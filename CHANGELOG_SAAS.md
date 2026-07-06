@@ -250,7 +250,7 @@ sem reescrever as ~100 funções de acesso a dados.
   `request.state.tenant_id` — a busca do usuário já fica escopada por RLS.
 - Handler de **login**: resolve/ativa o tenant antes de `verify_user`.
 
-### ⚠️ Atenção operacional
+### Atenção operacional
 - Rode a nova migração **primeiro numa cópia de staging** do banco: ela adiciona colunas,
   faz backfill e ativa RLS `FORCE`. É idempotente, mas mexe em todas as tabelas.
 - O papel do banco na `DATABASE_URL` é dono das tabelas; com `FORCE ROW LEVEL SECURITY`
@@ -296,7 +296,7 @@ do tenant.
   instância de outro. O fluxo de `connect` já cria a instância se ela não existir
   (auto-provisionamento no primeiro QR).
 
-### ⚠️ Follow-up encadeado na Fase 3 (envios pela UI)
+### Follow-up encadeado na Fase 3 (envios pela UI)
 Vários envios iniciados pela interface ainda escolhem a instância por
 `ROLE_SESSION_MAP` (papel -> instância, hardcoded) ou por `client_data['session_id']`,
 e alguns alertas ao admin usam `"vendas"` fixo (ex.: `main.py` linhas ~1270, 1318,

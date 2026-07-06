@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>continnumOS - Superadmin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0d0f;--bg2:#141417;--surface:#141417;--primary:#ff6a00;--primary2:#ffb020;--text:#f2ede6;--muted:#9a9aa0;--border:#2a2a30;--pos:#3ddc84;--neg:#ff4d4d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',system-ui,sans-serif;font-size:14px}
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;padding:14px 22px;background:rgba(13,13,15,.86);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.02em}
+.brand img{width:30px;height:30px;border-radius:8px}
+.brand small{display:block;font:600 10px 'JetBrains Mono',monospace;color:var(--primary);letter-spacing:.16em;text-transform:uppercase}
+.spacer{flex:1}
+.tk{display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--neg)}
+.dot.on{background:var(--pos)}
+input,select,button{font:inherit;color:var(--text)}
+.inp{padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg2)}
+.inp:focus{outline:none;border-color:var(--primary)}
+.btn{padding:9px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;cursor:pointer;font-weight:600;font-size:12.5px;transition:all .15s ease}
+.btn:hover{border-color:var(--primary)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#0a0a0a}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.mini{padding:6px 10px;font-size:11.5px;border-radius:8px}
+.btn.danger:hover{border-color:var(--neg);color:var(--neg)}
+main{max-width:1240px;margin:0 auto;padding:22px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px 16px}
+.kpi .k{font:600 10px 'JetBrains Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.kpi .v{font-size:26px;font-weight:700;margin-top:6px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{font:600 10px 'JetBrains Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;text-align:left;padding:12px 14px;border-bottom:1px solid var(--border)}
+td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+.cli b{font-weight:600}
+.cli small{color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:11px}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font:600 11px 'Space Grotesk';text-transform:capitalize}
+.badge.active{background:rgba(61,220,132,.12);color:var(--pos)}
+.badge.suspended{background:rgba(255,77,77,.12);color:var(--neg)}
+.badge.trial,.badge.past_due{background:rgba(255,176,32,.14);color:var(--primary2)}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+select.plan{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-size:12px}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+.mut{color:var(--muted)}
+.prog{height:7px;border-radius:999px;background:var(--bg);overflow:hidden;margin-top:5px}
+.prog i{display:block;height:100%;background:var(--primary)}
+.prog i.warn{background:var(--primary2)}
+.prog i.over{background:var(--neg)}
+.ov{position:fixed;inset:0;z-index:100050;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.ov.open{display:flex}
+.modal{width:min(520px,94vw);max-height:88vh;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 24px 70px rgba(0,0,0,.6)}
+.modal h3{margin:0 0 4px;font-size:16px}
+.modal .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.field input,.field select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg2)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#toast{position:fixed;top:16px;right:16px;z-index:100060;display:flex;flex-direction:column;gap:8px}
+.tst{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:12px;padding:11px 14px;font-size:13px;box-shadow:0 12px 40px rgba(0,0,0,.5);max-width:340px;animation:sl .16s ease}
+.tst.err{border-left-color:var(--neg)}
+.tst.ok{border-left-color:var(--pos)}
+@keyframes sl{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+@media (max-width:720px){ .hidem{display:none} main{padding:14px} }
+</style></head>
+<body>
+<div class="topbar">
+  <div class="brand"><img src="/static/logo.png" alt=""><div>continnumOS<small>Superadmin</small></div></div>
+  <div class="spacer"></div>
+  <span class="tk"><span id="cdot" class="dot"></span><span id="cstat" class="mut">Desconectado</span></span>
+  <input id="token" class="inp" type="password" placeholder="Token do superadmin" style="width:220px">
+  <button class="btn primary" onclick="saveToken()">Entrar</button>
+</div>
+<main>
+  <div class="kpis" id="kpis"></div>
+  <div class="bar">
+    <input id="q" class="inp" placeholder="Buscar cliente, slug ou dominio..." oninput="render()" style="min-width:240px">
+    <select id="fstatus" class="inp" onchange="render()">
+      <option value="">Todos os status</option>
+      <option value="active">Ativos</option>
+      <option value="suspended">Suspensos</option>
+      <option value="trial">Trial</option>
+      <option value="past_due">Inadimplentes</option>
+    </select>
+    <div class="spacer"></div>
+    <button class="btn" onclick="load()">Atualizar</button>
+    <button class="btn primary" onclick="openCreate()">Novo cliente</button>
+  </div>
+  <div class="panel">
+    <table>
+      <thead><tr><th>ID</th><th>Cliente</th><th>Plano</th><th>Status</th><th class="hidem">Instancia</th><th>Acoes</th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    <div id="empty" class="empty">Informe o token do superadmin e clique em Entrar.</div>
+  </div>
+</main>
+
+<div class="ov" id="ovCreate">
+  <div class="modal">
+    <h3>Novo cliente</h3>
+    <div class="sub">Provisiona um novo tenant e a instancia Evolution associada.</div>
+    <div class="grid2">
+      <div class="field"><label>Slug</label><input id="c_slug" placeholder="ex: acme"></div>
+      <div class="field"><label>Nome de exibicao</label><input id="c_name" placeholder="Acme Ltda"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Dominio (opcional)</label><input id="c_domain" placeholder="acme.com.br"></div>
+      <div class="field"><label>Instancia Evolution (opcional)</label><input id="c_instance" placeholder="acme"></div>
+    </div>
+    <div class="field"><label>Plano</label><select id="c_plan"></select></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button class="btn" onclick="closeOv('ovCreate')">Cancelar</button>
+      <button class="btn primary" onclick="createTenant()">Criar e provisionar</button>
+    </div>
+  </div>
+</div>
+
+<div class="ov" id="ovInfo">
+  <div class="modal">
+    <h3 id="infoTitle">Detalhes</h3>
+    <div class="sub" id="infoSub"></div>
+    <div id="infoBody"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn" onclick="closeOv('ovInfo')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="/static/ui-modals.js"></script>
+<script>
+var PLANS=[], TENANTS=[];
+function T(){ return localStorage.getItem('sa_token')||''; }
+function H(){ return {'X-Superadmin-Token':T(),'Content-Type':'application/json'}; }
+function saveToken(){ localStorage.setItem('sa_token', document.getElementById('token').value.trim()); load(); }
+function money(c){ return 'R$ '+((c||0)/100).toFixed(2).replace('.',','); }
+function esc(s){ var d=document.createElement('div'); d.textContent=(s==null?'':String(s)); return d.innerHTML; }
+function val(id){ return (document.getElementById(id).value||'').trim(); }
+function setConn(ok){ document.getElementById('cdot').className='dot'+(ok?' on':''); document.getElementById('cstat').textContent=ok?'Conectado':'Desconectado'; }
+function toast(msg,kind){ var h=document.getElementById('toast'); var d=document.createElement('div'); d.className='tst'+(kind==='err'?' err':(kind==='ok'?' ok':'')); d.textContent=msg; h.appendChild(d); setTimeout(function(){ d.style.opacity='0'; d.style.transition='opacity .2s'; setTimeout(function(){ d.remove(); },200); },3600); }
+function openOv(id){ document.getElementById(id).classList.add('open'); }
+function closeOv(id){ document.getElementById(id).classList.remove('open'); }
+function openCreate(){ var sel=document.getElementById('c_plan'); sel.innerHTML=PLANS.map(function(p){ return '<option value="'+esc(p.code)+'">'+esc(p.name)+' ('+money(p.price_cents)+')</option>'; }).join(''); openOv('ovCreate'); }
+
+async function load(){
+  if(!T()){ setConn(false); document.getElementById('empty').style.display='block'; return; }
+  try{
+    var r=await fetch('/api/superadmin/tenants',{headers:H()});
+    if(!r.ok){ setConn(false); toast('Token invalido ou nao autorizado.','err'); var e=document.getElementById('empty'); e.style.display='block'; e.textContent='Token invalido ou nao autorizado.'; return; }
+    var d=await r.json(); PLANS=d.plans||[]; TENANTS=d.tenants||[]; setConn(true); renderKpis(); render();
+  }catch(err){ setConn(false); toast('Falha de conexao com o servidor.','err'); }
+}
+
+function renderKpis(){
+  var total=TENANTS.length;
+  var active=TENANTS.filter(function(t){ return t.status==='active'; }).length;
+  var susp=TENANTS.filter(function(t){ return t.status==='suspended'; }).length;
+  var priceOf={}; PLANS.forEach(function(p){ priceOf[p.code]=p.price_cents||0; });
+  var mrr=TENANTS.filter(function(t){ return t.status==='active'; }).reduce(function(a,t){ return a+(priceOf[t.plan]||0); },0);
+  var cards=[['Clientes',total],['Ativos',active],['Suspensos',susp],['MRR estimado',money(mrr)],['Planos',PLANS.length]];
+  document.getElementById('kpis').innerHTML=cards.map(function(c){ return '<div class="kpi"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+'</div></div>'; }).join('');
+}
+
+function render(){
+  var q=(document.getElementById('q').value||'').toLowerCase();
+  var fs=document.getElementById('fstatus').value;
+  var rows=TENANTS.filter(function(t){
+    if(fs && t.status!==fs) return false;
+    if(!q) return true;
+    return ((t.display_name||'')+' '+(t.slug||'')+' '+(t.domain||'')).toLowerCase().indexOf(q)>=0;
+  });
+  var tb=document.getElementById('tb'); tb.innerHTML='';
+  document.getElementById('empty').style.display = rows.length ? 'none' : 'block';
+  rows.forEach(function(t){
+    var opts=PLANS.map(function(p){ return '<option value="'+esc(p.code)+'"'+(p.code===t.plan?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('');
+    var actBtn = t.status==='active'
+      ? '<button class="btn mini danger" onclick="susp('+t.id+')">Suspender</button>'
+      : '<button class="btn mini primary" onclick="act('+t.id+')">Ativar</button>';
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td class="mut">'+t.id+'</td>'
+      +'<td class="cli"><b>'+esc(t.display_name||t.slug)+'</b><br><small>'+esc(t.domain||t.slug)+'</small></td>'
+      +'<td><select class="plan" onchange="setPlan('+t.id+',this.value)">'+opts+'</select></td>'
+      +'<td><span class="badge '+esc(t.status)+'">'+esc(t.status)+'</span></td>'
+      +'<td class="hidem mut">'+esc(t.evolution_instance||'-')+'</td>'
+      +'<td><div class="acts">'+actBtn
+      +'<button class="btn mini" onclick="usage('+t.id+')">Uso</button>'
+      +'<button class="btn mini" onclick="invs('+t.id+')">Faturas</button>'
+      +'<button class="btn mini" onclick="genInv('+t.id+')">Gerar fatura</button></div></td>';
+    tb.appendChild(tr);
+  });
+}
+
+async function createTenant(){
+  var b={slug:val('c_slug'),display_name:val('c_name'),domain:val('c_domain'),evolution_instance:val('c_instance'),plan:val('c_plan')};
+  if(!b.slug||!b.display_name){ toast('Informe ao menos slug e nome.','err'); return; }
+  var r=await fetch('/api/superadmin/tenants',{method:'POST',headers:H(),body:JSON.stringify(b)});
+  var d=await r.json().catch(function(){ return {}; });
+  if(r.ok){ toast('Cliente criado: '+(d.tenant?d.tenant.slug:b.slug),'ok'); closeOv('ovCreate'); load(); }
+  else toast(d.error||'Erro ao criar cliente.','err');
+}
+
+async function setPlan(id,plan){ var r=await fetch('/api/superadmin/tenants/'+id+'/plan',{method:'POST',headers:H(),body:JSON.stringify({plan:plan})}); toast(r.ok?'Plano atualizado.':'Erro ao mudar plano.', r.ok?'ok':'err'); }
+async function susp(id){ if(!(await window.uiConfirm('Suspender este cliente? O acesso do tenant sera bloqueado.',{danger:true,okText:'Suspender'}))) return; await fetch('/api/superadmin/tenants/'+id+'/suspend',{method:'POST',headers:H()}); toast('Cliente suspenso.','ok'); load(); }
+async function act(id){ await fetch('/api/superadmin/tenants/'+id+'/activate',{method:'POST',headers:H()}); toast('Cliente ativado.','ok'); load(); }
+
+async function usage(id){
+  var r=await fetch('/api/superadmin/tenants/'+id+'/usage',{headers:H()});
+  if(!r.ok){ toast('Falha ao carregar uso.','err'); return; }
+  var d=await r.json(); var u=d.usage||{}, l=d.limits||{};
+  function bar(label,used,max){
+    var pct = max>0 ? Math.min(100,Math.round(used/max*100)) : 0;
+    var cls = pct>=100?'over':(pct>=80?'warn':'');
+    return '<div class="field"><label>'+label+' <span class="mut">'+used+' / '+(max||'ilimitado')+'</span></label><div class="prog"><i class="'+cls+'" style="width:'+pct+'%"></i></div></div>';
+  }
+  document.getElementById('infoTitle').textContent='Uso do cliente #'+id;
+  document.getElementById('infoSub').textContent='Consumo atual frente aos limites do plano.';
+  document.getElementById('infoBody').innerHTML=bar('Usuarios',u.users||0,l.max_users||0)+bar('Contatos',u.contacts||0,l.max_contacts||0)+bar('Mensagens no mes',u.messages_month||0,l.max_messages_month||0);
+  openOv('ovInfo');
+}
+
+async function invs(id){
+  var r=await fetch('/api/superadmin/tenants/'+id+'/invoices',{headers:H()});
+  if(!r.ok){ toast('Falha ao carregar faturas.','err'); return; }
+  var d=await r.json(); var list=d.invoices||[];
+  var body = list.length
+    ? '<table><thead><tr><th>#</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody>'+list.map(function(i){
+        var pay = i.status!=='paid' ? '<button class="btn mini primary" onclick="pay('+i.id+','+id+')">Marcar paga</button>' : '<span class="mut">-</span>';
+        return '<tr><td class="mut">'+i.id+'</td><td>'+money(i.amount_cents)+'</td><td><span class="badge '+(i.status==='paid'?'active':'past_due')+'">'+esc(i.status)+'</span></td><td>'+pay+'</td></tr>';
+      }).join('')+'</tbody></table>'
+    : '<div class="mut">Sem faturas para este cliente.</div>';
+  document.getElementById('infoTitle').textContent='Faturas do cliente #'+id;
+  document.getElementById('infoSub').textContent='Historico de cobrancas.';
+  document.getElementById('infoBody').innerHTML=body+'<div style="margin-top:14px"><button class="btn" onclick="genInv('+id+')">Gerar nova fatura</button></div>';
+  openOv('ovInfo');
+}
+async function genInv(id){ var r=await fetch('/api/superadmin/tenants/'+id+'/invoices',{method:'POST',headers:H(),body:JSON.stringify({})}); toast(r.ok?'Fatura gerada.':'Erro ao gerar fatura.', r.ok?'ok':'err'); if(document.getElementById('ovInfo').classList.contains('open')) invs(id); }
+async function pay(iid,tid){ if(!(await window.uiConfirm('Marcar esta fatura como paga?',{okText:'Marcar paga'}))) return; await fetch('/api/superadmin/invoices/'+iid+'/pay',{method:'POST',headers:H()}); toast('Fatura paga.','ok'); if(tid) invs(tid); load(); }
+
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeOv('ovCreate'); closeOv('ovInfo'); } });
+(function(){ var t=T(); if(t){ document.getElementById('token').value=t; load(); } })();
+</script>
+</body></html>

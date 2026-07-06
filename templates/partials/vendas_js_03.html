@@ -11,17 +11,17 @@
     
     async function createNewTag() { 
         const name = document.getElementById('new-tag-name').value;
-        if(!name) return Toastify({text: "⚠️ Digite o nome da tag", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast();
+        if(!name) return Toastify({text: "Digite o nome da tag", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast();
         await fetch('/api/tags', {method: 'POST', body: JSON.stringify({name: name, color: document.getElementById('new-tag-color').value})}); 
         document.getElementById('new-tag-name').value = ''; document.getElementById('manageTagsModal').style.display='none';
-        Toastify({text: "✅ Tag Criada!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
+        Toastify({text: "Tag Criada!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
         await loadTags(); renderTagsUI(); 
     }
 
     async function loadSnippets() {
         const res = await fetch('/api/snippets'); const data = await res.json();
-        const box = document.getElementById('snippets-container'); box.innerHTML = '<button class="btn-macro" onclick="openTransfer()">🔄 Transferir</button>';
-        data.forEach(s => { const btn = document.createElement('button'); btn.className = 'btn-macro'; btn.innerText = `⚡ ${s.shortcut}`; btn.onclick = () => sendMacro(s.content); box.appendChild(btn); });
+        const box = document.getElementById('snippets-container'); box.innerHTML = '<button class="btn-macro" onclick="openTransfer()">Transferir</button>';
+        data.forEach(s => { const btn = document.createElement('button'); btn.className = 'btn-macro'; btn.innerText = `${s.shortcut}`; btn.onclick = () => sendMacro(s.content); box.appendChild(btn); });
     }
     async function loadManageSnippets() {
         const res = await fetch('/api/snippets'); const data = await res.json();
@@ -78,20 +78,20 @@
             method: 'POST', 
             body: JSON.stringify(payload)
         }); 
-        Toastify({text: "✅ Perfil Salvo!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
+        Toastify({text: "Perfil Salvo!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
     }
     
     async function saveNewContact() { 
         const phone = document.getElementById('new-phone').value;
         const name = document.getElementById('new-name').value;
-        if(!phone) return Toastify({text: "⚠️ Digite o celular.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast();
+        if(!phone) return Toastify({text: "Digite o celular.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast();
         try {
             await fetch('/api/contacts/new', {method: 'POST', body: JSON.stringify({phone, name})}); 
             document.getElementById('newContactModal').style.display='none';
             document.getElementById('new-phone').value = ''; document.getElementById('new-name').value = '';
-            Toastify({text: "✅ Contato Salvo!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
+            Toastify({text: "Contato Salvo!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
             resetContactsList(); lastActiveListState = null; loadMoreContacts(); loadContactBuckets(); buildDashboard();
-        } catch(e) { Toastify({text: "❌ Erro ao salvar.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast(); }
+        } catch(e) { Toastify({text: "Erro ao salvar.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast(); }
     }
     
     async function selectChat(phone, name, notes, extra, stage, tagsData = '', listData = '') {
@@ -281,7 +281,7 @@
 
     function showPanelNoticeToast(sender, text) {
         Toastify({
-            text: `📣 Comunicado de ${sender || 'Admin'}\n${text || 'Novo comunicado.'}`,
+            text: `Comunicado de ${sender || 'Admin'}\n${text || 'Novo comunicado.'}`,
             duration: 7000,
             close: true,
             gravity: "top",
@@ -562,7 +562,7 @@
             activeInternalChatToasts[conversationTarget].hideToast();
         }
         const toast = Toastify({
-            text: `💬 ${senderName}\n${scopeLabel}\n${preview}\nClique para abrir`,
+            text: `${senderName}\n${scopeLabel}\n${preview}\nClique para abrir`,
             duration: -1,
             close: false,
             gravity: "top",

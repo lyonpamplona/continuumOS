@@ -1126,20 +1126,38 @@ class ConnectionManager:
         await redis_client.publish("crm_channel", message)
 
     async def listen(self):
-        """Escuta o canal Redis e entrega eventos aos WebSockets conectados."""
-        await self.pubsub.subscribe("crm_channel")
-        async for message in self.pubsub.listen():
-            if message["type"] == "message":
-                data = message["data"].decode("utf-8")
-                dead_connections = []
-                for connection in list(self.active_connections):
-                    try: 
-                        await connection.send_text(data)
-                    except Exception as exc:
-                        dead_connections.append(connection)
-                        logger.debug("WebSocket removido da lista realtime após falha de envio: {}", exc)
-                for connection in dead_connections:
-                    self.disconnect(connection)
+        """Escuta o canal Redis e entrega eventos aos WebSockets conectados.
+
+        Reconecta com backoff se a conexao Redis cair, para o realtime nao
+        morrer de vez apos um blip de rede (antes a task morria e nunca voltava).
+        """
+        backoff = 1
+        while True:
+            try:
+                await self.pubsub.subscribe("crm_channel")
+                backoff = 1
+                async for message in self.pubsub.listen():
+                    if message["type"] == "message":
+                        data = message["data"].decode("utf-8")
+                        dead_connections = []
+                        for connection in list(self.active_connections):
+                            try:
+                                await connection.send_text(data)
+                            except Exception as exc:
+                                dead_connections.append(connection)
+                                logger.debug("WebSocket removido da lista realtime apos falha de envio: {}", exc)
+                        for connection in dead_connections:
+                            self.disconnect(connection)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("Realtime pub/sub caiu ({}); reconectando em {}s.", exc, backoff)
+                try:
+                    await self.pubsub.unsubscribe("crm_channel")
+                except Exception:
+                    pass
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 30)
 
 manager = ConnectionManager()
 
@@ -1727,7 +1745,7 @@ async def system_monitor_loop():
                     if admin_phone and (mem_usage > 90 or cpu_usage > 95):
                         can_alert = await redis_client.set("alert:system_overload", "1", ex=900, nx=True)
                         if can_alert:
-                            msg = f"🚨 *Alerta do Servidor* 🚨\nUso de Memória: {mem_usage}%\nUso de CPU: {cpu_usage}%\nPossível sobrecarga detectada."
+                            msg = f"*Alerta do Servidor*\nUso de Memória: {mem_usage}%\nUso de CPU: {cpu_usage}%\nPossível sobrecarga detectada."
                             await evo.send_message(admin_phone, msg, await db.get_tenant_instance(get_current_tenant()))
                             logger.warning(f"Alerta de sistema enviado ao admin: Mem={mem_usage}%, CPU={cpu_usage}%")
             await asyncio.sleep(300)
@@ -1793,6 +1811,37 @@ async def data_retention_loop():
             await asyncio.sleep(24 * 3600)
 
 
+SCHEDULER_LOCK_KEY = "continnumos:scheduler:leader"
+SCHEDULER_LOCK_TTL = 90
+
+
+async def _acquire_scheduler_lock():
+    """Elege um unico worker lider para os loops de fundo (single-flight/Redis).
+
+    Com N workers, apenas um deve rodar os loops periodicos para nao duplicar
+    follow-ups, lembretes e limpezas. Se o Redis falhar, assume lideranca para
+    nao deixar o sistema sem scheduler.
+    """
+    try:
+        got = await redis_client.set(SCHEDULER_LOCK_KEY, str(os.getpid()), nx=True, ex=SCHEDULER_LOCK_TTL)
+        return bool(got)
+    except Exception as exc:
+        logger.warning("Falha ao adquirir lock do scheduler ({}); assumindo lider por seguranca.", exc)
+        return True
+
+
+async def _scheduler_lock_keeper():
+    """Renova o lock de lideranca periodicamente enquanto este worker viver."""
+    while True:
+        try:
+            await asyncio.sleep(SCHEDULER_LOCK_TTL // 3)
+            await redis_client.set(SCHEDULER_LOCK_KEY, str(os.getpid()), ex=SCHEDULER_LOCK_TTL)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.debug("Falha ao renovar lock do scheduler: {}", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicializa conexões e tarefas de fundo no ciclo de vida do FastAPI."""
@@ -1806,20 +1855,18 @@ async def lifespan(app: FastAPI):
     await db.init_db()
     # Fase 3: aquece a config do tenant padrão para leituras síncronas (horário, etc.).
     await tc.load_tenant_config(DEFAULT_TENANT_ID)
-    # Quick wins: cria tabelas/colunas novas (idempotente).
-    await db.create_quickwins_tables()
-    # Fase 10: cria tabelas de IA/automacao (idempotente).
-    await db.create_phase10_tables()
-    await db.create_phase11_tables()
-    await db.create_phase12_tables()
-    await db.create_phase13_tables()
+    # Quick wins + Fases 10-13: migracoes de boot idempotentes, serializadas por
+    # advisory lock para nao correr entre workers (evita UniqueViolationError em
+    # pg_type no primeiro boot com varios workers).
+    await db.create_all_phase_tables()
     # WebSocket/realtime replica via Redis pub/sub — precisa rodar em TODA réplica.
     asyncio.create_task(manager.listen())
     # Fase 7: os loops periódicos rodam em UMA única réplica/scheduler para não
     # duplicar follow-ups, lembretes e limpezas quando houver N réplicas web.
     # Em deploy escalado, deixe RUN_BACKGROUND_JOBS=true só no scheduler.
-    if settings.RUN_BACKGROUND_JOBS:
-        logger.info("[SCHEDULER] Loops de fundo ATIVOS neste processo.")
+    if settings.RUN_BACKGROUND_JOBS and await _acquire_scheduler_lock():
+        logger.info("[SCHEDULER] Loops de fundo ATIVOS neste worker (lider eleito).")
+        asyncio.create_task(_scheduler_lock_keeper())
         asyncio.create_task(media_cleanup_loop())
         asyncio.create_task(sla_monitor_loop())
         asyncio.create_task(morning_followup_loop())
@@ -1831,6 +1878,8 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(scheduled_messages_loop())
         asyncio.create_task(cadence_loop())
         asyncio.create_task(team_sla_loop())
+    elif settings.RUN_BACKGROUND_JOBS:
+        logger.info("[SCHEDULER] Loops de fundo NAO iniciados neste worker (outro worker e o lider).")
     else:
         logger.info("[SCHEDULER] Loops de fundo DESATIVADOS (RUN_BACKGROUND_JOBS=false).")
     yield
@@ -1947,8 +1996,12 @@ async def websocket_endpoint(websocket: WebSocket):
 async def healthcheck():
     """Retorna saúde operacional básica para monitoramento externo."""
     ops = await build_operations_status()
-    status_label = "ok" if ops["status"] == "ok" else "degraded"
-    status_code = 200 if status_label == "ok" else 503
+    status_label = ops["status"]
+    # Liveness: o container esta vivo enquanto o processo responde e o banco
+    # esta acessivel. Dependencias externas degradadas (ex.: Evolution/WhatsApp
+    # desconectado) NAO devem retornar 503 e reiniciar o container em loop.
+    db_ok = bool(ops["checks"].get("database", {}).get("ok"))
+    status_code = 200 if db_ok else 503
     return JSONResponse(
         status_code=status_code,
         content={
@@ -2034,86 +2087,14 @@ async def logout(request: Request):
     response.delete_cookie("session_token")
     return response
 
-SUPERADMIN_HTML = """<!DOCTYPE html>
-<html lang="pt-br"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Super-Admin — Gestão de Clientes</title>
-<style>
-body{font-family:system-ui,Arial,sans-serif;margin:0;background:#0b1014;color:#e9edef}
-header{background:#111b21;padding:16px 24px;display:flex;gap:12px;align-items:center;border-bottom:1px solid #222d34}
-h1{font-size:18px;margin:0;flex:1}
-input,select,button{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid #2a3942;background:#202c33;color:#e9edef}
-button{cursor:pointer;background:#ff6600;border:none;color:#111;font-weight:600}
-button.ghost{background:#202c33;color:#e9edef;border:1px solid #2a3942;font-weight:400}
-main{padding:24px;max-width:1150px;margin:0 auto}
-table{width:100%;border-collapse:collapse;margin-top:16px}
-th,td{padding:8px 10px;border-bottom:1px solid #222d34;text-align:left;font-size:14px;vertical-align:top}
-.card{background:#111b21;border:1px solid #222d34;border-radius:12px;padding:16px;margin-bottom:16px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.badge{padding:2px 8px;border-radius:999px;font-size:12px}
-.active{background:#0a3d2a;color:#4ade80}.suspended{background:#4d1414;color:#f87171}
-small{color:#8696a0}
-</style></head>
-<body>
-<header><h1>Gestão de Clientes (Super-Admin)</h1>
-<input id="token" type="password" placeholder="Token do super-admin">
-<button onclick="saveToken()">Entrar</button></header>
-<main>
-<div class="card"><b>Novo cliente</b>
-<div class="row" style="margin-top:8px">
-<input id="n_slug" placeholder="slug (ex: acme)">
-<input id="n_name" placeholder="Nome de exibição">
-<input id="n_domain" placeholder="domínio (opcional)">
-<input id="n_instance" placeholder="instância Evolution (opcional)">
-<select id="n_plan"></select>
-<button onclick="createTenant()">Criar + provisionar</button>
-</div></div>
-<div id="msg"></div>
-<table id="tbl"><thead><tr><th>ID</th><th>Cliente</th><th>Plano</th><th>Status</th><th>Instância</th><th>Ações</th></tr></thead><tbody></tbody></table>
-</main>
-<script>
-const T=()=>localStorage.getItem('sa_token')||'';
-function saveToken(){localStorage.setItem('sa_token',document.getElementById('token').value);load();}
-function H(){return {'X-Superadmin-Token':T(),'Content-Type':'application/json'};}
-function msg(t,ok){document.getElementById('msg').innerHTML='<div class="card" style="border-color:'+(ok?'#0a3d2a':'#4d1414')+'">'+t+'</div>';}
-let PLANS=[];
-async function load(){
- const r=await fetch('/api/superadmin/tenants',{headers:H()});
- if(!r.ok){msg('Token inválido ou não autorizado.',false);return;}
- const d=await r.json();PLANS=d.plans||[];
- const sel=document.getElementById('n_plan');sel.innerHTML=PLANS.map(p=>'<option value="'+p.code+'">'+p.name+' (R$'+(p.price_cents/100).toFixed(2)+')</option>').join('');
- const tb=document.querySelector('#tbl tbody');tb.innerHTML='';
- (d.tenants||[]).forEach(t=>{
-  const opts=PLANS.map(p=>'<option value="'+p.code+'"'+(p.code===t.plan?' selected':'')+'>'+p.name+'</option>').join('');
-  const tr=document.createElement('tr');
-  tr.innerHTML='<td>'+t.id+'</td><td>'+t.display_name+'<br><small>'+(t.domain||t.slug)+'</small></td>'+
-   '<td><select onchange="setPlan('+t.id+',this.value)">'+opts+'</select></td>'+
-   '<td><span class="badge '+t.status+'">'+t.status+'</span></td>'+
-   '<td>'+t.evolution_instance+'</td>'+
-   '<td class="row">'+
-    (t.status==='active'?'<button class="ghost" onclick="susp('+t.id+')">Suspender</button>':'<button onclick="act('+t.id+')">Ativar</button>')+
-    '<button class="ghost" onclick="usage('+t.id+')">Uso</button>'+
-    '<button class="ghost" onclick="invs('+t.id+')">Faturas</button>'+
-    '<button class="ghost" onclick="genInv('+t.id+')">Gerar fatura</button>'+
-   '</td>';
-  tb.appendChild(tr);
- });
-}
-async function createTenant(){
- const b={slug:n_slug.value,display_name:n_name.value,domain:n_domain.value,evolution_instance:n_instance.value,plan:n_plan.value};
- const r=await fetch('/api/superadmin/tenants',{method:'POST',headers:H(),body:JSON.stringify(b)});
- const d=await r.json();msg(r.ok?('Cliente criado: '+d.tenant.slug):(d.error||'Erro'),r.ok);load();
-}
-async function setPlan(id,plan){const r=await fetch('/api/superadmin/tenants/'+id+'/plan',{method:'POST',headers:H(),body:JSON.stringify({plan})});msg(r.ok?'Plano atualizado.':'Erro ao mudar plano.',r.ok);}
-async function susp(id){await fetch('/api/superadmin/tenants/'+id+'/suspend',{method:'POST',headers:H()});load();}
-async function act(id){await fetch('/api/superadmin/tenants/'+id+'/activate',{method:'POST',headers:H()});load();}
-async function usage(id){const r=await fetch('/api/superadmin/tenants/'+id+'/usage',{headers:H()});const d=await r.json();msg('Uso: usuários '+d.usage.users+'/'+d.limits.max_users+' · contatos '+d.usage.contacts+'/'+d.limits.max_contacts+' · msgs mês '+d.usage.messages_month+'/'+d.limits.max_messages_month,true);}
-async function invs(id){const r=await fetch('/api/superadmin/tenants/'+id+'/invoices',{headers:H()});const d=await r.json();const rows=(d.invoices||[]).map(i=>'#'+i.id+' R$'+(i.amount_cents/100).toFixed(2)+' — '+i.status+(i.status!=='paid'?' <button class=ghost onclick="pay('+i.id+')">Pagar</button>':'')).join('<br>')||'Sem faturas.';msg('Faturas do tenant '+id+':<br>'+rows,true);}
-async function genInv(id){const r=await fetch('/api/superadmin/tenants/'+id+'/invoices',{method:'POST',headers:H(),body:JSON.stringify({})});msg(r.ok?'Fatura gerada.':'Erro.',r.ok);load();}
-async function pay(id){await fetch('/api/superadmin/invoices/'+id+'/pay',{method:'POST',headers:H()});msg('Fatura paga.',true);}
-if(T()){document.getElementById('token').value=T();load();}
-</script>
-</body></html>"""
+def _load_superadmin_html():
+    import os
+    _p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "superadmin.html")
+    with open(_p, encoding="utf-8") as _f:
+        return _f.read()
+
+
+SUPERADMIN_HTML = _load_superadmin_html()
 
 
 def _superadmin_authorized(request: Request) -> bool:
@@ -2527,7 +2508,7 @@ async def evo_connect(request: Request, payload: EvolutionSessionRequest, user: 
             return {"qr": qr_base64}
             
         logger.warning(f"API respondeu sem QR Code. Status: {res.status_code}")
-        return {"qr": None, "message": "⏳ O motor do WhatsApp está acordando. Aguarde 5 segundos e clique em 'Ler QR' novamente."}
+        return {"qr": None, "message": "O motor do WhatsApp está acordando. Aguarde 5 segundos e clique em 'Ler QR' novamente."}
         
     except Exception as e:
         logger.error(f"Erro crítico no processo de conexão: {e}")
@@ -4214,7 +4195,7 @@ async def log_external_access(payload: PhonePayload, user: dict = Depends(get_cu
     """Registra no histórico quando o operador abre o app externo do WhatsApp."""
     if not user: return {"status": "error"}
     phone = payload.phone
-    log_msg = f"⚠️ [Auditoria] {user['name']} acessou o App Externo."
+    log_msg = f"[Auditoria] {user['name']} acessou o App Externo."
     target_session = tc.role_session_map().get(user['role'], await db.get_tenant_instance(get_current_tenant()))
     await db.save_message(phone, "sistema", log_msg, "system", f"sys_{time.time()}", 3, target_session)
     await record_audit_log(user, "external_whatsapp_opened", phone=phone, details={"session_id": target_session})

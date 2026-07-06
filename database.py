@@ -5472,3 +5472,25 @@ async def supervision_snapshot():
     except Exception:
         snap["presence"] = []
     return snap
+
+
+
+async def create_all_phase_tables():
+    """Executa quick wins + Fases 10-13 sob advisory lock (seguro p/ N workers).
+
+    CREATE TABLE IF NOT EXISTS nao e concorrencia-safe no Postgres: com varios
+    workers no primeiro boot, dois podem tentar criar o mesmo type/tabela ao
+    mesmo tempo e um estoura UniqueViolationError em pg_type. O advisory lock
+    serializa a migracao entre workers; os que chegam depois encontram tudo
+    criado (no-op).
+    """
+    async with pool.acquire() as conn:
+        await conn.execute("SELECT pg_advisory_lock($1)", SCHEMA_LOCK_ID)
+        try:
+            await create_quickwins_tables()
+            await create_phase10_tables()
+            await create_phase11_tables()
+            await create_phase12_tables()
+            await create_phase13_tables()
+        finally:
+            await conn.execute("SELECT pg_advisory_unlock($1)", SCHEMA_LOCK_ID)

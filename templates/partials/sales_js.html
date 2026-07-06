@@ -130,9 +130,9 @@
     sec.appendChild(kb);
   }
   async function newDeal() {
-    var title = prompt('Titulo do negocio:'); if (!title) return;
-    var phone = prompt('Telefone do contato (opcional):') || '';
-    var value = parseFloat(prompt('Valor (R$):') || '0') || 0;
+    var title = await window.uiPrompt('Titulo do negocio:'); if (!title) return;
+    var phone = (await window.uiPrompt('Telefone do contato (opcional):')) || '';
+    var value = parseFloat((await window.uiPrompt('Valor (R$):')) || '0') || 0;
     var w = await api('POST', '/api/deals', { pipeline_id: PIPE_ID, title: title, contact_phone: phone, value: value });
     if (w.ok) { toast('Negocio criado.'); loadPipeline(); } else toast('Erro.', true);
   }
@@ -295,7 +295,7 @@
       var c = el('div', 'sl-card');
       c.innerHTML = '<div class="sl-row"><b>' + esc(cd.name) + '</b><span class="sl-mut" style="margin-left:auto">' + ((cd.steps || []).length) + ' passo(s) - ' + (cd.active ? 'ativa' : 'inativa') + '</span></div>';
       var enr = el('button', 'sl-btn mini', 'Inscrever contato');
-      enr.onclick = async function () { var ph = prompt('Telefone do contato:'); if (!ph) return; var w = await api('POST', '/api/cadences/' + cd.id + '/enroll', { contact_phone: ph }); if (w.ok) toast('Inscrito.'); else toast('Erro.', true); };
+      enr.onclick = async function () { var ph = await window.uiPrompt('Telefone do contato:'); if (!ph) return; var w = await api('POST', '/api/cadences/' + cd.id + '/enroll', { contact_phone: ph }); if (w.ok) toast('Inscrito.'); else toast('Erro.', true); };
       var del = el('button', 'sl-btn ghost mini', 'Excluir');
       del.onclick = async function () { await api('DELETE', '/api/cadences/' + cd.id); loadCadences(); };
       c.appendChild(enr); c.appendChild(del); sec.appendChild(c);

@@ -86,7 +86,7 @@
         input.value = ''; cancelReply(); await loadChatHistory(); 
     }
     
-    async function saveContactInfo() { if(!currentPhone) return; await fetch('/api/edit_contact', {method: 'POST', body: JSON.stringify({phone: currentPhone, name: document.getElementById('info-name').value, notes: document.getElementById('info-notes').value, extra: document.getElementById('info-extra').value})}); Toastify({text: "✅ Informações Salvas!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast(); mobileView('chat'); lastActiveListState = null; buildDashboard(); }
+    async function saveContactInfo() { if(!currentPhone) return; await fetch('/api/edit_contact', {method: 'POST', body: JSON.stringify({phone: currentPhone, name: document.getElementById('info-name').value, notes: document.getElementById('info-notes').value, extra: document.getElementById('info-extra').value})}); Toastify({text: "Informações Salvas!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast(); mobileView('chat'); lastActiveListState = null; buildDashboard(); }
     
     async function submitFinish(result) {
         if(!currentPhone) return;
@@ -126,13 +126,13 @@
         if (type === 'text') {
             const text = document.getElementById('status-text').value;
             if (!text.trim()) {
-                return Toastify({text: "⚠️ Digite a mensagem do status.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
+                return Toastify({text: "Digite a mensagem do status.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
             }
             formData.append('content', text);
         } else {
             const file = document.getElementById('status-image-file').files[0];
             if (!file) {
-                return Toastify({text: "⚠️ Selecione uma imagem.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
+                return Toastify({text: "Selecione uma imagem.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
             }
             formData.append('file', file);
         }
@@ -140,7 +140,7 @@
         document.getElementById('statusModal').style.display = 'none';
         
         Toastify({
-            text: "📡 Publicando Status no WhatsApp... Aguarde.",
+            text: "Publicando Status no WhatsApp... Aguarde.",
             duration: 3000, gravity: "top", position: "right",
             style: { background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px", fontFamily: "'JetBrains Mono', monospace"}
         }).showToast();
@@ -150,16 +150,16 @@
             const data = await res.json();
             if (data.status === 'ok') {
                 let msgExt = data.filter ? `filtrados pela palavra '${data.filter}'.` : `da sua carteira.`;
-                playBeep("Status Postado! 🚀", `A sua postagem aparecerá nos celulares de ${data.count} clientes ${msgExt}`);
+                playBeep("Status Postado!", `A sua postagem aparecerá nos celulares de ${data.count} clientes ${msgExt}`);
                 document.getElementById('status-text').value = ''; 
                 document.getElementById('status-image-file').value = '';
                 if(document.getElementById('status-filter')) document.getElementById('status-filter').value = '';
                 loadStatusHistory(false);
             } else {
-                Toastify({text: `❌ Erro: ${data.message}`, duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
+                Toastify({text: `Erro: ${data.message}`, duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
             }
         } catch(e) { 
-            Toastify({text: "🔌 Falha de conexão com o servidor.", duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
+            Toastify({text: "Falha de conexão com o servidor.", duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
         }
     }
 
@@ -377,7 +377,7 @@
     }
 
     async function deleteStatusPost(statusId) {
-        if (!confirm('Apagar este status do histórico do painel? Esta ação remove a auditoria local, mas não apaga o status já publicado no WhatsApp.')) return;
+        if (!(await window.uiConfirm('Apagar este status do histórico do painel? Esta ação remove a auditoria local, mas não apaga o status já publicado no WhatsApp.'))) return;
         try {
             const res = await fetch('/api/status/' + encodeURIComponent(statusId), {method: 'DELETE'});
             const data = await res.json();

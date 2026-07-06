@@ -585,12 +585,12 @@
     <div class="modal-content" style="text-align:center;">
         <h3 style="margin-top:0; color:var(--primary); margin-bottom:16px;">Reagir</h3>
         <div style="display:flex; justify-content:center; gap:16px; font-size:2rem; margin-bottom:24px;">
-            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('👍')">👍</span>
-            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('❤️')">❤️</span>
-            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('😂')">😂</span>
-            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('😮')">😮</span>
-            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('😢')">😢</span>
-            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('🙏')">🙏</span>
+            <span class="reaction-emoji" data-emoji="👍" style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('👍')">👍</span>
+            <span class="reaction-emoji" data-emoji="❤️" style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('❤️')">❤️</span>
+            <span class="reaction-emoji" data-emoji="😂" style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('😂')">😂</span>
+            <span class="reaction-emoji" data-emoji="😮" style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('😮')">😮</span>
+            <span class="reaction-emoji" data-emoji="😢" style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('😢')">😢</span>
+            <span class="reaction-emoji" data-emoji="🙏" style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('🙏')">🙏</span>
         </div>
     </div>
 </div>
@@ -654,6 +654,8 @@
 {% include 'partials/sales_js.html' %}
 {% include 'partials/team_js.html' %}
 </script>
-<script src="/static/dock.js" defer></script>
+<script src="/static/ui-modals.js" defer></script>
+    <script src="/static/reaction-icons.js" defer></script>
+    <script src="/static/dock.js" defer></script>
 </body>
 </html>

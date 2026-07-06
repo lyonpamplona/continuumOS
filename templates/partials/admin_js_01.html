@@ -335,12 +335,11 @@
     }
 
     function showDesktopNotification(title, body, phoneToOpen = null, internalTarget = null) {
-        if (!document.hidden || notificationSetting('continnumOS:desktopNotifications') !== 'on' || !('Notification' in window) || Notification.permission !== 'granted') return;
+        if (notificationSetting('continnumOS:desktopNotifications') !== 'on') return;
         const now = Date.now();
         if (now - lastDesktopNotificationAt < 1200) return;
         lastDesktopNotificationAt = now;
-        const note = new Notification(title, {body: body, icon: '/static/logo.png', badge: '/static/logo.png', tag: phoneToOpen || internalTarget || title, renotify: true});
-        note.onclick = function() {
+        showCustomNotification(title, body, function() {
             window.focus();
             if (internalTarget) {
                 openInternalTargetFromToast(internalTarget);
@@ -348,15 +347,45 @@
                 const card = document.getElementById('audit-contact-' + phoneToOpen);
                 if (card) { switchMainTab('tab-auditoria'); card.click(); if(window.innerWidth <= 1024) auditMobileView('chat'); }
             }
-            note.close();
-        };
+        });
     }
+
+    function showCustomNotification(title, body, onClick) {
+        let host = document.getElementById('cnotif-host');
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'cnotif-host';
+            document.body.appendChild(host);
+            const st = document.createElement('style');
+            st.textContent = "#cnotif-host{position:fixed;top:16px;right:16px;z-index:100002;display:flex;flex-direction:column;gap:10px;max-width:340px;pointer-events:none}"
+                + ".cnotif{pointer-events:auto;display:flex;gap:10px;align-items:flex-start;background:var(--surface,#141417);border:1px solid var(--border,#2a2a30);border-left:3px solid var(--primary,#ff6a00);border-radius:12px;padding:12px 14px;box-shadow:0 12px 40px rgba(0,0,0,.55);cursor:pointer;color:var(--text,#f2ede6);font-family:'Space Grotesk',system-ui,sans-serif;animation:cnotif-in .18s ease}"
+                + ".cnotif:hover{border-color:var(--primary,#ff6a00)}"
+                + ".cnotif img{width:34px;height:34px;border-radius:8px;flex-shrink:0}"
+                + ".cnotif .cn-t{font-weight:700;font-size:13px;margin-bottom:2px}"
+                + ".cnotif .cn-b{font-size:12px;line-height:1.4;color:var(--muted,#c9c4bc);word-break:break-word}"
+                + ".cnotif .cn-x{margin-left:auto;color:var(--muted,#9a9aa0);font-size:16px;line-height:1;padding:0 2px}"
+                + "@keyframes cnotif-in{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}";
+            document.head.appendChild(st);
+        }
+        const card = document.createElement('div');
+        card.className = 'cnotif';
+        card.innerHTML = "<img src='/static/logo.png' alt=''><div style='min-width:0'><div class='cn-t'></div><div class='cn-b'></div></div><span class='cn-x'>&#215;</span>";
+        card.querySelector('.cn-t').textContent = title || 'continnumOS';
+        card.querySelector('.cn-b').textContent = body || '';
+        const rm = function() { card.style.opacity = '0'; card.style.transform = 'translateX(24px)'; card.style.transition = 'all .18s ease'; setTimeout(function() { card.remove(); }, 200); };
+        card.querySelector('.cn-x').onclick = function(e) { e.stopPropagation(); rm(); };
+        card.onclick = function() { try { if (onClick) onClick(); } catch(e) {} rm(); };
+        host.appendChild(card);
+        try { if (typeof playMsnSound === 'function') playMsnSound(); } catch(e) {}
+        setTimeout(rm, 6000);
+    }
+
 
     function playBeep(title, body, phoneToOpen = null) {
         playMsnSound();
         showDesktopNotification(title, body, phoneToOpen);
         Toastify({
-            text: phoneToOpen ? `💬 ${title}\n${body}\n👉 Clique para abrir` : `💬 ${title}\n${body}`,
+            text: phoneToOpen ? `${title}\n${body}\nClique para abrir` : `${title}\n${body}`,
             duration: 5000, close: true, gravity: "top", position: "right", stopOnFocus: true,
             style: { background: "#F4EFF4", color: "#1D192B", borderRadius: "16px", boxShadow: "0 4px 14px rgba(0,0,0,0.08)", fontFamily: "'JetBrains Mono', monospace", border: "1px solid #EADDFF", padding: "12px 24px", fontWeight: "500", display: "flex", alignItems: "center", gap: "8px", whiteSpace: "pre-wrap", cursor: phoneToOpen ? "pointer" : "default" },
             onClick: function() {
