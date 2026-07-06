@@ -1,0 +1,10 @@
+.env
+__pycache__/
+contacts.vcf
+.codex
+*.pyc
+logs/*.log
+*.vcf
+logs/relatorio_sistema.*
+propostas/
+scripts/relatorio_sistema.py

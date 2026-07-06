@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" width="1280" height="360" role="img" aria-label="continnumOS">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111114"/>
+      <stop offset="1" stop-color="#08080a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.82" cy="0.18" r="0.55">
+      <stop offset="0" stop-color="#ff6a00" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#ff6a00" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse">
+      <path d="M36 0H0V36" fill="none" stroke="#ff6a00" stroke-opacity="0.06" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="360" fill="url(#bgGrad)"/>
+  <rect width="1280" height="360" fill="url(#grid)"/>
+  <rect width="1280" height="360" fill="url(#glow)"/>
+  <rect x="0" y="0" width="1280" height="6" fill="#ff6a00"/>
+
+  <!-- mark -->
+  <g transform="translate(92,116)">
+    <path d="M0 20 L20 0 L128 0 L128 108 L108 128 L0 128 Z" fill="#ff6a00"/>
+    <text x="64" y="92" font-family="Segoe UI,Arial,sans-serif" font-size="90" font-weight="800" fill="#0a0705" text-anchor="middle">C</text>
+  </g>
+
+  <!-- wordmark -->
+  <text x="256" y="168" font-family="Segoe UI,Arial,sans-serif" font-size="78" font-weight="800" fill="#f2ede6">continnum<tspan fill="#ff6a00">OS</tspan></text>
+  <text x="258" y="210" font-family="Consolas,monospace" font-size="21" fill="#9a9188">CRM multi-tenant de atendimento via WhatsApp &#183; white-label</text>
+
+  <!-- pills -->
+  <g font-family="Consolas,monospace" font-size="18" fill="#ffb020">
+    <rect x="258" y="244" width="104" height="34" rx="6" fill="#1c1c20" stroke="#2a2a30"/>
+    <text x="310" y="267" text-anchor="middle">FastAPI</text>
+    <rect x="372" y="244" width="140" height="34" rx="6" fill="#1c1c20" stroke="#2a2a30"/>
+    <text x="442" y="267" text-anchor="middle">PostgreSQL</text>
+    <rect x="522" y="244" width="84" height="34" rx="6" fill="#1c1c20" stroke="#2a2a30"/>
+    <text x="564" y="267" text-anchor="middle">Redis</text>
+    <rect x="616" y="244" width="120" height="34" rx="6" fill="#1c1c20" stroke="#2a2a30"/>
+    <text x="676" y="267" text-anchor="middle">WhatsApp</text>
+    <rect x="746" y="244" width="150" height="34" rx="6" fill="#1c1c20" stroke="#2a2a30"/>
+    <text x="821" y="267" text-anchor="middle">Multi-tenant</text>
+  </g>
+
+  <text x="1188" y="338" font-family="Consolas,monospace" font-size="14" fill="#6f6a63" text-anchor="end">Desenvolvido com aux&#237;lio de IA</text>
+</svg>

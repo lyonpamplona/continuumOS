@@ -1,0 +1,168 @@
+/* ===================================================================
+   Fase 10 - Copiloto do atendente (IA) - painel flutuante (JS puro).
+   Sugestao de resposta, correcao de tom, resumo, extracao, traducao,
+   base de conhecimento (RAG) e selo de sentimento/lead da conversa.
+=================================================================== */
+(function () {
+  if (window.__aiCopilotLoaded) return; window.__aiCopilotLoaded = true;
+
+  function cph() {
+    if (typeof currentPhone !== 'undefined' && currentPhone) return currentPhone;
+    return window.currentPhone || '';
+  }
+  function composer() {
+    return document.getElementById('chat-input') ||
+           document.querySelector('#message-input, .composer textarea, .chat-input, textarea');
+  }
+  async function api(method, url, body) {
+    var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opt.body = JSON.stringify(body);
+    try {
+      var r = await fetch(url, opt);
+      var t = await r.text(); var d = null;
+      try { d = t ? JSON.parse(t) : null; } catch (e) { d = t; }
+      return { ok: r.ok, status: r.status, data: d };
+    } catch (e) { return { ok: false, status: 0, data: null }; }
+  }
+  function toast(m, bad) {
+    var n = document.createElement('div'); n.textContent = m;
+    n.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:99999;padding:10px 16px;border-radius:8px;font:600 13px Space Grotesk,system-ui;color:#0a0a0a;background:' + (bad ? '#ffb020' : '#ff6a00') + ';box-shadow:0 8px 24px rgba(0,0,0,.4)';
+    document.body.appendChild(n); setTimeout(function () { n.remove(); }, 2600);
+  }
+  function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function need() { if (!cph()) { toast('Abra uma conversa primeiro.', true); return false; } return true; }
+  function insertText(t) {
+    var c = composer(); if (!c) { toast('Campo de mensagem nao encontrado.', true); return; }
+    c.value = c.value ? (c.value + ' ' + t) : t; c.focus();
+    c.dispatchEvent(new Event('input', { bubbles: true })); toast('Inserido no campo de mensagem.');
+  }
+
+  var css = document.createElement('style');
+  css.textContent = [
+    '.ai-fab{position:fixed;left:22px;bottom:22px;z-index:9998;height:44px;padding:0 14px;border-radius:12px;border:1px solid #2a2a30;background:#141417;color:#ff6a00;cursor:pointer;display:flex;align-items:center;gap:8px;font:700 12px Space Grotesk;box-shadow:0 10px 30px rgba(0,0,0,.5)}',
+    '.ai-fab:hover{border-color:#ff6a00}',
+    '.ai-panel{position:fixed;left:22px;bottom:76px;z-index:9999;width:370px;max-height:74vh;display:none;flex-direction:column;background:#0d0d0f;border:1px solid #2a2a30;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:Space Grotesk,system-ui;color:#f2ede6}',
+    '.ai-panel.open{display:flex}',
+    '.ai-head{padding:10px 12px;border-bottom:1px solid #2a2a30;background:#141417;display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
+    '.ai-badge{font:700 10px JetBrains Mono;padding:3px 8px;border-radius:20px;border:1px solid #2a2a30}',
+    '.ai-body{padding:12px;overflow:auto}',
+    '.ai-btn{width:100%;padding:9px;border:0;border-radius:8px;background:#ff6a00;color:#0a0a0a;font:700 12px Space Grotesk;cursor:pointer;margin-bottom:6px}',
+    '.ai-btn.ghost{background:transparent;border:1px solid #2a2a30;color:#f2ede6}',
+    '.ai-row{display:flex;gap:6px}.ai-row .ai-btn{margin-bottom:0}',
+    '.ai-out{background:#141417;border:1px solid #2a2a30;border-radius:8px;padding:9px;font-size:12.5px;color:#e8e2d9;white-space:pre-wrap;margin:6px 0}',
+    '.ai-lbl{font:600 11px Space Grotesk;color:#9a9aa0;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.04em}',
+    '.ai-in{width:100%;box-sizing:border-box;background:#141417;border:1px solid #2a2a30;border-radius:8px;color:#f2ede6;padding:8px;font:500 13px Space Grotesk;margin-bottom:6px}',
+    '.ai-sel{width:100%;box-sizing:border-box;background:#141417;border:1px solid #2a2a30;border-radius:8px;color:#f2ede6;padding:7px;font:500 12px Space Grotesk;margin-bottom:6px}',
+    '.ai-mut{font-size:11px;color:#6a6a70}'
+  ].join('');
+  document.head.appendChild(css);
+
+  var fab = document.createElement('button');
+  fab.className = 'ai-fab';
+  fab.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a4 4 0 0 0-4 4c0 1 .3 1.7.8 2.4C7.7 10.4 7 11.6 7 13a5 5 0 0 0 10 0c0-1.4-.7-2.6-1.8-3.6.5-.7.8-1.4.8-2.4a4 4 0 0 0-4-4z"/><path d="M12 13v6"/></svg><span>Copiloto IA</span>';
+  var panel = document.createElement('div'); panel.className = 'ai-panel';
+  panel.innerHTML =
+    '<div class="ai-head"><b style="font-size:13px">Copiloto IA</b>' +
+    '<span id="ai-sent" class="ai-badge" style="color:#9a9aa0">sentimento: -</span>' +
+    '<span id="ai-lead" class="ai-badge" style="color:#9a9aa0">lead: -</span></div>' +
+    '<div class="ai-body">' +
+    '<button class="ai-btn" id="ai-suggest">Sugerir resposta</button>' +
+    '<div id="ai-suggest-out"></div>' +
+    '<div class="ai-lbl">Corrigir tom do texto do campo</div>' +
+    '<div class="ai-row"><select class="ai-sel" id="ai-tone"><option value="formal">Formal</option><option value="amigavel">Amigavel</option><option value="conciso">Conciso</option></select>' +
+    '<button class="ai-btn ghost" id="ai-tone-btn" style="width:auto;white-space:nowrap">Ajustar</button></div>' +
+    '<div class="ai-row"><button class="ai-btn ghost" id="ai-summary">Resumir</button>' +
+    '<button class="ai-btn ghost" id="ai-extract">Extrair dados</button></div>' +
+    '<div id="ai-analysis-out"></div>' +
+    '<div class="ai-lbl">Traducao</div>' +
+    '<div class="ai-row"><select class="ai-sel" id="ai-lang"><option value="en">PT -> EN</option><option value="es">PT -> ES</option><option value="pt">-> PT</option></select>' +
+    '<button class="ai-btn ghost" id="ai-trans-btn" style="width:auto;white-space:nowrap">Traduzir campo</button></div>' +
+    '<div id="ai-trans-out"></div>' +
+    '<div class="ai-lbl">Base de conhecimento</div>' +
+    '<input class="ai-in" id="ai-kb-q" placeholder="Pergunte algo sobre seus produtos/politicas...">' +
+    '<button class="ai-btn ghost" id="ai-kb-btn">Buscar resposta</button>' +
+    '<div id="ai-kb-out"></div>' +
+    '</div>';
+  document.body.appendChild(fab); document.body.appendChild(panel);
+
+  fab.onclick = function () { panel.classList.toggle('open'); if (panel.classList.contains('open')) loadBadges(); };
+
+  function outBox(html) { return '<div class="ai-out">' + html + '</div>'; }
+
+  async function loadBadges() {
+    var sEl = document.getElementById('ai-sent'), lEl = document.getElementById('ai-lead');
+    if (!cph()) { sEl.textContent = 'sentimento: -'; lEl.textContent = 'lead: -'; return; }
+    var r = await api('GET', '/api/ai/conversation/' + cph());
+    var ai = (r.data && r.data.ai) || {}, lead = (r.data && r.data.lead) || {};
+    var s = ai.sentiment || '-';
+    sEl.textContent = 'sentimento: ' + s;
+    sEl.style.color = s === 'positivo' ? '#3ddc84' : (s === 'negativo' ? '#ff4d4d' : '#9a9aa0');
+    var b = lead.band || '-';
+    lEl.textContent = 'lead: ' + b + (lead.score != null ? ' (' + lead.score + ')' : '');
+    lEl.style.color = b === 'quente' ? '#ff6a00' : (b === 'morno' ? '#ffb020' : '#9a9aa0');
+  }
+
+  document.getElementById('ai-suggest').onclick = async function () {
+    if (!need()) return;
+    var box = document.getElementById('ai-suggest-out'); box.innerHTML = outBox('Gerando sugestao...');
+    var r = await api('POST', '/api/ai/suggest', { phone: cph() });
+    if (!r.ok || !r.data) { box.innerHTML = outBox('Erro ao gerar sugestao.'); return; }
+    var txt = r.data.text || '';
+    box.innerHTML = outBox(esc(txt)) +
+      '<div class="ai-row"><button class="ai-btn" id="ai-use">Inserir no campo</button></div>' +
+      '<div class="ai-mut">motor: ' + esc(r.data.engine || '-') + '</div>';
+    document.getElementById('ai-use').onclick = function () { insertText(txt); };
+  };
+
+  document.getElementById('ai-tone-btn').onclick = async function () {
+    var c = composer(); if (!c || !c.value.trim()) { toast('Escreva algo no campo primeiro.', true); return; }
+    var tone = document.getElementById('ai-tone').value;
+    var r = await api('POST', '/api/ai/tone', { text: c.value, tone: tone });
+    if (r.ok && r.data && r.data.text) { c.value = r.data.text; c.dispatchEvent(new Event('input', { bubbles: true })); toast('Tom ajustado.'); }
+    else toast('Erro ao ajustar tom.', true);
+  };
+
+  document.getElementById('ai-summary').onclick = async function () {
+    if (!need()) return;
+    var box = document.getElementById('ai-analysis-out'); box.innerHTML = outBox('Resumindo...');
+    var r = await api('POST', '/api/ai/summary', { phone: cph() });
+    box.innerHTML = outBox(esc((r.data && r.data.summary) || 'Sem resumo.'));
+  };
+
+  document.getElementById('ai-extract').onclick = async function () {
+    if (!need()) return;
+    var box = document.getElementById('ai-analysis-out'); box.innerHTML = outBox('Extraindo...');
+    var r = await api('POST', '/api/ai/extract', { phone: cph() });
+    var d = r.data || {};
+    var labels = { name: 'Nome', order: 'Pedido', amount: 'Valor', email: 'E-mail', cpf: 'CPF', objection: 'Objecao' };
+    var rows = Object.keys(labels).map(function (k) {
+      return '<div><b>' + labels[k] + ':</b> ' + esc(d[k] != null && d[k] !== '' ? d[k] : '-') + '</div>';
+    }).join('');
+    box.innerHTML = outBox(rows);
+  };
+
+  document.getElementById('ai-trans-btn').onclick = async function () {
+    var c = composer(); if (!c || !c.value.trim()) { toast('Escreva algo no campo primeiro.', true); return; }
+    var lang = document.getElementById('ai-lang').value;
+    var box = document.getElementById('ai-trans-out'); box.innerHTML = outBox('Traduzindo...');
+    var r = await api('POST', '/api/ai/translate', { text: c.value, target_lang: lang });
+    var d = r.data || {};
+    box.innerHTML = outBox(esc(d.text || '')) +
+      '<div class="ai-row"><button class="ai-btn" id="ai-trans-use">Usar traducao</button></div>' +
+      (d.note ? '<div class="ai-mut">' + esc(d.note) + '</div>' : '<div class="ai-mut">motor: ' + esc(d.engine || '-') + '</div>');
+    var u = document.getElementById('ai-trans-use'); if (u) u.onclick = function () { c.value = d.text || ''; c.dispatchEvent(new Event('input', { bubbles: true })); toast('Traducao aplicada.'); };
+  };
+
+  document.getElementById('ai-kb-btn').onclick = async function () {
+    var q = document.getElementById('ai-kb-q').value.trim();
+    if (!q) { toast('Digite uma pergunta.', true); return; }
+    var box = document.getElementById('ai-kb-out'); box.innerHTML = outBox('Buscando...');
+    var r = await api('POST', '/api/kb/query', { question: q, phone: cph() });
+    var d = r.data || {};
+    if (!d.found) { box.innerHTML = outBox('Nada encontrado na base de conhecimento.'); return; }
+    box.innerHTML = outBox(esc(d.text || '')) +
+      '<div class="ai-row"><button class="ai-btn" id="ai-kb-use">Inserir no campo</button></div>' +
+      (d.sources && d.sources.length ? '<div class="ai-mut">fontes: ' + esc(d.sources.join(', ')) + '</div>' : '');
+    var u = document.getElementById('ai-kb-use'); if (u) u.onclick = function () { insertText(d.text || ''); };
+  };
+})();

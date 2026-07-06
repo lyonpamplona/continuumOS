@@ -1,0 +1,343 @@
+<script>
+/* ===================================================================
+   Fase 12 - Console de Vendas & CRM avancado (JS puro).
+   Abas: Pipeline | Catalogo | Carrinho | Metas | Cadencias | Comissoes.
+=================================================================== */
+(function () {
+  if (window.__salesLoaded) return; window.__salesLoaded = true;
+
+  async function api(method, url, body) {
+    var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opt.body = JSON.stringify(body);
+    try {
+      var r = await fetch(url, opt); var t = await r.text(); var d = null;
+      try { d = t ? JSON.parse(t) : null; } catch (e) { d = t; }
+      return { ok: r.ok, status: r.status, data: d };
+    } catch (e) { return { ok: false, status: 0, data: null }; }
+  }
+  function toast(m, bad) {
+    var n = document.createElement('div'); n.textContent = m;
+    n.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:100001;padding:10px 16px;border-radius:8px;font:600 13px Space Grotesk,system-ui;color:#0a0a0a;background:' + (bad ? '#ffb020' : '#ff6a00');
+    document.body.appendChild(n); setTimeout(function () { n.remove(); }, 2800);
+  }
+  function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function money(v) { return 'R$ ' + (parseFloat(v || 0)).toFixed(2); }
+
+  var css = document.createElement('style');
+  css.textContent = [
+    '.sl-fab{position:fixed;right:22px;top:152px;z-index:9995;height:40px;padding:0 14px;border-radius:10px;border:1px solid #2a2a30;background:#141417;color:#3ddc84;cursor:pointer;font:700 12px Space Grotesk;display:flex;align-items:center;gap:7px}',
+    '.sl-fab:hover{border-color:#3ddc84}',
+    '.sl-ov{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center}',
+    '.sl-ov.open{display:flex}',
+    '.sl-modal{width:min(1120px,97vw);height:min(90vh,960px);background:#0d0d0f;border:1px solid #2a2a30;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;font-family:Space Grotesk,system-ui;color:#f2ede6}',
+    '.sl-top{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid #2a2a30;background:#141417;flex-wrap:wrap}',
+    '.sl-top b{font-size:14px;margin-right:auto}',
+    '.sl-tab{padding:7px 12px;border:0;border-radius:8px;background:transparent;color:#9a9aa0;font:600 12px Space Grotesk;cursor:pointer}',
+    '.sl-tab.on{background:#ff6a00;color:#0a0a0a}',
+    '.sl-x{background:transparent;border:0;color:#f2ede6;font:700 16px Space Grotesk;cursor:pointer;padding:4px 8px}',
+    '.sl-body{padding:14px;overflow:auto;flex:1}',
+    '.sl-sec{display:none}.sl-sec.on{display:block}',
+    '.sl-lbl{font:600 11px Space Grotesk;color:#9a9aa0;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.04em}',
+    '.sl-in,.sl-ta,.sl-sel{width:100%;box-sizing:border-box;background:#141417;border:1px solid #2a2a30;border-radius:8px;color:#f2ede6;padding:8px 10px;font:500 13px Space Grotesk;margin-bottom:8px}',
+    '.sl-btn{padding:8px 13px;border:0;border-radius:8px;background:#ff6a00;color:#0a0a0a;font:700 12px Space Grotesk;cursor:pointer;margin:2px 4px 2px 0}',
+    '.sl-btn.ghost{background:transparent;border:1px solid #2a2a30;color:#f2ede6}',
+    '.sl-btn.mini{padding:4px 8px;font-size:11px}',
+    '.sl-card{border:1px solid #2a2a30;border-radius:10px;padding:10px;margin-bottom:8px;background:#141417}',
+    '.sl-row{display:flex;gap:8px;align-items:center}',
+    '.sl-mut{color:#6b6b72;font:500 11px Space Grotesk}',
+    '.sl-kb{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}',
+    '.sl-col{min-width:210px;width:210px;background:#0d0d0f;border:1px solid #22222a;border-radius:10px;padding:8px;flex-shrink:0}',
+    '.sl-colh{font:700 12px Space Grotesk;margin-bottom:8px;display:flex;align-items:center;gap:6px}',
+    '.sl-dot{width:9px;height:9px;border-radius:50%}',
+    '.sl-deal{background:#141417;border:1px solid #2a2a30;border-radius:8px;padding:8px;margin-bottom:7px}',
+    '.sl-deal b{font:600 12px Space Grotesk}',
+    '.sl-sig{font:700 9px JetBrains Mono,monospace;padding:1px 5px;border-radius:5px}',
+    '.sl-ok{color:#3ddc84;background:#3ddc8422}.sl-at{color:#ffb020;background:#ffb02022}.sl-ri{color:#ff4d4d;background:#ff4d4d22}',
+    '.sl-bar{height:8px;border-radius:4px;background:#22222a;overflow:hidden;margin-top:4px}',
+    '.sl-fill{height:100%;background:#3ddc84}',
+    '.sl-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}',
+    '.sl-step{border:1px dashed #2a2a30;border-radius:8px;padding:8px;margin-bottom:6px}',
+    'table.sl-t{width:100%;border-collapse:collapse}.sl-t td,.sl-t th{padding:6px 8px;border-bottom:1px solid #22222a;font:500 12px Space Grotesk;text-align:left}'
+  ].join('');
+  document.head.appendChild(css);
+
+  var TABS = [['pipe', 'Pipeline'], ['cat', 'Catalogo'], ['cart', 'Carrinho'], ['goal', 'Metas'], ['cad', 'Cadencias'], ['comm', 'Comissoes']];
+  var fab = el('button', 'sl-fab', 'VENDAS / CRM');
+  var ov = el('div', 'sl-ov');
+  var tabsHtml = TABS.map(function (t, i) { return '<button class="sl-tab' + (i === 0 ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>'; }).join('');
+  var secHtml = TABS.map(function (t, i) { return '<div class="sl-sec' + (i === 0 ? ' on' : '') + '" id="sec_' + t[0] + '"></div>'; }).join('');
+  ov.innerHTML = '<div class="sl-modal"><div class="sl-top"><b>Vendas &amp; CRM</b>' + tabsHtml + '<button class="sl-x" id="slClose">x</button></div><div class="sl-body">' + secHtml + '</div></div>';
+  document.body.appendChild(fab); document.body.appendChild(ov);
+
+  var STAGES = [], PIPE_ID = null, PRODUCTS = [];
+  fab.onclick = function () { ov.classList.add('open'); loadPipeline(); };
+  document.getElementById('slClose').onclick = function () { ov.classList.remove('open'); };
+  ov.onclick = function (e) { if (e.target === ov) ov.classList.remove('open'); };
+  Array.prototype.forEach.call(ov.querySelectorAll('.sl-tab'), function (b) {
+    b.onclick = function () {
+      Array.prototype.forEach.call(ov.querySelectorAll('.sl-tab'), function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var t = b.getAttribute('data-t');
+      TABS.forEach(function (tt) { document.getElementById('sec_' + tt[0]).classList.toggle('on', tt[0] === t); });
+      if (t === 'pipe') loadPipeline();
+      if (t === 'cat') loadCatalog();
+      if (t === 'cart') renderCart();
+      if (t === 'goal') loadGoals();
+      if (t === 'cad') loadCadences();
+      if (t === 'comm') loadCommissions();
+    };
+  });
+
+  // ---------------- PIPELINE ----------------
+  async function loadPipeline() {
+    var sec = document.getElementById('sec_pipe');
+    sec.innerHTML = '<div class="sl-mut">Carregando...</div>';
+    var p = await api('GET', '/api/pipelines');
+    if (!p.ok || !p.data || !p.data.pipelines || !p.data.pipelines.length) { sec.innerHTML = '<div class="sl-mut">Sem pipeline.</div>'; return; }
+    var pipe = p.data.pipelines[0];
+    PIPE_ID = pipe.id; STAGES = pipe.stages || [];
+    var d = await api('GET', '/api/deals?pipeline_id=' + PIPE_ID);
+    var deals = (d.data && d.data.deals) || [];
+    sec.innerHTML = '';
+    var head = el('div', 'sl-row');
+    head.style.marginBottom = '10px';
+    head.innerHTML = '<span class="sl-mut">Previsao ponderada: <b style="color:#3ddc84">' + money((d.data && d.data.forecast) || 0) + '</b></span>';
+    var addBtn = el('button', 'sl-btn mini', '+ Negocio'); addBtn.style.marginLeft = 'auto';
+    addBtn.onclick = newDeal; head.appendChild(addBtn); sec.appendChild(head);
+    var kb = el('div', 'sl-kb');
+    STAGES.forEach(function (st) {
+      var col = el('div', 'sl-col');
+      var inStage = deals.filter(function (x) { return x.stage === st.id; });
+      var sum = inStage.reduce(function (a, x) { return a + parseFloat(x.value || 0); }, 0);
+      col.appendChild(el('div', 'sl-colh', '<span class="sl-dot" style="background:' + (st.color || '#9a9aa0') + '"></span>' + esc(st.name) + ' <span class="sl-mut" style="margin-left:auto">' + inStage.length + ' / ' + money(sum) + '</span>'));
+      inStage.forEach(function (dl) {
+        var h = dl.health || {}; var sc = h.signal === 'risco' ? 'sl-ri' : (h.signal === 'atencao' ? 'sl-at' : 'sl-ok');
+        var card = el('div', 'sl-deal');
+        var opts = STAGES.map(function (s) { return '<option value="' + s.id + '"' + (s.id === dl.stage ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
+        card.innerHTML = '<div class="sl-row"><b>' + esc(dl.title) + '</b><span class="sl-sig ' + sc + '" style="margin-left:auto">' + (h.days_idle || 0) + 'd</span></div>' +
+          '<div class="sl-mut">' + esc(dl.contact_name || dl.contact_phone || '') + ' - ' + money(dl.value) + '</div>' +
+          '<select class="sl-sel" style="margin:6px 0 0;padding:4px 6px;font-size:11px">' + opts + '</select>';
+        var selEl = card.querySelector('select');
+        selEl.onchange = async function () {
+          var w = await api('POST', '/api/deals/' + dl.id + '/move', { stage: selEl.value });
+          if (w.ok) { toast('Movido.'); loadPipeline(); } else toast('Erro.', true);
+        };
+        col.appendChild(card);
+      });
+      kb.appendChild(col);
+    });
+    sec.appendChild(kb);
+  }
+  async function newDeal() {
+    var title = prompt('Titulo do negocio:'); if (!title) return;
+    var phone = prompt('Telefone do contato (opcional):') || '';
+    var value = parseFloat(prompt('Valor (R$):') || '0') || 0;
+    var w = await api('POST', '/api/deals', { pipeline_id: PIPE_ID, title: title, contact_phone: phone, value: value });
+    if (w.ok) { toast('Negocio criado.'); loadPipeline(); } else toast('Erro.', true);
+  }
+
+  // ---------------- CATALOGO ----------------
+  async function loadCatalog() {
+    var sec = document.getElementById('sec_cat');
+    sec.innerHTML = '';
+    var form = el('div', 'sl-card');
+    form.innerHTML = '<b>Novo produto</b><div class="sl-grid"><div><div class="sl-lbl">Nome</div><input class="sl-in" id="pName"></div>' +
+      '<div><div class="sl-lbl">SKU</div><input class="sl-in" id="pSku"></div>' +
+      '<div><div class="sl-lbl">Preco</div><input class="sl-in" id="pPrice" type="number" step="0.01"></div>' +
+      '<div><div class="sl-lbl">Estoque</div><input class="sl-in" id="pStock" type="number"></div></div>';
+    var save = el('button', 'sl-btn', 'Adicionar produto');
+    save.onclick = async function () {
+      var body = { name: document.getElementById('pName').value.trim(), sku: document.getElementById('pSku').value.trim(),
+        price: parseFloat(document.getElementById('pPrice').value) || 0, stock: parseInt(document.getElementById('pStock').value, 10) || 0 };
+      if (!body.name) { toast('Informe o nome.', true); return; }
+      var w = await api('POST', '/api/products', body);
+      if (w.ok) { toast('Produto salvo.'); loadCatalog(); } else toast((w.data && w.data.error) || 'Erro (admin?).', true);
+    };
+    form.appendChild(save); sec.appendChild(form);
+    var r = await api('GET', '/api/products');
+    PRODUCTS = (r.data && r.data.products) || [];
+    var tbl = el('table', 'sl-t');
+    tbl.innerHTML = '<tr><th>Produto</th><th>SKU</th><th>Preco</th><th>Estoque</th><th></th></tr>';
+    PRODUCTS.forEach(function (p) {
+      var tr = el('tr');
+      tr.innerHTML = '<td>' + esc(p.name) + '</td><td>' + esc(p.sku) + '</td><td>' + money(p.price) + '</td><td>' + (p.stock || 0) + '</td>';
+      var td = el('td'); var del = el('button', 'sl-btn ghost mini', 'x');
+      del.onclick = async function () { await api('DELETE', '/api/products/' + p.id); loadCatalog(); };
+      td.appendChild(del); tr.appendChild(td); tbl.appendChild(tr);
+    });
+    sec.appendChild(tbl);
+  }
+
+  // ---------------- CARRINHO ----------------
+  var CART_PHONE = '';
+  async function renderCart() {
+    var sec = document.getElementById('sec_cart');
+    sec.innerHTML = '';
+    var bar = el('div', 'sl-row'); bar.style.marginBottom = '10px';
+    var guess = (window.currentPhone || '');
+    bar.innerHTML = '<input class="sl-in" id="cartPhone" placeholder="Telefone do cliente" value="' + esc(CART_PHONE || guess) + '" style="margin:0;max-width:260px">';
+    var load = el('button', 'sl-btn mini', 'Abrir carrinho'); load.style.marginLeft = '8px';
+    load.onclick = function () { CART_PHONE = document.getElementById('cartPhone').value.trim(); if (CART_PHONE) openCart(); };
+    bar.appendChild(load); sec.appendChild(bar);
+    var box = el('div'); box.id = 'cartBox'; sec.appendChild(box);
+    if (CART_PHONE) openCart();
+  }
+  async function openCart() {
+    var box = document.getElementById('cartBox');
+    if (!PRODUCTS.length) { var pr = await api('GET', '/api/products?active_only=true'); PRODUCTS = (pr.data && pr.data.products) || []; }
+    var r = await api('GET', '/api/cart/' + encodeURIComponent(CART_PHONE));
+    if (!r.ok) { box.innerHTML = '<div class="sl-mut">Erro.</div>'; return; }
+    var items = r.data.items || []; var tot = r.data.totals || {};
+    box.innerHTML = '';
+    var add = el('div', 'sl-card');
+    var opts = PRODUCTS.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + ' (' + money(p.price) + ')</option>'; }).join('');
+    add.innerHTML = '<div class="sl-row"><select class="sl-sel" id="cartProd" style="margin:0">' + opts + '</select>' +
+      '<input class="sl-in" id="cartQty" type="number" value="1" style="margin:0;max-width:70px">' +
+      '<button class="sl-btn mini" id="cartAdd">Adicionar</button></div>';
+    box.appendChild(add);
+    document.getElementById('cartAdd').onclick = async function () {
+      var pid = parseInt(document.getElementById('cartProd').value, 10);
+      var q = parseInt(document.getElementById('cartQty').value, 10) || 1;
+      var w = await api('POST', '/api/cart/' + encodeURIComponent(CART_PHONE) + '/items', { product_id: pid, qty: q });
+      if (w.ok) openCart(); else toast('Erro.', true);
+    };
+    var tbl = el('table', 'sl-t'); tbl.innerHTML = '<tr><th>Item</th><th>Qtd</th><th>Preco</th><th></th></tr>';
+    items.forEach(function (it) {
+      var tr = el('tr');
+      tr.innerHTML = '<td>' + esc(it.name) + '</td><td>' + it.qty + '</td><td>' + money(it.price) + '</td>';
+      var td = el('td'); var del = el('button', 'sl-btn ghost mini', 'x');
+      del.onclick = async function () { await api('DELETE', '/api/cart/items/' + it.id); openCart(); };
+      td.appendChild(del); tr.appendChild(td); tbl.appendChild(tr);
+    });
+    box.appendChild(tbl);
+    var foot = el('div', 'sl-card');
+    foot.innerHTML = '<div class="sl-row"><b>Total: ' + money(tot.total) + '</b>' +
+      '<span class="sl-mut" style="margin-left:8px">(' + (tot.item_count || 0) + ' itens)</span></div>';
+    var co = el('button', 'sl-btn', 'Gerar link de pagamento'); co.style.marginTop = '8px';
+    co.onclick = async function () {
+      if (!items.length) { toast('Carrinho vazio.', true); return; }
+      var w = await api('POST', '/api/cart/' + encodeURIComponent(CART_PHONE) + '/checkout', { provider: 'link' });
+      if (w.ok) {
+        var url = location.origin + w.data.payment_link;
+        foot.appendChild(el('div', 'sl-mut', 'Link: ' + url));
+        toast('Pedido gerado. Link copiado.');
+        try { navigator.clipboard.writeText(url); } catch (e) {}
+        openCart();
+      } else toast((w.data && w.data.error) || 'Erro.', true);
+    };
+    foot.appendChild(co); box.appendChild(foot);
+  }
+
+  // ---------------- METAS ----------------
+  function curPeriod() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); }
+  async function loadGoals() {
+    var sec = document.getElementById('sec_goal');
+    sec.innerHTML = '';
+    var form = el('div', 'sl-card');
+    form.innerHTML = '<b>Nova meta</b><div class="sl-grid">' +
+      '<div><div class="sl-lbl">Responsavel (usuario)</div><input class="sl-in" id="gOwner"></div>' +
+      '<div><div class="sl-lbl">Periodo (AAAA-MM)</div><input class="sl-in" id="gPeriod" value="' + curPeriod() + '"></div>' +
+      '<div><div class="sl-lbl">Meta de receita (R$)</div><input class="sl-in" id="gTarget" type="number" step="0.01"></div></div>';
+    var save = el('button', 'sl-btn', 'Salvar meta');
+    save.onclick = async function () {
+      var body = { owner: document.getElementById('gOwner').value.trim(), period: document.getElementById('gPeriod').value.trim(), metric: 'revenue', target: parseFloat(document.getElementById('gTarget').value) || 0 };
+      var w = await api('POST', '/api/goals', body);
+      if (w.ok) { toast('Meta salva.'); loadGoals(); } else toast((w.data && w.data.error) || 'Erro (admin?).', true);
+    };
+    form.appendChild(save); sec.appendChild(form);
+    var r = await api('GET', '/api/goals?period=' + curPeriod());
+    (r.data && r.data.goals || []).forEach(function (g) {
+      var pr = g.progress || {}; var c = el('div', 'sl-card');
+      var col = pr.status === 'batida' ? '#3ddc84' : (pr.status === 'no caminho' ? '#ffb020' : '#ff4d4d');
+      c.innerHTML = '<div class="sl-row"><b>' + esc(g.owner || '(sem dono)') + '</b><span class="sl-mut" style="margin-left:auto">' + esc(g.period) + '</span></div>' +
+        '<div class="sl-mut">' + money(g.achieved) + ' de ' + money(g.target) + ' - ' + esc(pr.status || '') + '</div>' +
+        '<div class="sl-bar"><div class="sl-fill" style="width:' + Math.min(100, pr.pct || 0) + '%;background:' + col + '"></div></div>';
+      var del = el('button', 'sl-btn ghost mini', 'Excluir'); del.style.marginTop = '6px';
+      del.onclick = async function () { await api('DELETE', '/api/goals/' + g.id); loadGoals(); };
+      c.appendChild(del); sec.appendChild(c);
+    });
+  }
+
+  // ---------------- CADENCIAS ----------------
+  var STEPS = [];
+  async function loadCadences() {
+    var sec = document.getElementById('sec_cad');
+    sec.innerHTML = '';
+    STEPS = STEPS.length ? STEPS : [{ delay_hours: 0, channel: 'whatsapp', template: '' }];
+    var form = el('div', 'sl-card');
+    form.innerHTML = '<b>Nova cadencia</b><div class="sl-lbl">Nome</div><input class="sl-in" id="cadName">';
+    var stepsBox = el('div'); stepsBox.id = 'stepsBox';
+    function drawSteps() {
+      stepsBox.innerHTML = '';
+      STEPS.forEach(function (s, i) {
+        var d = el('div', 'sl-step');
+        d.innerHTML = '<div class="sl-row"><b class="sl-mut">Passo ' + (i + 1) + '</b>' +
+          '<input class="sl-in" data-k="delay" type="number" value="' + (s.delay_hours || 0) + '" style="margin:0 0 0 8px;max-width:90px" placeholder="horas"></div>' +
+          '<textarea class="sl-ta" data-k="tpl" placeholder="Mensagem (use [[nome]])" style="min-height:52px;margin-top:6px">' + esc(s.template || '') + '</textarea>';
+        d.querySelector('[data-k=delay]').onchange = function (e) { STEPS[i].delay_hours = parseFloat(e.target.value) || 0; };
+        d.querySelector('[data-k=tpl]').onchange = function (e) { STEPS[i].template = e.target.value; };
+        stepsBox.appendChild(d);
+      });
+    }
+    drawSteps();
+    var addStep = el('button', 'sl-btn ghost mini', '+ Passo');
+    addStep.onclick = function () { STEPS.push({ delay_hours: 24, channel: 'whatsapp', template: '' }); drawSteps(); };
+    var save = el('button', 'sl-btn', 'Salvar cadencia');
+    save.onclick = async function () {
+      var body = { name: document.getElementById('cadName').value.trim() || 'Cadencia', steps: STEPS, active: true };
+      var w = await api('POST', '/api/cadences', body);
+      if (w.ok) { toast('Cadencia salva.'); STEPS = []; loadCadences(); } else toast((w.data && w.data.error) || 'Erro (admin?).', true);
+    };
+    form.appendChild(stepsBox); form.appendChild(addStep); form.appendChild(save); sec.appendChild(form);
+    var r = await api('GET', '/api/cadences');
+    (r.data && r.data.cadences || []).forEach(function (cd) {
+      var c = el('div', 'sl-card');
+      c.innerHTML = '<div class="sl-row"><b>' + esc(cd.name) + '</b><span class="sl-mut" style="margin-left:auto">' + ((cd.steps || []).length) + ' passo(s) - ' + (cd.active ? 'ativa' : 'inativa') + '</span></div>';
+      var enr = el('button', 'sl-btn mini', 'Inscrever contato');
+      enr.onclick = async function () { var ph = prompt('Telefone do contato:'); if (!ph) return; var w = await api('POST', '/api/cadences/' + cd.id + '/enroll', { contact_phone: ph }); if (w.ok) toast('Inscrito.'); else toast('Erro.', true); };
+      var del = el('button', 'sl-btn ghost mini', 'Excluir');
+      del.onclick = async function () { await api('DELETE', '/api/cadences/' + cd.id); loadCadences(); };
+      c.appendChild(enr); c.appendChild(del); sec.appendChild(c);
+    });
+  }
+
+  // ---------------- COMISSOES ----------------
+  async function loadCommissions() {
+    var sec = document.getElementById('sec_comm');
+    sec.innerHTML = '';
+    var form = el('div', 'sl-card');
+    form.innerHTML = '<b>Nova regra de comissao</b><div class="sl-grid">' +
+      '<div><div class="sl-lbl">Nome</div><input class="sl-in" id="rName"></div>' +
+      '<div><div class="sl-lbl">Valor minimo (R$)</div><input class="sl-in" id="rMin" type="number" step="0.01"></div>' +
+      '<div><div class="sl-lbl">Taxa (%)</div><input class="sl-in" id="rRate" type="number" step="0.01"></div></div>';
+    var save = el('button', 'sl-btn', 'Salvar regra');
+    save.onclick = async function () {
+      var body = { name: document.getElementById('rName').value.trim() || 'Regra', min_value: parseFloat(document.getElementById('rMin').value) || 0, rate: parseFloat(document.getElementById('rRate').value) || 0 };
+      var w = await api('POST', '/api/commissions/rules', body);
+      if (w.ok) { toast('Regra salva.'); loadCommissions(); } else toast((w.data && w.data.error) || 'Erro (admin?).', true);
+    };
+    form.appendChild(save); sec.appendChild(form);
+    var rr = await api('GET', '/api/commissions/rules');
+    (rr.data && rr.data.rules || []).forEach(function (rl) {
+      var c = el('div', 'sl-card');
+      c.innerHTML = '<div class="sl-row"><b>' + esc(rl.name) + '</b><span class="sl-mut" style="margin-left:auto">a partir de ' + money(rl.min_value) + ' -> ' + rl.rate + '%</span></div>';
+      var del = el('button', 'sl-btn ghost mini', 'Excluir'); del.style.marginTop = '6px';
+      del.onclick = async function () { await api('DELETE', '/api/commissions/rules/' + rl.id); loadCommissions(); };
+      c.appendChild(del); sec.appendChild(c);
+    });
+    var rep = await api('GET', '/api/commissions/report?period=' + curPeriod());
+    if (rep.ok && rep.data) {
+      var box = el('div', 'sl-card');
+      box.innerHTML = '<b>Relatorio do mes (' + curPeriod() + ')</b>';
+      var tbl = el('table', 'sl-t'); tbl.innerHTML = '<tr><th>Vendedor</th><th>Receita</th><th>Pedidos</th><th>Taxa</th><th>Comissao</th></tr>';
+      (rep.data.report || []).forEach(function (x) {
+        var tr = el('tr'); tr.innerHTML = '<td>' + esc(x.owner || '-') + '</td><td>' + money(x.revenue) + '</td><td>' + x.orders + '</td><td>' + x.rate + '%</td><td>' + money(x.commission) + '</td>'; tbl.appendChild(tr);
+      });
+      box.appendChild(tbl);
+      box.appendChild(el('div', 'sl-mut', 'Total de comissoes: ' + money(rep.data.total_commission)));
+      sec.appendChild(box);
+    }
+  }
+})();
+</script>

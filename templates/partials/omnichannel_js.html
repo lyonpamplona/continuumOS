@@ -1,0 +1,197 @@
+<script>
+/* ===================================================================
+   Fase 11 - Caixa unificada (omnichannel) - JS puro.
+   FAB "Caixa" -> modal com lista de conversas (todos os canais) + thread.
+=================================================================== */
+(function () {
+  if (window.__omniLoaded) return; window.__omniLoaded = true;
+
+  var CH_ICON = {
+    whatsapp_cloud: 'WA', telegram: 'TG', instagram: 'IG',
+    messenger: 'MSG', email: 'ML', webchat: 'WEB'
+  };
+  var CH_COLOR = {
+    whatsapp_cloud: '#25d366', telegram: '#2aabee', instagram: '#e1306c',
+    messenger: '#0084ff', email: '#ffb020', webchat: '#ff6a00'
+  };
+
+  async function api(method, url, body) {
+    var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opt.body = JSON.stringify(body);
+    try {
+      var r = await fetch(url, opt); var t = await r.text(); var d = null;
+      try { d = t ? JSON.parse(t) : null; } catch (e) { d = t; }
+      return { ok: r.ok, status: r.status, data: d };
+    } catch (e) { return { ok: false, status: 0, data: null }; }
+  }
+  function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function chip(cid) {
+    var c = CH_COLOR[cid] || '#9a9aa0';
+    return '<span class="om-chip" style="background:' + c + '22;color:' + c + ';border:1px solid ' + c + '55">' + (CH_ICON[cid] || cid) + '</span>';
+  }
+
+  var css = document.createElement('style');
+  css.textContent = [
+    '.om-fab{position:fixed;right:22px;top:60px;z-index:9997;height:40px;padding:0 14px;border-radius:10px;border:1px solid #2a2a30;background:#141417;color:#ffb020;cursor:pointer;font:700 12px Space Grotesk;display:flex;align-items:center;gap:7px}',
+    '.om-fab:hover{border-color:#ffb020}',
+    '.om-badge{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ff4d4d;color:#fff;font:700 11px Space Grotesk;display:none;align-items:center;justify-content:center}',
+    '.om-ov{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center}',
+    '.om-ov.open{display:flex}',
+    '.om-modal{width:min(1040px,96vw);height:min(88vh,920px);background:#0d0d0f;border:1px solid #2a2a30;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;font-family:Space Grotesk,system-ui;color:#f2ede6}',
+    '.om-top{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #2a2a30;background:#141417}',
+    '.om-top b{font-size:14px;margin-right:auto}',
+    '.om-x{background:transparent;border:0;color:#f2ede6;font:700 16px Space Grotesk;cursor:pointer;padding:4px 8px}',
+    '.om-fil{padding:6px 8px;border:1px solid #2a2a30;border-radius:8px;background:#0d0d0f;color:#f2ede6;font:600 11px Space Grotesk}',
+    '.om-main{display:flex;flex:1;overflow:hidden}',
+    '.om-list{width:320px;border-right:1px solid #2a2a30;overflow:auto;background:#0d0d0f}',
+    '.om-conv{display:flex;gap:9px;padding:10px 12px;border-bottom:1px solid #1c1c22;cursor:pointer;align-items:center}',
+    '.om-conv:hover{background:#141417}.om-conv.on{background:#17171b}',
+    '.om-chip{font:700 9px JetBrains Mono,monospace;padding:2px 5px;border-radius:5px;letter-spacing:.02em}',
+    '.om-cbody{flex:1;min-width:0}',
+    '.om-cname{font:600 13px Space Grotesk;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.om-clast{font:500 11px Space Grotesk;color:#9a9aa0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.om-un{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ff6a00;color:#0a0a0a;font:700 11px Space Grotesk;display:flex;align-items:center;justify-content:center}',
+    '.om-thread{flex:1;display:flex;flex-direction:column;overflow:hidden}',
+    '.om-msgs{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:8px;background:#0d0d0f}',
+    '.om-b{max-width:74%;padding:8px 11px;border-radius:12px;font:500 13px Space Grotesk;line-height:1.4;word-wrap:break-word}',
+    '.om-in{align-self:flex-start;background:#1c1c22;border:1px solid #2a2a30}',
+    '.om-out{align-self:flex-end;background:#ff6a0022;border:1px solid #ff6a0055}',
+    '.om-meta{font:500 10px JetBrains Mono,monospace;color:#6b6b72;margin-top:3px}',
+    '.om-send{display:flex;gap:8px;padding:10px;border-top:1px solid #2a2a30;background:#141417}',
+    '.om-ta{flex:1;background:#0d0d0f;border:1px solid #2a2a30;border-radius:10px;color:#f2ede6;padding:9px 11px;font:500 13px Space Grotesk;resize:none;height:42px}',
+    '.om-btn{padding:0 16px;border:0;border-radius:10px;background:#ff6a00;color:#0a0a0a;font:700 12px Space Grotesk;cursor:pointer}',
+    '.om-empty{margin:auto;color:#6b6b72;font:600 13px Space Grotesk;text-align:center;padding:30px}',
+    '.om-stub{align-self:center;color:#ffb020;font:600 10px JetBrains Mono,monospace}'
+  ].join('');
+  document.head.appendChild(css);
+
+  var fab = el('button', 'om-fab');
+  fab.innerHTML = 'CAIXA UNIFICADA <span class="om-badge" id="omBadge">0</span>';
+  var ov = el('div', 'om-ov');
+  ov.innerHTML =
+    '<div class="om-modal">' +
+      '<div class="om-top">' +
+        '<b>Caixa unificada</b>' +
+        '<select class="om-fil" id="omFilCh"><option value="">Todos os canais</option></select>' +
+        '<select class="om-fil" id="omFilSt"><option value="open">Abertas</option><option value="">Todas</option><option value="closed">Fechadas</option></select>' +
+        '<button class="om-x" id="omClose">x</button>' +
+      '</div>' +
+      '<div class="om-main">' +
+        '<div class="om-list" id="omList"></div>' +
+        '<div class="om-thread">' +
+          '<div class="om-msgs" id="omMsgs"><div class="om-empty">Selecione uma conversa.</div></div>' +
+          '<div class="om-send" id="omSendBox" style="display:none">' +
+            '<textarea class="om-ta" id="omInput" placeholder="Escreva uma resposta..."></textarea>' +
+            '<button class="om-btn" id="omSend">Enviar</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(fab);
+  document.body.appendChild(ov);
+
+  var current = null;
+  var convCache = [];
+
+  function openOv() { ov.classList.add('open'); loadConvs(); }
+  function closeOv() { ov.classList.remove('open'); }
+  fab.onclick = openOv;
+  document.getElementById('omClose').onclick = closeOv;
+  ov.onclick = function (e) { if (e.target === ov) closeOv(); };
+  document.getElementById('omFilCh').onchange = loadConvs;
+  document.getElementById('omFilSt').onchange = loadConvs;
+
+  function fillChannelFilter(summary) {
+    var sel = document.getElementById('omFilCh');
+    if (sel.options.length > 1) return;
+    Object.keys(CH_ICON).forEach(function (k) {
+      var o = document.createElement('option'); o.value = k; o.textContent = k; sel.appendChild(o);
+    });
+  }
+
+  async function loadConvs() {
+    var chv = document.getElementById('omFilCh').value;
+    var stv = document.getElementById('omFilSt').value;
+    var r = await api('GET', '/api/inbox/conversations?status=' + encodeURIComponent(stv) + '&channel=' + encodeURIComponent(chv));
+    var list = document.getElementById('omList');
+    list.innerHTML = '';
+    if (!r.ok || !r.data || !r.data.conversations || !r.data.conversations.length) {
+      list.innerHTML = '<div class="om-empty">Nenhuma conversa.</div>'; return;
+    }
+    convCache = r.data.conversations;
+    fillChannelFilter(r.data.summary);
+    convCache.forEach(function (c) {
+      var row = el('div', 'om-conv');
+      if (current && current.id === c.id) row.classList.add('on');
+      row.innerHTML = chip(c.channel) +
+        '<div class="om-cbody"><div class="om-cname">' + esc(c.contact_name || c.contact_ref || 'Contato') + '</div>' +
+        '<div class="om-clast">' + esc(c.last_message || '') + '</div></div>' +
+        (c.unread > 0 ? '<span class="om-un">' + c.unread + '</span>' : '');
+      row.onclick = function () { openConv(c); };
+      list.appendChild(row);
+    });
+  }
+
+  async function openConv(c) {
+    current = c;
+    Array.prototype.forEach.call(document.querySelectorAll('.om-conv'), function (n) { n.classList.remove('on'); });
+    document.getElementById('omSendBox').style.display = 'flex';
+    var box = document.getElementById('omMsgs');
+    box.innerHTML = '<div class="om-empty">Carregando...</div>';
+    var r = await api('GET', '/api/inbox/messages/' + c.id);
+    box.innerHTML = '';
+    if (!r.ok || !r.data || !r.data.messages) { box.innerHTML = '<div class="om-empty">Erro ao carregar.</div>'; return; }
+    r.data.messages.forEach(function (m) { box.appendChild(renderMsg(m)); });
+    box.scrollTop = box.scrollHeight;
+    loadConvs();
+  }
+
+  function renderMsg(m) {
+    var wrap = el('div');
+    wrap.style.display = 'flex'; wrap.style.flexDirection = 'column';
+    wrap.style.alignItems = (m.direction === 'out') ? 'flex-end' : 'flex-start';
+    var b = el('div', 'om-b ' + (m.direction === 'out' ? 'om-out' : 'om-in'));
+    b.innerHTML = esc(m.text || (m.media_url ? '[midia]' : ''));
+    wrap.appendChild(b);
+    var meta = m.sender ? esc(m.sender) : '';
+    if (m.status === 'simulado') meta += ' (simulado)';
+    wrap.appendChild(el('div', 'om-meta', meta));
+    return wrap;
+  }
+
+  async function send() {
+    if (!current) return;
+    var ta = document.getElementById('omInput');
+    var txt = ta.value.trim();
+    if (!txt) return;
+    ta.value = '';
+    var r = await api('POST', '/api/inbox/send', { conversation_id: current.id, text: txt });
+    var box = document.getElementById('omMsgs');
+    box.appendChild(renderMsg({ direction: 'out', text: txt, sender: 'voce', status: (r.data && r.data.stub) ? 'simulado' : 'sent' }));
+    box.scrollTop = box.scrollHeight;
+  }
+  document.getElementById('omSend').onclick = send;
+  document.getElementById('omInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+
+  async function refreshBadge() {
+    var r = await api('GET', '/api/inbox/conversations?status=open');
+    if (r.ok && r.data && r.data.summary) {
+      var tot = 0; r.data.summary.forEach(function (s) { tot += parseInt(s.unread || 0, 10); });
+      var b = document.getElementById('omBadge');
+      b.textContent = tot; b.style.display = tot > 0 ? 'flex' : 'none';
+    }
+  }
+  refreshBadge();
+  setInterval(function () { if (!ov.classList.contains('open')) refreshBadge(); }, 20000);
+
+  // integra com o WebSocket do painel, se existir
+  try {
+    if (window.addEventListener) {
+      document.addEventListener('omni-refresh', function () { if (ov.classList.contains('open')) loadConvs(); else refreshBadge(); });
+    }
+  } catch (e) {}
+})();
+</script>

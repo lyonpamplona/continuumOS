@@ -1,0 +1,242 @@
+<script>
+/* ===================================================================
+   Fase 11 - Console omnichannel (admin): Canais | Campanhas | Segmentos.
+=================================================================== */
+(function () {
+  if (window.__campLoaded) return; window.__campLoaded = true;
+
+  async function api(method, url, body) {
+    var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opt.body = JSON.stringify(body);
+    try {
+      var r = await fetch(url, opt); var t = await r.text(); var d = null;
+      try { d = t ? JSON.parse(t) : null; } catch (e) { d = t; }
+      return { ok: r.ok, status: r.status, data: d };
+    } catch (e) { return { ok: false, status: 0, data: null }; }
+  }
+  function toast(m, bad) {
+    var n = document.createElement('div'); n.textContent = m;
+    n.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:100001;padding:10px 16px;border-radius:8px;font:600 13px Space Grotesk,system-ui;color:#0a0a0a;background:' + (bad ? '#ffb020' : '#ff6a00');
+    document.body.appendChild(n); setTimeout(function () { n.remove(); }, 2800);
+  }
+  function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+
+  var css = document.createElement('style');
+  css.textContent = [
+    '.cmp-fab{position:fixed;right:22px;top:106px;z-index:9996;height:40px;padding:0 14px;border-radius:10px;border:1px solid #2a2a30;background:#141417;color:#ff6a00;cursor:pointer;font:700 12px Space Grotesk;display:flex;align-items:center;gap:7px}',
+    '.cmp-fab:hover{border-color:#ff6a00}',
+    '.cmp-ov{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center}',
+    '.cmp-ov.open{display:flex}',
+    '.cmp-modal{width:min(960px,96vw);height:min(88vh,920px);background:#0d0d0f;border:1px solid #2a2a30;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;font-family:Space Grotesk,system-ui;color:#f2ede6}',
+    '.cmp-top{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid #2a2a30;background:#141417}',
+    '.cmp-top b{font-size:14px;margin-right:auto}',
+    '.cmp-tab{padding:7px 12px;border:0;border-radius:8px;background:transparent;color:#9a9aa0;font:600 12px Space Grotesk;cursor:pointer}',
+    '.cmp-tab.on{background:#ff6a00;color:#0a0a0a}',
+    '.cmp-x{background:transparent;border:0;color:#f2ede6;font:700 16px Space Grotesk;cursor:pointer;padding:4px 8px}',
+    '.cmp-body{padding:16px;overflow:auto;flex:1}',
+    '.cmp-sec{display:none}.cmp-sec.on{display:block}',
+    '.cmp-lbl{font:600 11px Space Grotesk;color:#9a9aa0;margin:10px 0 4px;text-transform:uppercase;letter-spacing:.04em}',
+    '.cmp-in,.cmp-ta,.cmp-sel{width:100%;box-sizing:border-box;background:#141417;border:1px solid #2a2a30;border-radius:8px;color:#f2ede6;padding:8px 10px;font:500 13px Space Grotesk;margin-bottom:8px}',
+    '.cmp-ta{min-height:80px;resize:vertical}',
+    '.cmp-btn{padding:9px 14px;border:0;border-radius:8px;background:#ff6a00;color:#0a0a0a;font:700 12px Space Grotesk;cursor:pointer;margin:2px 4px 2px 0}',
+    '.cmp-btn.ghost{background:transparent;border:1px solid #2a2a30;color:#f2ede6}',
+    '.cmp-btn.mini{padding:4px 8px;font-size:11px}',
+    '.cmp-card{border:1px solid #2a2a30;border-radius:10px;padding:11px;margin-bottom:8px;background:#141417}',
+    '.cmp-row{display:flex;gap:8px;align-items:center}',
+    '.cmp-badge{font:700 10px JetBrains Mono,monospace;padding:2px 7px;border-radius:6px;border:1px solid #2a2a30}',
+    '.cmp-ok{color:#3ddc84;border-color:#3ddc8455}',
+    '.cmp-off{color:#9a9aa0}',
+    '.cmp-mut{color:#6b6b72;font:500 11px Space Grotesk}'
+  ].join('');
+  document.head.appendChild(css);
+
+  var fab = el('button', 'cmp-fab', 'CAMPANHAS');
+  var ov = el('div', 'cmp-ov');
+  ov.innerHTML =
+    '<div class="cmp-modal">' +
+      '<div class="cmp-top">' +
+        '<b>Omnichannel</b>' +
+        '<button class="cmp-tab on" data-t="chan">Canais</button>' +
+        '<button class="cmp-tab" data-t="camp">Campanhas</button>' +
+        '<button class="cmp-tab" data-t="seg">Segmentos</button>' +
+        '<button class="cmp-x" id="cmpClose">x</button>' +
+      '</div>' +
+      '<div class="cmp-body">' +
+        '<div class="cmp-sec on" id="secChan"></div>' +
+        '<div class="cmp-sec" id="secCamp"></div>' +
+        '<div class="cmp-sec" id="secSeg"></div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(fab);
+  document.body.appendChild(ov);
+
+  fab.onclick = function () { ov.classList.add('open'); loadChannels(); };
+  document.getElementById('cmpClose').onclick = function () { ov.classList.remove('open'); };
+  ov.onclick = function (e) { if (e.target === ov) ov.classList.remove('open'); };
+  Array.prototype.forEach.call(ov.querySelectorAll('.cmp-tab'), function (b) {
+    b.onclick = function () {
+      Array.prototype.forEach.call(ov.querySelectorAll('.cmp-tab'), function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var t = b.getAttribute('data-t');
+      document.getElementById('secChan').classList.toggle('on', t === 'chan');
+      document.getElementById('secCamp').classList.toggle('on', t === 'camp');
+      document.getElementById('secSeg').classList.toggle('on', t === 'seg');
+      if (t === 'chan') loadChannels();
+      if (t === 'camp') loadCampaigns();
+      if (t === 'seg') loadSegments();
+    };
+  });
+
+  // ---------------- CANAIS ----------------
+  var META = null;
+  async function loadChannels() {
+    var sec = document.getElementById('secChan');
+    sec.innerHTML = '<div class="cmp-mut">Carregando...</div>';
+    var r = await api('GET', '/api/channels');
+    if (!r.ok || !r.data) { sec.innerHTML = '<div class="cmp-mut">Erro ao carregar.</div>'; return; }
+    META = r.data;
+    sec.innerHTML = '<div class="cmp-mut">Conecte cada canal preenchendo as credenciais. Sem credenciais, os envios ficam em modo simulado (stub) para testes.</div>';
+    var byChan = {};
+    (META.accounts || []).forEach(function (a) { byChan[a.channel] = a; });
+    META.supported.forEach(function (cid) {
+      var acc = byChan[cid];
+      var card = el('div', 'cmp-card');
+      var connected = acc && acc.has_config;
+      card.innerHTML =
+        '<div class="cmp-row"><b>' + esc(META.labels[cid] || cid) + '</b>' +
+        '<span class="cmp-badge ' + (connected ? 'cmp-ok' : 'cmp-off') + '" style="margin-left:auto">' +
+        (connected ? 'conectado' : 'nao configurado') + '</span></div>';
+      var fields = META.fields[cid] || [];
+      var inputs = {};
+      fields.forEach(function (f) {
+        card.appendChild(el('div', 'cmp-lbl', f));
+        var inp = el('input', 'cmp-in');
+        inp.type = (f.indexOf('token') >= 0 || f.indexOf('secret') >= 0 || f.indexOf('password') >= 0) ? 'password' : 'text';
+        inp.placeholder = connected && (acc.config_keys || []).indexOf(f) >= 0 ? '******** (salvo)' : f;
+        card.appendChild(inp); inputs[f] = inp;
+      });
+      var save = el('button', 'cmp-btn mini', 'Salvar');
+      save.onclick = async function () {
+        var config = {};
+        fields.forEach(function (f) { if (inputs[f].value) config[f] = inputs[f].value; });
+        var w = await api('POST', '/api/channels', { channel: cid, name: META.labels[cid], config: config });
+        if (w.ok) { toast('Canal salvo.'); loadChannels(); } else toast('Erro.', true);
+      };
+      var test = el('button', 'cmp-btn ghost mini', 'Testar');
+      test.onclick = async function () {
+        var w = await api('POST', '/api/channels/' + cid + '/test');
+        if (w.data && w.data.stub) toast('Simulado (sem credenciais).', true);
+        else if (w.data && w.data.ok) toast('Envio de teste OK.');
+        else toast('Falha: ' + ((w.data && w.data.error) || 'erro'), true);
+      };
+      var wrap = el('div'); wrap.style.marginTop = '6px';
+      wrap.appendChild(save); wrap.appendChild(test);
+      if (cid === 'telegram') {
+        var hint = el('div', 'cmp-mut', 'Webhook: configure no BotFather para /webhook/telegram/<secret>');
+        hint.style.marginTop = '4px'; wrap.appendChild(hint);
+      }
+      card.appendChild(wrap);
+      sec.appendChild(card);
+    });
+  }
+
+  // ---------------- SEGMENTOS ----------------
+  async function loadSegments() {
+    var sec = document.getElementById('secSeg');
+    sec.innerHTML = '';
+    var form = el('div', 'cmp-card');
+    form.innerHTML = '<b>Novo segmento</b>' +
+      '<div class="cmp-lbl">Nome</div><input class="cmp-in" id="segName" placeholder="Ex.: Leads quentes">' +
+      '<div class="cmp-lbl">Estagio (opcional)</div><input class="cmp-in" id="segStage" placeholder="Ex.: carteira">' +
+      '<div class="cmp-lbl">Faixa de lead (opcional)</div>' +
+      '<select class="cmp-sel" id="segBand"><option value="">-</option><option value="quente">quente</option><option value="morno">morno</option><option value="frio">frio</option></select>' +
+      '<div class="cmp-lbl">Tag (opcional)</div><input class="cmp-in" id="segTag" placeholder="Ex.: lead-quente">';
+    var prev = el('button', 'cmp-btn ghost', 'Pre-visualizar');
+    var save = el('button', 'cmp-btn', 'Salvar segmento');
+    var out = el('div', 'cmp-mut'); out.style.marginTop = '6px';
+    function rules() {
+      var rs = [];
+      var st = document.getElementById('segStage').value.trim();
+      var bd = document.getElementById('segBand').value;
+      var tg = document.getElementById('segTag').value.trim();
+      if (st) rs.push({ field: 'stage', op: 'eq', value: st });
+      if (bd) rs.push({ field: 'lead_band', op: 'eq', value: bd });
+      if (tg) rs.push({ field: 'tag', op: 'has', value: tg });
+      return rs;
+    }
+    prev.onclick = async function () {
+      var w = await api('POST', '/api/segments/preview', { name: 'preview', rules: rules() });
+      if (w.ok && w.data) out.textContent = w.data.count + ' contato(s) correspondem.';
+      else toast('Erro na previa.', true);
+    };
+    save.onclick = async function () {
+      var nm = document.getElementById('segName').value.trim() || 'Segmento';
+      var w = await api('POST', '/api/segments', { name: nm, rules: rules() });
+      if (w.ok) { toast('Segmento salvo.'); loadSegments(); } else toast('Erro.', true);
+    };
+    form.appendChild(prev); form.appendChild(save); form.appendChild(out);
+    sec.appendChild(form);
+    var r = await api('GET', '/api/segments');
+    (r.data || []).forEach(function (s) {
+      var c = el('div', 'cmp-card');
+      c.innerHTML = '<div class="cmp-row"><b>' + esc(s.name) + '</b>' +
+        '<span class="cmp-mut" style="margin-left:auto">' + ((s.rules || []).length) + ' regra(s)</span></div>';
+      var del = el('button', 'cmp-btn ghost mini', 'Excluir');
+      del.onclick = async function () { await api('DELETE', '/api/segments/' + s.id); loadSegments(); };
+      c.appendChild(del); sec.appendChild(c);
+    });
+  }
+
+  // ---------------- CAMPANHAS ----------------
+  async function loadCampaigns() {
+    var sec = document.getElementById('secCamp');
+    sec.innerHTML = '';
+    var segs = (await api('GET', '/api/segments')).data || [];
+    var chans = (META && META.supported) ? META.supported : ['whatsapp_cloud', 'telegram', 'email'];
+    var labels = (META && META.labels) ? META.labels : {};
+    var form = el('div', 'cmp-card');
+    var segOpts = '<option value="">Sem segmento</option>' + segs.map(function (s) { return '<option value="' + s.id + '">' + esc(s.name) + '</option>'; }).join('');
+    var chOpts = chans.map(function (c) { return '<option value="' + c + '">' + esc(labels[c] || c) + '</option>'; }).join('');
+    form.innerHTML = '<b>Nova campanha</b>' +
+      '<div class="cmp-lbl">Nome</div><input class="cmp-in" id="cName" placeholder="Ex.: Promo de julho">' +
+      '<div class="cmp-lbl">Canal</div><select class="cmp-sel" id="cChan">' + chOpts + '</select>' +
+      '<div class="cmp-lbl">Segmento</div><select class="cmp-sel" id="cSeg">' + segOpts + '</select>' +
+      '<div class="cmp-lbl">Mensagem (use [[nome]] para personalizar)</div>' +
+      '<textarea class="cmp-ta" id="cTpl" placeholder="Ola [[nome]], temos uma novidade..."></textarea>';
+    var create = el('button', 'cmp-btn', 'Criar campanha');
+    create.onclick = async function () {
+      var body = {
+        name: document.getElementById('cName').value.trim() || 'Campanha',
+        channel: document.getElementById('cChan').value,
+        segment_id: parseInt(document.getElementById('cSeg').value, 10) || null,
+        template: document.getElementById('cTpl').value
+      };
+      var w = await api('POST', '/api/campaigns', body);
+      if (w.ok) { toast('Campanha criada.'); loadCampaigns(); } else toast('Erro.', true);
+    };
+    form.appendChild(create);
+    sec.appendChild(form);
+    var r = await api('GET', '/api/campaigns');
+    (r.data || []).forEach(function (c) {
+      var st = c.stats || {};
+      var card = el('div', 'cmp-card');
+      card.innerHTML = '<div class="cmp-row"><b>' + esc(c.name) + '</b>' +
+        '<span class="cmp-badge cmp-off" style="margin-left:auto">' + esc(c.channel) + '</span>' +
+        '<span class="cmp-badge ' + (c.status === 'done' ? 'cmp-ok' : 'cmp-off') + '">' + esc(c.status) + '</span></div>' +
+        '<div class="cmp-mut" style="margin-top:4px">' + esc((c.template || '').slice(0, 90)) + '</div>' +
+        '<div class="cmp-mut" id="cst' + c.id + '">enviadas: ' + (st.sent || 0) + ' / total: ' + (st.total || 0) + ' / falhas: ' + (st.failed || 0) + '</div>';
+      var send = el('button', 'cmp-btn mini', 'Disparar');
+      send.onclick = async function () {
+        var w = await api('POST', '/api/campaigns/' + c.id + '/send');
+        if (w.ok) { toast('Disparo iniciado (' + (w.data.recipients || 0) + ').'); setTimeout(loadCampaigns, 1500); }
+        else toast((w.data && w.data.error) || 'Erro.', true);
+      };
+      var del = el('button', 'cmp-btn ghost mini', 'Excluir');
+      del.onclick = async function () { await api('DELETE', '/api/campaigns/' + c.id); loadCampaigns(); };
+      card.appendChild(send); card.appendChild(del);
+      sec.appendChild(card);
+    });
+  }
+})();
+</script>

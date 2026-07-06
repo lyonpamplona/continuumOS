@@ -1,0 +1,685 @@
+    function loadInternalUnreadState() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(internalUnreadStorageKey) || '{}') || {};
+            const normalized = {};
+            Object.entries(raw).forEach(([target, value]) => {
+                if (!value || typeof value !== 'object') return;
+                const unreadIds = Array.isArray(value.unread_ids) ? value.unread_ids.map(Number).filter(Boolean) : [];
+                normalized[target] = {
+                    last_seen_id: Number(value.last_seen_id || 0) || 0,
+                    latest_id: Number(value.latest_id || 0) || 0,
+                    unread_ids: Array.from(new Set(unreadIds)).sort((a, b) => a - b)
+                };
+            });
+            return normalized;
+        } catch(e) { return {}; }
+    }
+    function saveInternalUnreadState() {
+        localStorage.setItem(internalUnreadStorageKey, JSON.stringify(internalUnreadState));
+    }
+    function loadInternalLastMessageId() {
+        return Number(localStorage.getItem(internalLastIdStorageKey) || '0') || 0;
+    }
+    function updateInternalLastMessageId(messageId) {
+        const numericId = Number(messageId || 0);
+        if (!numericId || numericId <= internalLastMessageId) return;
+        internalLastMessageId = numericId;
+        localStorage.setItem(internalLastIdStorageKey, String(internalLastMessageId));
+    }
+    function internalConversationState(target) {
+        if (!internalUnreadState[target] || typeof internalUnreadState[target] !== 'object') {
+            internalUnreadState[target] = {last_seen_id: 0, latest_id: 0, unread_ids: []};
+        }
+        if (!Array.isArray(internalUnreadState[target].unread_ids)) internalUnreadState[target].unread_ids = [];
+        internalUnreadState[target].last_seen_id = Number(internalUnreadState[target].last_seen_id || 0) || 0;
+        internalUnreadState[target].latest_id = Number(internalUnreadState[target].latest_id || 0) || 0;
+        return internalUnreadState[target];
+    }
+    function rememberInternalConversationLatest(target, messageId) {
+        const numericId = Number(messageId || 0);
+        if (!target || !numericId) return;
+        const state = internalConversationState(target);
+        state.latest_id = Math.max(Number(state.latest_id || 0), numericId);
+        saveInternalUnreadState();
+    }
+    function internalUnreadTotal() {
+        return Object.values(internalUnreadState).reduce((sum, value) => sum + ((value && Array.isArray(value.unread_ids)) ? value.unread_ids.length : 0), 0);
+    }
+    function updateInternalUnreadBadges() {
+        const total = internalUnreadTotal();
+        document.querySelectorAll('.internal-unread-badge').forEach(el => {
+            el.innerText = total > 99 ? '99+' : String(total);
+            el.style.display = total > 0 ? 'inline-flex' : 'none';
+        });
+        document.querySelectorAll('[data-internal-badge-target]').forEach(el => {
+            const target = el.dataset.internalBadgeTarget || '';
+            const state = internalUnreadState[target];
+            const count = state && Array.isArray(state.unread_ids) ? state.unread_ids.length : 0;
+            el.innerText = count > 99 ? '99+' : String(count);
+            el.style.display = count > 0 ? 'inline-flex' : 'none';
+        });
+    }
+    function incrementInternalUnread(target, payload) {
+        const messageId = Number(payload?.message_id || 0);
+        if (!target || !messageId) return;
+        const state = internalConversationState(target);
+        state.latest_id = Math.max(Number(state.latest_id || 0), messageId);
+        if (messageId <= Number(state.last_seen_id || 0)) {
+            saveInternalUnreadState();
+            updateInternalUnreadBadges();
+            return;
+        }
+        if (!state.unread_ids.includes(messageId)) state.unread_ids.push(messageId);
+        state.unread_ids = Array.from(new Set(state.unread_ids)).sort((a, b) => a - b);
+        saveInternalUnreadState();
+        updateInternalUnreadBadges();
+    }
+    function clearInternalUnread(target, seenId = 0) {
+        if (!target) return;
+        const state = internalConversationState(target);
+        const unreadMax = state.unread_ids.length ? Math.max(...state.unread_ids) : 0;
+        state.latest_id = Math.max(Number(state.latest_id || 0), Number(seenId || 0), unreadMax);
+        state.last_seen_id = Math.max(Number(state.last_seen_id || 0), state.latest_id);
+        state.unread_ids = [];
+        saveInternalUnreadState();
+        updateInternalUnreadBadges();
+    }
+    function internalEventIdentity(payload) {
+        return payload.event_id || (payload.message_id ? `internal_message:${payload.message_id}` : '');
+    }
+    function rememberInternalEvent(eventId) {
+        if (!eventId) return;
+        internalSeenEventIds.add(eventId);
+        while (internalSeenEventIds.size > 300) {
+            const oldest = internalSeenEventIds.values().next().value;
+            internalSeenEventIds.delete(oldest);
+        }
+    }
+    function shouldProcessInternalEvent(payload) {
+        const eventId = internalEventIdentity(payload);
+        if (eventId && internalSeenEventIds.has(eventId)) return false;
+        const createdAt = Date.parse(payload.created_at || '');
+        if (Number.isFinite(createdAt) && Date.now() - createdAt > INTERNAL_TOAST_MAX_AGE_MS) {
+            payload.internal_late_event = true;
+            console.warn('Mensagem interna antiga sincronizada sem toast', {eventId, created_at: payload.created_at, target: payload.target, sender: payload.sender});
+        }
+        rememberInternalEvent(eventId);
+        updateInternalLastMessageId(payload.message_id);
+        return true;
+    }
+    function setupInternalNotificationChannel() {
+        if (!('BroadcastChannel' in window)) return;
+        try {
+            internalBroadcastChannel = new BroadcastChannel(internalBroadcastChannelName);
+            internalBroadcastChannel.onmessage = (event) => {
+                const data = event.data || {};
+                if (data.type !== 'internal_toast_claimed' || data.tab_id === internalTabId || !data.event_id) return;
+                internalToastClaims.set(data.event_id, Date.now() + INTERNAL_TOAST_LOCK_TTL_MS);
+            };
+        } catch(e) {
+            internalBroadcastChannel = null;
+        }
+    }
+    function hasInternalToastClaim(eventId) {
+        if (!eventId) return false;
+        const expiresAt = Number(internalToastClaims.get(eventId) || 0);
+        if (!expiresAt) return false;
+        if (expiresAt <= Date.now()) {
+            internalToastClaims.delete(eventId);
+            return false;
+        }
+        return true;
+    }
+    function broadcastInternalToastClaim(eventId, conversationTarget) {
+        if (!internalBroadcastChannel || !eventId) return;
+        try {
+            internalBroadcastChannel.postMessage({
+                type: 'internal_toast_claimed',
+                event_id: eventId,
+                conversation_target: conversationTarget,
+                tab_id: internalTabId,
+                claimed_at: new Date().toISOString()
+            });
+        } catch(e) {}
+    }
+    function cleanupInternalToastLocks(now) {
+        try {
+            Object.keys(localStorage).forEach(key => {
+                if (!key.startsWith(internalToastLockPrefix)) return;
+                const value = JSON.parse(localStorage.getItem(key) || '{}');
+                if (Number(value.expires_at || 0) <= now) localStorage.removeItem(key);
+            });
+        } catch(e) {}
+    }
+    function claimInternalToast(payload, conversationTarget) {
+        if (payload.internal_late_event) return false;
+        const eventId = internalEventIdentity(payload);
+        if (!eventId) return true;
+        if (hasInternalToastClaim(eventId)) return false;
+        const now = Date.now();
+        const lockKey = internalToastLockPrefix + eventId;
+        try {
+            cleanupInternalToastLocks(now);
+            const current = JSON.parse(localStorage.getItem(lockKey) || 'null');
+            if (current && current.tab_id !== internalTabId && Number(current.expires_at || 0) > now) return false;
+            const claim = {event_id: eventId, tab_id: internalTabId, conversation_target: conversationTarget, expires_at: now + INTERNAL_TOAST_LOCK_TTL_MS};
+            localStorage.setItem(lockKey, JSON.stringify(claim));
+            const stored = JSON.parse(localStorage.getItem(lockKey) || '{}');
+            if (stored.tab_id !== internalTabId) return false;
+            internalToastClaims.set(eventId, now + INTERNAL_TOAST_LOCK_TTL_MS);
+            broadcastInternalToastClaim(eventId, conversationTarget);
+            return true;
+        } catch(e) {
+            return true;
+        }
+    }
+    async function syncInternalUnreadSince(reason = 'manual') {
+        if (internalSyncRunning) return;
+        internalSyncRunning = true;
+        try {
+            let guard = 0;
+            while (guard < 4) {
+                const currentLastId = internalLastMessageId;
+                const res = await fetch(`/api/internal_chat/unread_since?last_id=${encodeURIComponent(currentLastId)}&limit=80`);
+                if (!res.ok) throw new Error(`sync ${res.status}`);
+                const data = await res.json();
+                const messages = Array.isArray(data.messages) ? data.messages : [];
+                if (!currentLastId && Number(data.latest_id || 0)) {
+                    updateInternalLastMessageId(data.latest_id);
+                    break;
+                }
+                for (const payload of messages) {
+                    await handleInternalChatEvent(payload);
+                }
+                if (messages.length) {
+                    updateInternalLastMessageId(Math.max(...messages.map(item => Number(item.message_id || 0))));
+                } else if (Number(data.latest_id || 0) > internalLastMessageId) {
+                    updateInternalLastMessageId(data.latest_id);
+                }
+                if (!data.has_more) break;
+                guard += 1;
+            }
+        } catch(e) {
+            console.warn('Falha ao sincronizar chat interno', {reason, error: e});
+        } finally {
+            internalSyncRunning = false;
+        }
+    }
+
+    function internalToastStyle(role) {
+        const styles = {
+            admin: {background: "#1D1238", color: "#EADDFF", border: "#7C4DFF"},
+            vendas_1: {background: "#102A24", color: "#C9F7E8", border: "#00A884"},
+            vendas_2: {background: "#102A24", color: "#C9F7E8", border: "#00A884"},
+            financeiro: {background: "#2A2410", color: "#FFE8A3", border: "#D6A700"},
+            engenharia: {background: "#102134", color: "#D6ECFF", border: "#4DA3FF"}
+        };
+        return styles[role] || {background: "var(--surface)", color: "var(--primary)", border: "var(--border)"};
+    }
+
+    function findInternalContactCard(target) {
+        const title = target === 'geral' ? 'Comunicação Interna' : target;
+        return Array.from(document.querySelectorAll('#int-list-col .contact-card')).find(card => {
+            return (card.querySelector('.card-title')?.innerText || '').trim() === title;
+        });
+    }
+
+    function openInternalTargetFromToast(target, toast) {
+        switchMainTab('tab-internal');
+        const card = findInternalContactCard(target);
+        openInternalChat(target, card);
+        if (toast && toast.hideToast) toast.hideToast();
+    }
+
+    function showInternalChatToast(payload, conversationTarget) {
+        if (!claimInternalToast(payload, conversationTarget)) return;
+        const style = internalToastStyle(payload.sender_role);
+        const senderName = payload.sender || 'Equipe';
+        const scopeLabel = payload.mentioned_me ? 'Mencionou você' : (conversationTarget === 'geral' ? 'Chat geral' : 'Mensagem individual');
+        const preview = payload.preview || 'Nova mensagem interna.';
+        playMsnSound();
+        showDesktopNotification(`Chat interno - ${senderName}`, `${scopeLabel}: ${preview}`, null, conversationTarget);
+        if (activeInternalChatToasts[conversationTarget]?.hideToast) {
+            activeInternalChatToasts[conversationTarget].hideToast();
+        }
+        const toast = Toastify({
+            text: `💬 ${senderName}\n${scopeLabel}\n${preview}\nClique para abrir`,
+            duration: -1,
+            close: false,
+            gravity: "top",
+            position: "right",
+            stopOnFocus: false,
+            style: {
+                background: style.background,
+                color: style.color,
+                border: `1px solid ${style.border}`,
+                borderRadius: "12px",
+                fontFamily: "var(--font-main)",
+                whiteSpace: "pre-wrap",
+                cursor: "pointer",
+                width: "min(440px, calc(100vw - 28px))",
+                maxWidth: "calc(100vw - 28px)",
+                padding: "16px 20px",
+                fontSize: "0.95rem",
+                lineHeight: "1.45",
+                boxShadow: "0 10px 26px rgba(0,0,0,0.35)"
+            },
+            onClick: function() {
+                delete activeInternalChatToasts[conversationTarget];
+                openInternalTargetFromToast(conversationTarget, toast);
+            }
+        });
+        activeInternalChatToasts[conversationTarget] = toast;
+        toast.showToast();
+    }
+
+    async function handleInternalChatEvent(payload) {
+        const myName = '{{ user.name }}';
+        const target = payload.target || 'geral';
+        const sender = payload.sender || '';
+        const myRole = '{{ user.role }}';
+        const mentions = Array.isArray(payload.mentions) ? payload.mentions : [];
+        payload.mentioned_me = mentions.includes(myName) || mentions.includes(myRole);
+        const isRelevant = target === 'geral' || target === myName || sender === myName;
+        if (!isRelevant) return;
+        if (!shouldProcessInternalEvent(payload)) return;
+
+        const conversationTarget = target === 'geral' ? 'geral' : (sender === myName ? (payload.conversation_target || target) : sender);
+        const isInternalOpen = document.getElementById('tab-internal')?.classList.contains('active');
+        const isSameConversation = typeof currentInternalTarget !== 'undefined' && currentInternalTarget === conversationTarget;
+
+        if (isSameConversation) await loadInternalChat();
+        rememberInternalConversationLatest(conversationTarget, payload.message_id);
+        if (sender !== myName) {
+            if (!(isInternalOpen && isSameConversation)) incrementInternalUnread(conversationTarget, payload);
+            if (!payload.internal_late_event) showInternalChatToast(payload, conversationTarget);
+        }
+    }
+    
+    function setAuditReply(msgId, b64Text) {
+        currentReplyId = msgId; let decoded = decodeURIComponent(escape(atob(b64Text))); document.getElementById('audit-reply-preview-text').innerText = decoded; document.getElementById('audit-reply-bar').style.display = 'flex'; document.getElementById('admin-chat-input').focus();
+    }
+    function cancelAuditReply() { currentReplyId = null; document.getElementById('audit-reply-bar').style.display = 'none'; }
+    function openReactionModal(msgId) { currentReactionMsgId = msgId; document.getElementById('reactionModal').style.display = 'flex'; }
+    
+    async function submitReaction(emoji) {
+        document.getElementById('reactionModal').style.display = 'none'; if (!currentReactionMsgId || !currentAuditPhone) return;
+        try { await fetch('/api/chat/react', { method: 'POST', body: JSON.stringify({phone: currentAuditPhone, message_id: currentReactionMsgId, emoji: emoji}) }); } catch(e) {}
+        currentReactionMsgId = null;
+    }
+
+    async function pinAuditMessage(phone, b64Text) {
+        let decoded = decodeURIComponent(escape(atob(b64Text))); await fetch('/api/chat/pin', {method: 'POST', body: JSON.stringify({phone: phone, text: decoded})});
+        const pinRes = await fetch('/api/chat/' + currentAuditPhone + '/pinned'); const pinData = await pinRes.json();
+        if (pinData.pinned_message) { document.getElementById('audit-pinned-text-content').innerText = pinData.pinned_message; document.getElementById('audit-pinned-message-banner').style.display = 'flex'; }
+    }
+
+    async function unpinAuditMessage() {
+        await fetch('/api/chat/unpin', {method: 'POST', body: JSON.stringify({phone: currentAuditPhone})}); document.getElementById('audit-pinned-message-banner').style.display = 'none';
+    }
+
+    async function openForwardModal(msgId) {
+        currentForwardMsgId = msgId; const res = await fetch('/api/poll_updates'); const data = await res.json(); const select = document.getElementById('forward-target'); select.innerHTML = '';
+        data.clientes.forEach(c => { let opt = document.createElement('option'); opt.value = c.phone; opt.text = c.name && c.name !== 'None' ? c.name : c.phone.replace('@s.whatsapp.net', ''); select.appendChild(opt); });
+        document.getElementById('forwardModal').style.display = 'flex';
+    }
+
+    async function submitForward() {
+        const target = document.getElementById('forward-target').value; if(!target || !currentForwardMsgId) return;
+        document.getElementById('forwardModal').style.display = 'none'; Toastify({text: "Encaminhando...", style: {background: "var(--surface)", color: "var(--primary)"}}).showToast();
+        try {
+            const res = await fetch('/api/chat/forward', { method: 'POST', body: JSON.stringify({message_id: currentForwardMsgId, target_phone: target}) });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                Toastify({text: "Mensagem encaminhada.", style: {background: "var(--surface)", color: "var(--primary)"}}).showToast();
+            } else {
+                Toastify({text: `Falha ao encaminhar: ${data.message || 'sem confirmação da Evolution'}`, duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+            }
+        } catch(e) {
+            Toastify({text: "Falha de conexão ao encaminhar.", duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        }
+    }
+
+    function openEditModal(msgId, b64Text) {
+        currentEditMsgId = msgId; let decoded = decodeURIComponent(escape(atob(b64Text))); document.getElementById('edit-text-input').value = decoded; document.getElementById('editModal').style.display = 'flex';
+    }
+
+    const EDIT_MESSAGE_WINDOW_MS = 15 * 60 * 1000;
+    const DELETE_MESSAGE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+    function hasRemoteMessageId(m) {
+        const id = String(m.waha_id || '');
+        return id && !id.startsWith('local_') && !id.startsWith('sys_');
+    }
+
+    function messageAgeMs(m) {
+        const sentAt = parseLocalTimestamp(m.timestamp);
+        return sentAt ? Date.now() - sentAt.getTime() : Number.POSITIVE_INFINITY;
+    }
+
+    function canEditRemoteMessage(m, phoneAtRequest) {
+        return m.msg_type === 'text' && m.sender !== phoneAtRequest && m.sender !== 'sistema' && hasRemoteMessageId(m) && messageAgeMs(m) <= EDIT_MESSAGE_WINDOW_MS;
+    }
+
+    function canDeleteRemoteMessage(m, phoneAtRequest) {
+        return m.msg_type !== 'deleted' && m.sender !== phoneAtRequest && m.sender !== 'sistema' && hasRemoteMessageId(m) && messageAgeMs(m) <= DELETE_MESSAGE_WINDOW_MS;
+    }
+
+    function notifyToast(text, isError = false, duration = 3000) {
+        Toastify({
+            text,
+            duration,
+            gravity: "top",
+            position: "right",
+            style: {
+                background: isError ? "#2A1114" : "var(--surface)",
+                color: isError ? "#F15C6D" : "var(--primary)",
+                border: isError ? "1px solid #4A1C22" : "1px solid var(--border)",
+                borderRadius: "8px",
+                fontFamily: "var(--font-main)"
+            }
+        }).showToast();
+    }
+    /** Atualiza o indicador visual da conexão realtime no topo do painel. */
+    function setRealtimeStatus(state) {
+        const el = document.getElementById('realtime-status');
+        if (!el) return;
+        const label = state === 'online' ? 'Tempo real online' : state === 'offline' ? 'Tempo real offline' : 'Reconectando';
+        el.classList.remove('reconnecting', 'offline');
+        if (state !== 'online') el.classList.add(state);
+        el.title = label;
+        const text = el.querySelector('span');
+        if (text) text.textContent = label;
+    }
+    /** Mostra um aviso clicável quando novos logs chegam fora da aba Logs. */
+    function showAuditLogPendingToast() {
+        if (auditLogToastVisible) return;
+        auditLogToastVisible = true;
+        Toastify({
+            text: "Novos logs recebidos. Clique para abrir.",
+            duration: 7000,
+            close: true,
+            gravity: "top",
+            position: "right",
+            onClick: () => {
+                auditLogToastVisible = false;
+                switchMainTab('tab-logs');
+            },
+            callback: () => { auditLogToastVisible = false; },
+            style: {
+                background: "var(--surface)",
+                color: "var(--primary)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                fontFamily: "var(--font-main)",
+                cursor: "pointer"
+            }
+        }).showToast();
+    }
+
+    function confirmDeleteToast(onConfirm) {
+        const node = document.createElement('div');
+        node.style.display = 'flex';
+        node.style.flexDirection = 'column';
+        node.style.gap = '10px';
+        node.innerHTML = `
+            <div style="font-weight:700;">Apagar mensagem para todos?</div>
+            <div style="font-size:0.8rem; color:var(--text-muted);">Essa ação segue a janela permitida pelo WhatsApp.</div>
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <button type="button" data-action="cancel" style="padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text-main); cursor:pointer;">Cancelar</button>
+                <button type="button" data-action="confirm" style="padding:6px 10px; border-radius:6px; border:1px solid #4A1C22; background:#2A1114; color:#F15C6D; cursor:pointer;">Apagar</button>
+            </div>
+        `;
+        const toast = Toastify({
+            node,
+            duration: -1,
+            gravity: "top",
+            position: "right",
+            close: false,
+            style: {
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                boxShadow: "0 12px 30px rgba(0,0,0,0.35)"
+            }
+        });
+        node.querySelector('[data-action="cancel"]').onclick = () => toast.hideToast();
+        node.querySelector('[data-action="confirm"]').onclick = async () => {
+            toast.hideToast();
+            await onConfirm();
+        };
+        toast.showToast();
+    }
+
+    async function submitEdit() {
+        const newText = document.getElementById('edit-text-input').value; if (!newText.trim() || !currentEditMsgId) return; document.getElementById('editModal').style.display = 'none';
+        try {
+            const res = await fetch('/api/chat/edit', { method: 'POST', body: JSON.stringify({phone: currentAuditPhone, message_id: currentEditMsgId, new_text: newText}) });
+            const data = await res.json();
+            if (data.status !== 'ok') { notifyToast(`Erro: ${data.message}`, true); } 
+            else { notifyToast("Mensagem editada com sucesso.", false, 2000); }
+        } catch(e) { notifyToast("Falha de conexão ao editar mensagem.", true); }
+        currentEditMsgId = null;
+    }
+
+    async function confirmDelete(msgId) {
+        confirmDeleteToast(async () => {
+            try {
+                const res = await fetch('/api/chat/delete', { method: 'POST', body: JSON.stringify({phone: currentAuditPhone, message_id: msgId}) });
+                const data = await res.json();
+                if (data.status !== 'ok') { notifyToast(`Erro: ${data.message}`, true); } 
+                else { notifyToast("Mensagem apagada para todos.", false, 2000); }
+            } catch(e) { notifyToast("Falha de conexão ao apagar mensagem.", true); }
+        });
+    }
+
+    async function uploadMediaAdmin() {
+        const fileInput = document.getElementById('media-upload-admin'); if (!fileInput.files.length || !currentAuditPhone) return;
+        const formData = new FormData(); formData.append("phone", currentAuditPhone); formData.append("file", fileInput.files[0]);
+        if (currentReplyId) formData.append("quoted_id", currentReplyId);
+        try {
+            const res = await fetch('/api/chat/send_media', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.status !== 'ok') {
+                Toastify({text: `Falha ao enviar mídia: ${data.message || 'sem confirmação da Evolution'}`, duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+            }
+        } catch(e) {
+            Toastify({text: "Falha de conexão ao enviar mídia.", duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        }
+        fileInput.value = ""; cancelAuditReply();
+    }
+    async function uploadInternalMedia() {
+        const fileInput = document.getElementById('media-upload-internal'); if (!fileInput.files.length) return;
+        const formData = new FormData(); formData.append("target", currentInternalTarget); formData.append("file", fileInput.files[0]);
+        try { await fetch('/api/internal_chat/send_media', { method: 'POST', body: formData }); } catch(e) {}
+        fileInput.value = "";
+    }
+    async function uploadAvatarAction(inputElement) {
+        if (!inputElement.files.length) return;
+        const formData = new FormData(); formData.append("file", inputElement.files[0]);
+        try {
+            const res = await fetch('/api/profile/upload_avatar', { method: 'POST', body: formData }); const data = await res.json();
+            if (data.status === 'ok') {
+                document.getElementById('preview-avatar').innerHTML = `<img src="${data.url}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+                const topAvatar = document.querySelector('.profile-trigger .avatar'); if(topAvatar) topAvatar.innerHTML = `<img src="${data.url}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+            }
+        } catch(e) {}
+    }
+    let mediaRecorder; let audioChunks = []; let isRecording = false;
+    async function toggleRecording(chatType) {
+        let btnId = chatType === 'internal' ? 'btn-mic-internal' : 'btn-mic-admin'; let targetId = chatType === 'internal' ? currentInternalTarget : currentAuditPhone; let isInternal = chatType === 'internal';
+        const btn = document.getElementById(btnId);
+        if (isRecording) { mediaRecorder.stop(); isRecording = false; btn.style.color = "var(--text-main)"; btn.innerHTML = '<span class="material-symbols-outlined">mic</span>'; return; }
+        if (!targetId) return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorder = new MediaRecorder(stream); audioChunks = [];
+            mediaRecorder.addEventListener("dataavailable", event => { audioChunks.push(event.data); });
+            mediaRecorder.addEventListener("stop", async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' }); const file = new File([audioBlob], "audio_message.ogg", { type: 'audio/ogg' }); const formData = new FormData();
+                if (isInternal) { formData.append("target", targetId); formData.append("file", file); await fetch('/api/internal_chat/send_media', { method: 'POST', body: formData }); } 
+                else { formData.append("phone", targetId); formData.append("file", file); if (currentReplyId) formData.append("quoted_id", currentReplyId); await fetch('/api/chat/send_media', { method: 'POST', body: formData }); }
+                stream.getTracks().forEach(track => track.stop()); cancelAuditReply();
+            });
+            mediaRecorder.start(); isRecording = true; btn.style.color = "#ff5252"; btn.innerHTML = '<span class="material-symbols-outlined">stop_circle</span>';
+        } catch (err) {}
+    }
+    function applyGlobalMetrics(metrics) {
+        if (!metrics) return;
+        const bind = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = String(value ?? 0);
+        };
+        bind('metric-finalizados-venda', metrics.vendas_hoje);
+        bind('metric-finalizados-sem-venda', metrics.nao_vendas_hoje);
+        bind('metric-atendimentos', metrics.atendimentos_hoje);
+        bind('metric-aguardando', metrics.aguardando);
+        bind('metric-tma', metrics.tma || '--');
+        bind('metric-ativos', metrics.ativos);
+        bind('metric-total-contatos', metrics.total_contatos);
+        renderChart(metrics);
+    }
+
+    async function loadGlobalMetrics() {
+        try {
+            const res = await fetch('/api/admin/global_metrics');
+            if (!res.ok) return;
+            const data = await res.json();
+            applyGlobalMetrics(data);
+        } catch(e) {}
+    }
+
+    function roleLabel(role) {
+        const labels = {
+            admin: 'Administrador',
+            vendas_1: 'Vendas 1',
+            vendas_2: 'Vendas 2',
+            financeiro: 'Financeiro',
+            engenharia: 'Engenharia',
+            triagem: 'Triagem'
+        };
+        return labels[role] || role || '-';
+    }
+
+    function bindBreakdownValue(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.innerText = String(value ?? 0);
+    }
+
+    function currentYearMonth() {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    function currentDateKey() {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    function shiftYearMonth(yearMonth, delta) {
+        const [year, month] = String(yearMonth || currentYearMonth()).split('-').map(Number);
+        const date = new Date(year || new Date().getFullYear(), (month || 1) - 1 + delta, 1);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    function formatYearMonthLabel(yearMonth) {
+        const [year, month] = String(yearMonth || currentYearMonth()).split('-').map(Number);
+        const date = new Date(year || new Date().getFullYear(), (month || 1) - 1, 1);
+        const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        return label.charAt(0).toUpperCase() + label.slice(1).replace(' de ', '/');
+    }
+
+    function ensureTeamMonthOption(yearMonth) {
+        const select = document.getElementById('team-month-select');
+        if (!select || !yearMonth) return;
+        if (![...select.options].some(option => option.value === yearMonth)) {
+            const option = document.createElement('option');
+            option.value = yearMonth;
+            option.textContent = formatYearMonthLabel(yearMonth);
+            select.appendChild(option);
+        }
+        const sorted = [...select.options].sort((a, b) => b.value.localeCompare(a.value));
+        select.innerHTML = '';
+        sorted.forEach(option => select.appendChild(option));
+        select.value = yearMonth;
+    }
+
+    function initTeamMonthControls() {
+        teamThermometerMonth = currentYearMonth();
+        lastKnownTeamMonth = teamThermometerMonth;
+        lastKnownTeamDay = currentDateKey();
+        ensureTeamMonthOption(teamThermometerMonth);
+        ensureTeamMonthOption(shiftYearMonth(teamThermometerMonth, -1));
+        const select = document.getElementById('team-month-select');
+        if (select) select.value = teamThermometerMonth;
+        loadTeamThermometer(teamThermometerMonth);
+    }
+
+    function changeTeamReportMonth(yearMonth) {
+        if (!yearMonth) return;
+        teamThermometerMonth = yearMonth;
+        ensureTeamMonthOption(yearMonth);
+        loadTeamThermometer(yearMonth);
+    }
+
+    function showPreviousTeamMonth() {
+        const previous = shiftYearMonth(teamThermometerMonth || currentYearMonth(), -1);
+        changeTeamReportMonth(previous);
+    }
+
+    function checkTeamDateRollover() {
+        const currentMonth = currentYearMonth();
+        const currentDay = currentDateKey();
+        const monthChanged = currentMonth !== lastKnownTeamMonth;
+        const dayChanged = currentDay !== lastKnownTeamDay;
+        if (!monthChanged && !dayChanged) return;
+        lastKnownTeamMonth = currentMonth;
+        lastKnownTeamDay = currentDay;
+        if (monthChanged) {
+            teamThermometerMonth = currentMonth;
+            ensureTeamMonthOption(currentMonth);
+            ensureTeamMonthOption(shiftYearMonth(currentMonth, -1));
+        }
+        loadGlobalMetrics();
+        scheduleTeamThermometerRefresh(monthChanged ? 'month-rollover' : 'day-rollover', true);
+    }
+
+    function scheduleTeamThermometerRefresh(reason = 'update', force = false) {
+        const tabActive = document.getElementById('tab-agenda')?.classList.contains('active');
+        teamThermometerDirty = true;
+        if (!tabActive && !force) return;
+        clearTimeout(teamThermometerRefreshTimer);
+        teamThermometerRefreshTimer = setTimeout(() => {
+            teamThermometerRefreshTimer = null;
+            teamThermometerDirty = false;
+            loadTeamThermometer(teamThermometerMonth || currentYearMonth());
+        }, reason === 'tab-open' ? 80 : 900);
+    }
+
+    function renderTeamThermometerCard(item) {
+        const user = item.user || {};
+        const metrics = item.metrics || {};
+        const queues = item.queues || {};
+        const role = user.role || '';
+        const isSales = ['vendas_1', 'vendas_2'].includes(role);
+        const status = Number(user.is_active ?? 1) ? 'Ativo' : 'Inativo';
+        return `
+            <div class="team-report-card${isSales ? ' stat-card clickable' : ''}" ${isSales ? `data-seller="${escapeHtml(user.name || user.username || '')}" onclick="openUserPerformanceModal(this.dataset.seller)" title="Ver relatório semanal, quinzenal e mensal"` : ''}>
+                <div class="team-report-top">
+                    <div class="team-report-name">
+                        <strong>${escapeHtml(user.name || user.username || 'Usuário')}</strong>
+                        <span>${escapeHtml(roleLabel(role))}</span>
+                    </div>
+                    <span class="team-report-status">${escapeHtml(status)}</span>
+                </div>
+                <div class="team-report-metrics">
+                    <div><span>Vendas</span><strong>${metrics.vendas || 0}</strong></div>
+                    <div><span>Sem venda</span><strong>${metrics.nao_vendas || 0}</strong></div>
+                    <div><span>Atend.</span><strong>${metrics.atendimentos || 0}</strong></div>
+                    <div><span>TMA</span><strong>${escapeHtml(metrics.tma || '--')}</strong></div>
+                    <div><span>Ativos</span><strong>${queues.ativos || 0}</strong></div>
+                    <div><span>Aguard.</span><strong>${queues.aguardando || 0}</strong></div>
+                </div>
+            </div>
+        `;
+    }
+

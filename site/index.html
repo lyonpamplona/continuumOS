@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>continnumOS — CRM de Atendimento WhatsApp para revenda</title>
+<meta name="description" content="continnumOS é a plataforma CRM multi-tenant de atendimento via WhatsApp: centralize conversas, equipes, vendas e automação. Ideal para revenda white-label.">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12Z"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0M16 5.5a3 3 0 0 1 0 5.8M18 20a6 6 0 0 0-3-5.2"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4M4 20h16M8 20v-6M13 20V9M18 20v-9"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 5 6v6c0 4 3 6.5 7 9 4-2.5 7-5 7-9V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 9 5-9 5-9-5 9-5ZM3 13l9 5 9-5M3 17l9 5 9-5"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16"/><path d="M3 9h18M8 3v4M16 3v4"/></symbol>
+<symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0V8ZM12 17v5"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12V4h8l10 10-8 8L3 12Z"/><circle cx="7.5" cy="7.5" r="1.3"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12 4 4 10-10"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5ZM19 19H6"/></symbol>
+</defs></svg>
+
+<header class="nav"><div class="wrap">
+  <a class="brand" href="index.html"><span class="mark">C</span> continnumOS</a>
+  <nav>
+    <a href="#recursos">Recursos</a>
+    <a href="#como">Como funciona</a>
+    <a href="#planos">Planos</a>
+    <a href="#depoimentos">Clientes</a>
+    <a href="docs.html">Documentação</a>
+  </nav>
+  <a class="btn pri bevel-sm cta" href="#planos">Começar agora</a>
+</div></header>
+
+<!-- HERO -->
+<section class="hero" style="border-top:0"><div class="wrap grid2">
+  <div>
+    <span class="mono-tag">// CRM multi-tenant · WhatsApp</span>
+    <h1>O painel de atendimento <span class="hl">que a sua revenda</span> coloca no ar em minutos.</h1>
+    <p class="lead">continnumOS centraliza conversas de WhatsApp, equipes, contatos, agenda e vendas em um único console — pronto para operar em white-label sob a sua marca, com cada cliente isolado em seu próprio ambiente.</p>
+    <div class="actions">
+      <a class="btn pri bevel-sm" href="#planos">Ver planos <svg><use href="#i-arrow"/></svg></a>
+      <a class="btn bevel-sm" href="docs.html">Explorar documentação <svg><use href="#i-book"/></svg></a>
+    </div>
+    <div class="trust">
+      <div><b>100%</b>isolamento por tenant (RLS)</div>
+      <div><b>&lt;5min</b>para provisionar um cliente</div>
+      <div><b>24/7</b>atendimento em tempo real</div>
+    </div>
+  </div>
+  <div class="mock bevel">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>CONTINNUMOS // CONSOLE</span></div>
+    <div class="body">
+      <div class="rail"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+      <div class="col">
+        <div class="kpis">
+          <div class="kpi"><b>128</b><span>ATENDIMENTOS HOJE</span></div>
+          <div class="kpi"><b>37</b><span>VENDAS</span></div>
+          <div class="kpi"><b>2.4m</b><span>1ª RESPOSTA</span></div>
+        </div>
+        <div class="row w80"></div><div class="row w60"></div><div class="row"></div><div class="row w40"></div><div class="row w60"></div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<!-- LOGOS / social proof faixa -->
+<section style="padding:34px 0"><div class="wrap" style="text-align:center">
+  <span class="mono-tag">Operado por revendas e equipes de atendimento em todo o Brasil</span>
+</div></section>
+
+<!-- RECURSOS -->
+<section id="recursos"><div class="wrap">
+  <div class="sec-head">
+    <span class="mono-tag">// Recursos</span>
+    <h2>Tudo que uma operação de atendimento precisa — em um só console</h2>
+    <p>Da primeira mensagem ao fechamento da venda. Recursos pensados para quem revende e para quem opera no dia a dia.</p>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="ico"><svg><use href="#i-chat"/></svg></div><h3>Atendimento WhatsApp</h3><p>Caixa unificada com histórico, mídia, respostas rápidas, encaminhamento, reações e edição de mensagens em tempo real via Evolution API.</p></div>
+    <div class="card"><div class="ico"><svg><use href="#i-users"/></svg></div><h3>Contatos &amp; CRM</h3><p>Base de contatos com tags, listas, importação de VCF, notas e histórico completo de cada cliente em um clique.</p></div>
+    <div class="card"><div class="ico"><svg><use href="#i-chart"/></svg></div><h3>Vendas &amp; metas</h3><p>Registre vendas direto do atendimento, acompanhe conversão por atendente e termômetro de metas por dia e por mês.</p></div>
+    <div class="card"><div class="ico"><svg><use href="#i-users"/></svg></div><h3>Equipe &amp; painéis por papel</h3><p>Painéis dedicados para vendas e administração, com permissões granulares e chat interno entre a equipe.</p></div>
+    <div class="card"><div class="ico"><svg><use href="#i-calendar"/></svg></div><h3>Agenda integrada</h3><p>Compromissos, follow-ups e lembretes vinculados ao contato, com visão mensal e alertas.</p></div>
+    <div class="card"><div class="ico"><svg><use href="#i-shield"/></svg></div><h3>Auditoria &amp; LGPD</h3><p>Trilhas de auditoria, controle de acesso, exportação/exclusão de dados por titular e DPA pronto para o seu cliente.</p></div>
+    <div class="card"><div class="ico"><svg><use href="#i-layers"/></svg></div><h3>Multi-tenant real</h3><p>Cada cliente em seu ambiente isolado (Row-Level Security). Um cliente nunca enxerga os dados do outro.</p></div>
+    <div class="card"><div class="ico"><svg><use href="#i-tag"/></svg></div><h3>Billing &amp; planos</h3><p>Faturas, controle de inadimplência, suspensão automática e portal de billing para o cliente final.</p></div>
+    <div class="card"><div class="ico"><svg><use href="#i-plug"/></svg></div><h3>White-label &amp; API</h3><p>Sua marca, seu domínio, sua identidade. API pública e webhooks de saída para integrar com o restante do seu stack.</p></div>
+    <div class="card"><div class="ico"><svg><use href="#i-bolt"/></svg></div><h3>Tempo real &amp; PWA</h3><p>WebSocket para mensagens instantâneas, notificações desktop e instalação como aplicativo (PWA) com modo offline.</p></div>
+  </div>
+</div></section>
+
+<!-- COMO FUNCIONA -->
+<section id="como"><div class="wrap">
+  <div class="sec-head">
+    <span class="mono-tag">// Como funciona</span>
+    <h2>Da assinatura ao primeiro atendimento em 4 passos</h2>
+  </div>
+  <div class="steps">
+    <div class="step"><h3>Provisione o cliente</h3><p>Crie um novo tenant isolado com plano, limite de instâncias e usuários em poucos cliques.</p></div>
+    <div class="step"><h3>Conecte o WhatsApp</h3><p>Leia o QR Code da Evolution API e a instância entra em operação imediatamente.</p></div>
+    <div class="step"><h3>Convide a equipe</h3><p>Cadastre atendentes de vendas e administradores, cada um com seu painel e permissões.</p></div>
+    <div class="step"><h3>Atenda e venda</h3><p>Receba conversas em tempo real, registre vendas e acompanhe os resultados no dashboard.</p></div>
+  </div>
+</div></section>
+
+<!-- PLANOS -->
+<section id="planos"><div class="wrap">
+  <div class="sec-head center">
+    <span class="mono-tag">// Planos</span>
+    <h2>Preços simples para revender com margem</h2>
+    <p>Escolha o plano por cliente. Cobre do seu cliente final o quanto quiser — a plataforma é white-label.</p>
+  </div>
+  <div class="plans">
+    <div class="plan bevel">
+      <h3>Starter</h3>
+      <div class="price">R$ 149<small>/mês por cliente</small></div>
+      <p style="color:var(--mut);font-size:.84rem">Para começar a operar com uma instância.</p>
+      <ul>
+        <li><svg><use href="#i-check"/></svg> 1 instância WhatsApp</li>
+        <li><svg><use href="#i-check"/></svg> Até 3 usuários</li>
+        <li><svg><use href="#i-check"/></svg> Contatos e agenda</li>
+        <li><svg><use href="#i-check"/></svg> Relatórios básicos</li>
+      </ul>
+      <a class="btn bevel-sm" href="docs.html#comecar">Selecionar</a>
+    </div>
+    <div class="plan feat bevel">
+      <span class="badge">Mais popular</span>
+      <h3>Pro</h3>
+      <div class="price">R$ 349<small>/mês por cliente</small></div>
+      <p style="color:var(--mut);font-size:.84rem">Para equipes de vendas em operação.</p>
+      <ul>
+        <li><svg><use href="#i-check"/></svg> Até 3 instâncias</li>
+        <li><svg><use href="#i-check"/></svg> Usuários ilimitados</li>
+        <li><svg><use href="#i-check"/></svg> Metas, auditoria e chat interno</li>
+        <li><svg><use href="#i-check"/></svg> Billing + portal do cliente</li>
+        <li><svg><use href="#i-check"/></svg> Notificações em tempo real</li>
+      </ul>
+      <a class="btn pri bevel-sm" href="docs.html#comecar">Selecionar</a>
+    </div>
+    <div class="plan bevel">
+      <h3>White-label</h3>
+      <div class="price">Sob consulta</div>
+      <p style="color:var(--mut);font-size:.84rem">Sua marca, seu domínio, sua operação.</p>
+      <ul>
+        <li><svg><use href="#i-check"/></svg> Instâncias sob demanda</li>
+        <li><svg><use href="#i-check"/></svg> Domínio próprio por cliente</li>
+        <li><svg><use href="#i-check"/></svg> API pública + webhooks</li>
+        <li><svg><use href="#i-check"/></svg> SLA e suporte prioritário</li>
+      </ul>
+      <a class="btn bevel-sm" href="docs.html#comecar">Falar com vendas</a>
+    </div>
+  </div>
+</div></section>
+
+<!-- DEPOIMENTOS -->
+<section id="depoimentos"><div class="wrap">
+  <div class="sec-head">
+    <span class="mono-tag">// Clientes</span>
+    <h2>Quem opera com continnumOS</h2>
+  </div>
+  <div class="quotes">
+    <div class="quote"><p>“Coloquei três clientes no ar na mesma semana. O isolamento por tenant me deu segurança para vender sem medo de misturar dados.”</p><div class="who"><span class="av">MR</span><div><b>Marcos R.</b><span>Revenda de software · SP</span></div></div></div>
+    <div class="quote"><p>“A equipe de vendas adotou em um dia. O painel é direto, tem chat interno e o termômetro de metas motiva o time.”</p><div class="who"><span class="av">CL</span><div><b>Carla L.</b><span>Gestora de atendimento</span></div></div></div>
+    <div class="quote"><p>“O white-label fechou o negócio pra mim. Meu cliente vê a minha marca, e eu só me preocupo em vender.”</p><div class="who"><span class="av">JP</span><div><b>João P.</b><span>Agência · PR</span></div></div></div>
+  </div>
+</div></section>
+
+<!-- FAQ -->
+<section id="faq"><div class="wrap">
+  <div class="sec-head center"><span class="mono-tag">// FAQ</span><h2>Perguntas frequentes</h2></div>
+  <div class="faq">
+    <details class="acc"><summary>Preciso de servidor próprio?</summary><div class="ans">continnumOS roda em container (Docker). Você pode hospedar onde preferir; a documentação traz o passo a passo de deploy com docker-compose.</div></details>
+    <details class="acc"><summary>Como funciona o isolamento entre clientes?</summary><div class="ans">Cada tenant tem seus dados protegidos por Row-Level Security no banco. Um cliente jamais acessa dados de outro, mesmo compartilhando a mesma instância da aplicação.</div></details>
+    <details class="acc"><summary>Consigo usar minha marca?</summary><div class="ans">Sim. O plano White-label permite marca, cores e domínio próprio por cliente. O sistema já nasce sem referências fixas de marca.</div></details>
+    <details class="acc"><summary>Como conecto o WhatsApp?</summary><div class="ans">Via Evolution API: basta escanear o QR Code na configuração da instância. Detalhes na <a href="docs.html#whatsapp" style="color:var(--pri)">documentação</a>.</div></details>
+    <details class="acc"><summary>Existe cobrança automatizada?</summary><div class="ans">Sim. Há gestão de faturas, integração com gateway de pagamento, suspensão automática por inadimplência e portal de billing para o cliente final.</div></details>
+  </div>
+</div></section>
+
+<!-- CTA -->
+<section><div class="wrap">
+  <div class="cta-band bevel">
+    <h2>Pronto para revender atendimento com a sua marca?</h2>
+    <p>Provisione o primeiro cliente hoje e veja o console em operação.</p>
+    <a class="btn pri bevel-sm" href="docs.html#comecar">Começar agora <svg><use href="#i-arrow"/></svg></a>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="cols">
+    <div>
+      <a class="brand" href="index.html" style="margin-bottom:12px"><span class="mark">C</span> continnumOS</a>
+      <p style="max-width:280px">Plataforma CRM multi-tenant de atendimento via WhatsApp para revenda white-label.</p>
+    </div>
+    <div><h5>Produto</h5><a href="#recursos">Recursos</a><a href="#planos">Planos</a><a href="#como">Como funciona</a></div>
+    <div><h5>Recursos</h5><a href="docs.html">Documentação</a><a href="docs.html#whatsapp">Conectar WhatsApp</a><a href="docs.html#api">API</a></div>
+    <div><h5>Legal</h5><a href="docs.html#lgpd">LGPD</a><a href="docs.html">Termos</a><a href="docs.html">Privacidade</a></div>
+  </div>
+  <div class="base"><span>© 2026 continnumOS. Todos os direitos reservados.</span><span>Feito para quem revende atendimento.</span></div>
+</div></footer>
+</body>
+</html>

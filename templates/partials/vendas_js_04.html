@@ -1,0 +1,685 @@
+    async function loadChatHistory(force = false) {
+        if(!currentPhone) return; 
+        const phoneAtRequest = currentPhone;
+        if (chatFetchController) chatFetchController.abort();
+        chatFetchController = new AbortController();
+        let res, msgs;
+        try {
+            res = await fetch('/api/chat/' + phoneAtRequest, {signal: chatFetchController.signal});
+            msgs = await res.json();
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;
+            return;
+        }
+        if (currentPhone !== phoneAtRequest) return;
+        if (!Array.isArray(msgs)) return;
+        msgs = msgs.filter(m => (m.phone || '') === phoneAtRequest);
+        const box = document.getElementById('chat-history'); 
+        if(force || currentMessageCount === 0 || msgs.length < currentMessageCount) {
+            let htmlStr = '';
+            msgs.forEach(m => {
+                let wahaId = m.waha_id || m.id; let msgId = m.id;
+                let isSeller = (m.sender !== phoneAtRequest && m.sender !== 'bot' && m.sender !== 'sistema');
+                let cls = m.sender === phoneAtRequest ? 'msg-client' : (m.sender === 'bot' ? 'msg-bot' : (m.sender === 'sistema' ? 'msg-system' : 'msg-seller'));
+                let ackHtml = (m.sender !== 'bot' && m.sender !== 'sistema' && m.sender !== phoneAtRequest) ? `<span class="material-symbols-outlined ack-icon ${m.ack === 3 ? 'ack-read' : ''}">${getAckIcon(m.ack)}</span>` : '';
+                let timeStr = m.timestamp ? `<span style="font-size:0.6rem; opacity:0.5; margin-left:8px; font-weight:400;">${formatTime(m.timestamp)}</span>` : '';
+                
+                let actionsHtml = '';
+                if (m.sender !== 'sistema' && m.msg_type !== 'deleted') {
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="setReply('${wahaId}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">reply</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openReactionModal('${wahaId}')">mood</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="pinMessage('${phoneAtRequest}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">push_pin</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openForwardModal(${msgId})">forward</span>`;
+                    if (canEditRemoteMessage(m, phoneAtRequest)) {
+                        actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openEditModal('${wahaId}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">edit</span>`;
+                    }
+                    if (canDeleteRemoteMessage(m, phoneAtRequest)) {
+                        actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="confirmDelete('${wahaId}')">delete</span>`;
+                    }
+                }
+                htmlStr += `<div class="msg-bubble ${cls}">${formatMessage(m.msg_text)}<div style="display:flex; justify-content:flex-end; align-items:center; margin-top:2px;">${actionsHtml}${timeStr}${ackHtml}</div></div>`;
+            });
+            box.innerHTML = htmlStr;
+        } else if (msgs.length > currentMessageCount) {
+            const newMsgs = msgs.slice(currentMessageCount); let htmlStr = '';
+            newMsgs.forEach(m => {
+                let wahaId = m.waha_id || m.id; let msgId = m.id;
+                let isSeller = (m.sender !== phoneAtRequest && m.sender !== 'bot' && m.sender !== 'sistema');
+                let cls = m.sender === phoneAtRequest ? 'msg-client' : (m.sender === 'bot' ? 'msg-bot' : (m.sender === 'sistema' ? 'msg-system' : 'msg-seller'));
+                let ackHtml = (m.sender !== 'bot' && m.sender !== 'sistema' && m.sender !== phoneAtRequest) ? `<span class="material-symbols-outlined ack-icon ${m.ack === 3 ? 'ack-read' : ''}">${getAckIcon(m.ack)}</span>` : '';
+                let timeStr = m.timestamp ? `<span style="font-size:0.65rem; opacity:0.6; margin-left:6px;">${formatTime(m.timestamp)}</span>` : '';
+                
+                let actionsHtml = '';
+                if (m.sender !== 'sistema' && m.msg_type !== 'deleted') {
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="setReply('${wahaId}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">reply</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openReactionModal('${wahaId}')">mood</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="pinMessage('${phoneAtRequest}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">push_pin</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openForwardModal(${msgId})">forward</span>`;
+                    if (canEditRemoteMessage(m, phoneAtRequest)) {
+                        actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openEditModal('${wahaId}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">edit</span>`;
+                    }
+                    if (canDeleteRemoteMessage(m, phoneAtRequest)) {
+                        actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="confirmDelete('${wahaId}')">delete</span>`;
+                    }
+                }
+                htmlStr += `<div class="msg-bubble ${cls}">${formatMessage(m.msg_text)}<div style="display:flex; justify-content:flex-end; align-items:center; margin-top:4px;">${actionsHtml}${timeStr}${ackHtml}</div></div>`;
+            });
+            box.insertAdjacentHTML('beforeend', htmlStr);
+        }
+        currentMessageCount = msgs.length;
+        box.scrollTop = box.scrollHeight;
+    }
+
+    async function assumirAtual() { await fetch('/api/take_chat', {method: 'POST', body: JSON.stringify({phone: currentPhone})}); document.getElementById('assumir-box').style.display = 'none'; document.getElementById('active-box').style.display = 'flex'; lastActiveListState = null; buildDashboard(); }
+    async function sendMacro(text) { document.getElementById('chat-input').value = text; await sendChatMessage(); }
+    
+    async function sendChatMessage() { 
+        const input = document.getElementById('chat-input'); if(!input.value.trim() || !currentPhone) return; 
+        let payload = {phone: currentPhone, text: input.value.trim()};
+        if (currentReplyId) payload.quoted_id = currentReplyId;
+        const res = await fetch('/api/chat/send', {method: 'POST', body: JSON.stringify(payload)});
+        const data = await res.json();
+        if (data.status !== 'ok') {
+            Toastify({text: `Falha ao enviar: ${data.message || 'sem confirmação da Evolution'}`, duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+            return;
+        }
+        input.value = ''; cancelReply(); await loadChatHistory(); 
+    }
+    
+    async function saveContactInfo() { if(!currentPhone) return; await fetch('/api/edit_contact', {method: 'POST', body: JSON.stringify({phone: currentPhone, name: document.getElementById('info-name').value, notes: document.getElementById('info-notes').value, extra: document.getElementById('info-extra').value})}); Toastify({text: "✅ Informações Salvas!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast(); mobileView('chat'); lastActiveListState = null; buildDashboard(); }
+    
+    async function submitFinish(result) {
+        if(!currentPhone) return;
+        const res = await fetch('/api/finish_chat', {method: 'POST', body: JSON.stringify({phone: currentPhone, result: result})});
+        let data = {};
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok || data.status !== 'ok') {
+            Toastify({text: `Falha ao finalizar: ${data.error || data.message || 'tente novamente.'}`, duration: 4500, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+            return;
+        }
+        document.getElementById('no-chat').style.display = 'flex'; 
+        document.getElementById('chat-header').style.display = 'none'; 
+        document.getElementById('chat-controls').style.display = 'none'; 
+        document.getElementById('pinned-message-banner').style.display = 'none';
+        document.getElementById('chat-history').innerHTML = ''; 
+        currentPhone = null; 
+        currentMessageCount = 0; 
+        mobileView('list'); 
+        lastActiveListState = null;
+        buildDashboard();
+    }
+
+    async function submitStatus() {
+        const type = document.getElementById('status-type').value;
+        const filterWord = document.getElementById('status-filter') ? document.getElementById('status-filter').value : '';
+        const limitElement = document.getElementById('status-limit');
+        const allowedLimits = ['10', '20', '30', '50'];
+        const limit = allowedLimits.includes(limitElement?.value) ? limitElement.value : '50';
+        const statusListId = document.getElementById('status-list-filter') ? document.getElementById('status-list-filter').value : '';
+        
+        const formData = new FormData();
+        formData.append('type', type);
+        formData.append('filter_word', filterWord);
+        formData.append('limit', limit);
+        formData.append('list_id', statusListId);
+        
+        if (type === 'text') {
+            const text = document.getElementById('status-text').value;
+            if (!text.trim()) {
+                return Toastify({text: "⚠️ Digite a mensagem do status.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
+            }
+            formData.append('content', text);
+        } else {
+            const file = document.getElementById('status-image-file').files[0];
+            if (!file) {
+                return Toastify({text: "⚠️ Selecione uma imagem.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
+            }
+            formData.append('file', file);
+        }
+        
+        document.getElementById('statusModal').style.display = 'none';
+        
+        Toastify({
+            text: "📡 Publicando Status no WhatsApp... Aguarde.",
+            duration: 3000, gravity: "top", position: "right",
+            style: { background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px", fontFamily: "'JetBrains Mono', monospace"}
+        }).showToast();
+        
+        try {
+            const res = await fetch('/api/status/send', {method: 'POST', body: formData});
+            const data = await res.json();
+            if (data.status === 'ok') {
+                let msgExt = data.filter ? `filtrados pela palavra '${data.filter}'.` : `da sua carteira.`;
+                playBeep("Status Postado! 🚀", `A sua postagem aparecerá nos celulares de ${data.count} clientes ${msgExt}`);
+                document.getElementById('status-text').value = ''; 
+                document.getElementById('status-image-file').value = '';
+                if(document.getElementById('status-filter')) document.getElementById('status-filter').value = '';
+                loadStatusHistory(false);
+            } else {
+                Toastify({text: `❌ Erro: ${data.message}`, duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
+            }
+        } catch(e) { 
+            Toastify({text: "🔌 Falha de conexão com o servidor.", duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px", fontFamily: "var(--font-main)"}}).showToast();
+        }
+    }
+
+    let statusRealtimeRefreshTimer = null;
+
+    function statusModalIsOpen(modalId) {
+        return document.getElementById(modalId)?.style.display === 'flex';
+    }
+
+    function statusAuditTimestamp() {
+        return new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+    }
+
+    function setStatusAuditNote(elementId, text, icon = 'sync') {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        el.innerHTML = `<span class="material-symbols-outlined" style="font-size:15px; color:var(--wa-green);">${icon}</span>${escapeHtml(text)}`;
+    }
+
+    function statusProgressPercent(viewed, total) {
+        const totalNum = Number(total || 0);
+        if (!totalNum) return 0;
+        return Math.max(0, Math.min(100, Math.round((Number(viewed || 0) / totalNum) * 100)));
+    }
+
+    function renderStatusProgress(viewed, total) {
+        const percent = statusProgressPercent(viewed, total);
+        return `
+            <div style="margin-top:10px;">
+                <div style="height:7px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; border:1px solid var(--border);">
+                    <div style="width:${percent}%; height:100%; background:linear-gradient(90deg, var(--primary), var(--wa-green)); border-radius:999px;"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; gap:8px; margin-top:5px; color:var(--text-muted); font-size:0.68rem;">
+                    <span>${percent}% visualizado</span>
+                    <span>${viewed || 0}/${total || 0}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    function statusDiagnosticStyle(statusLabel) {
+        const styles = {
+            ok: ['#00A884', 'check_circle', 'Completo'],
+            waiting_webhook: ['#C9A227', 'hourglass_top', 'Aguardando webhook'],
+            legacy_no_targets: ['#8EA4B8', 'history', 'Histórico antigo'],
+            legacy_views_only: ['#C9A227', 'sync_problem', 'Visualização sem alvo'],
+            no_targets: ['#F15C6D', 'error', 'Sem alvos']
+        };
+        return styles[statusLabel] || ['var(--text-muted)', 'info', statusLabel || 'Diagnóstico'];
+    }
+
+    async function loadStatusDiagnostics() {
+        const panel = document.getElementById('status-diagnostics-panel');
+        if (!panel) return;
+        panel.style.display = 'flex';
+        panel.innerHTML = '<div style="padding:12px; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); background:rgba(255,255,255,0.03);">Analisando fluxo de status...</div>';
+        try {
+            const res = await fetch('/api/status/diagnostics');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Falha ao diagnosticar status');
+            const summary = data.summary || {};
+            const diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : [];
+            const header = `
+                <div style="border:1px solid var(--border); border-radius:8px; padding:12px; background:rgba(255,255,255,0.03);">
+                    <div style="display:flex; align-items:center; gap:8px; color:var(--primary); font-weight:800; margin-bottom:8px;">
+                        <span class="material-symbols-outlined" style="font-size:18px;">troubleshoot</span>
+                        Diagnóstico ponta a ponta
+                    </div>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(80px, 1fr)); gap:8px; margin-bottom:10px;">
+                        ${[
+                            ['Status', summary.posts || 0],
+                            ['Alvos', summary.tracked_targets || 0],
+                            ['Views', summary.tracked_views || 0],
+                            ['Pendentes', summary.pending_targets || 0]
+                        ].map(item => `<div style="border:1px solid var(--border); border-radius:8px; padding:8px; background:var(--surface);"><div style="font-weight:800;">${item[1]}</div><div style="font-size:0.68rem; color:var(--text-muted);">${item[0]}</div></div>`).join('')}
+                    </div>
+                    <div style="font-size:0.72rem; color:var(--text-muted); line-height:1.45;">${escapeHtml(data.test_guidance || '')}</div>
+                </div>
+            `;
+            if (!diagnostics.length) {
+                panel.innerHTML = header + '<div style="padding:12px; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); background:var(--surface);">Nenhum status publicado para diagnosticar ainda.</div>';
+                return;
+            }
+            const rows = diagnostics.map(item => {
+                const style = statusDiagnosticStyle(item.status_label);
+                const tracked = item.tracked_targets || 0;
+                const viewed = item.tracked_views || 0;
+                const pending = item.pending_targets || 0;
+                const latestView = item.latest_view_at || item.latest_legacy_view_at || 'sem visualização';
+                return `
+                    <div style="border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--surface);">
+                        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+                            <div style="min-width:0;">
+                                <div style="display:flex; align-items:center; gap:6px; color:${style[0]}; font-weight:800;">
+                                    <span class="material-symbols-outlined" style="font-size:17px;">${style[1]}</span>
+                                    ${escapeHtml(style[2])}
+                                </div>
+                                <div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;">${escapeHtml(item.seller_name || '')} · ${escapeHtml(item.session_id || '')} · ${escapeHtml(item.created_at || '')}</div>
+                            </div>
+                            <div style="font-size:0.72rem; color:var(--text-muted); text-align:right; flex-shrink:0;">${escapeHtml(item.status_type || '')}</div>
+                        </div>
+                        ${renderStatusProgress(viewed, tracked)}
+                        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
+                            <span style="border:1px solid var(--border); border-radius:999px; padding:3px 8px; font-size:0.68rem; color:var(--text-muted);">${tracked} rastreados</span>
+                            <span style="border:1px solid rgba(0,168,132,0.35); border-radius:999px; padding:3px 8px; font-size:0.68rem; color:#00A884;">${viewed} visualizados</span>
+                            <span style="border:1px solid rgba(201,162,39,0.35); border-radius:999px; padding:3px 8px; font-size:0.68rem; color:#C9A227;">${pending} pendentes</span>
+                            <span style="border:1px solid var(--border); border-radius:999px; padding:3px 8px; font-size:0.68rem; color:var(--text-muted);">última view: ${escapeHtml(latestView)}</span>
+                        </div>
+                        <div style="font-size:0.72rem; color:var(--text-muted); line-height:1.45; margin-top:8px;">${escapeHtml(item.action_hint || '')}</div>
+                    </div>
+                `;
+            }).join('');
+            panel.innerHTML = header + rows;
+        } catch(e) {
+            panel.innerHTML = '<div style="padding:12px; border:1px solid #4A1C22; border-radius:8px; color:#F15C6D; background:#2A1114;">Erro ao carregar diagnóstico do status.</div>';
+        }
+    }
+
+    async function refreshStatusAuditFromRealtime() {
+        clearTimeout(statusRealtimeRefreshTimer);
+        statusRealtimeRefreshTimer = setTimeout(async () => {
+            const stamp = statusAuditTimestamp();
+            const historyOpen = statusModalIsOpen('statusHistoryModal');
+            const targetOpen = statusModalIsOpen('statusViewersModal');
+            const carteiraOpen = document.getElementById('tab-carteira')?.classList.contains('active');
+            if (historyOpen || carteiraOpen) {
+                await loadStatusHistory(false, {realtime: true});
+                setStatusAuditNote('status-history-realtime-note', `Atualizado em tempo real às ${stamp}.`, 'sensors');
+            }
+            if (historyOpen && document.getElementById('status-diagnostics-panel')?.style.display === 'flex') {
+                await loadStatusDiagnostics();
+            }
+            if (targetOpen && currentStatusTargetId) {
+                await loadStatusTargets(currentStatusTargetFilter, {silent: true, realtime: true});
+                setStatusAuditNote('status-target-realtime-note', `Visualizações sincronizadas às ${stamp}.`, 'sync');
+            }
+        }, 250);
+    }
+
+    async function openStatusHistory() {
+        document.getElementById('statusHistoryModal').style.display = 'flex';
+        await loadStatusHistory(true);
+    }
+
+    async function loadStatusHistory(showLoading = true, options = {}) {
+        const box = document.getElementById('status-history-list');
+        if (!box) return;
+        if (showLoading) box.innerHTML = '<div style="padding:16px; color:var(--text-muted);">Carregando status publicados...</div>';
+        try {
+            const res = await fetch('/api/status/posts');
+            const posts = await res.json();
+            if (!posts.length) {
+                box.innerHTML = '<div style="padding:16px; color:var(--text-muted);">Nenhum status publicado ainda.</div>';
+                setStatusAuditNote('status-history-realtime-note', `Consulta atualizada às ${statusAuditTimestamp()}.`, 'sensors');
+                return;
+            }
+            box.innerHTML = posts.map(post => {
+                const typeLabel = post.status_type === 'image' ? 'Imagem' : 'Texto';
+                const preview = post.status_type === 'image' ? 'Imagem publicada' : escapeHtml(post.preview || '');
+                const filter = post.filter_word ? `Filtro: ${escapeHtml(post.filter_word)}` : 'Sem filtro';
+                const totalTargets = post.tracked_targets || post.target_count || 0;
+                const viewsCount = post.views_count || 0;
+                const pendingCount = Math.max(totalTargets - viewsCount, 0);
+                const progressHtml = renderStatusProgress(viewsCount, totalTargets);
+                return `
+                    <div style="border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--surface); display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:12px; align-items:flex-start;">
+                        <div style="min-width:0; display:flex; flex-direction:column;">
+                            <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+                                <span class="material-symbols-outlined" style="font-size:18px; color:var(--primary);">${post.status_type === 'image' ? 'image' : 'article'}</span>
+                                <strong>${typeLabel}</strong>
+                                <span style="font-size:0.7rem; color:var(--text-muted);">${formatTime(post.created_at)}</span>
+                            </div>
+                            <div style="font-size:0.85rem; color:var(--text-main); overflow:hidden; text-overflow:ellipsis;">${preview}</div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+                                <span style="border:1px solid var(--border); border-radius:999px; padding:3px 8px; font-size:0.68rem; color:var(--text-muted);">${filter}</span>
+                                <span style="border:1px solid rgba(0,168,132,0.35); border-radius:999px; padding:3px 8px; font-size:0.68rem; color:#00A884;">${viewsCount} visualizados</span>
+                                <span style="border:1px solid rgba(201,162,39,0.35); border-radius:999px; padding:3px 8px; font-size:0.68rem; color:#C9A227;">${pendingCount} pendentes</span>
+                            </div>
+                            ${progressHtml}
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+                            <div style="font-size:0.72rem; color:var(--text-muted); text-align:right;">${totalTargets} enviados</div>
+                            <button class="btn status-view-sent-btn" data-status-id="${escapeHtml(post.status_id || '')}" style="padding:8px 10px; white-space:nowrap;">
+                                <span class="material-symbols-outlined" style="font-size:16px;">groups</span> Ver enviados
+                            </button>
+                            <button class="btn status-delete-btn" data-status-id="${escapeHtml(post.status_id || '')}" style="padding:8px 10px; white-space:nowrap; border-color:#4A1C22; color:#F15C6D;">
+                                <span class="material-symbols-outlined" style="font-size:16px;">delete</span> Apagar
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            bindStatusHistoryActions();
+            if (!options.realtime) setStatusAuditNote('status-history-realtime-note', `Consulta atualizada às ${statusAuditTimestamp()}.`, 'sensors');
+        } catch(e) {
+            box.innerHTML = '<div style="padding:16px; color:#F15C6D;">Erro ao carregar status publicados.</div>';
+        }
+    }
+
+    function bindStatusHistoryActions() {
+        document.querySelectorAll('.status-view-sent-btn').forEach(btn => {
+            btn.onclick = () => {
+                const statusId = btn.dataset.statusId || '';
+                if (!statusId) return notifyToast('Status sem ID para auditoria.', true, 3000);
+                openStatusViewers(statusId, 'all');
+            };
+        });
+        document.querySelectorAll('.status-delete-btn').forEach(btn => {
+            btn.onclick = () => {
+                const statusId = btn.dataset.statusId || '';
+                if (!statusId) return notifyToast('Status sem ID para apagar.', true, 3000);
+                deleteStatusPost(statusId);
+            };
+        });
+    }
+
+    async function deleteStatusPost(statusId) {
+        if (!confirm('Apagar este status do histórico do painel? Esta ação remove a auditoria local, mas não apaga o status já publicado no WhatsApp.')) return;
+        try {
+            const res = await fetch('/api/status/' + encodeURIComponent(statusId), {method: 'DELETE'});
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.error || 'Falha ao apagar status.');
+            notifyToast('Status removido do histórico do painel.', false, 2600);
+            if (currentStatusTargetId === statusId) {
+                document.getElementById('statusViewersModal').style.display = 'none';
+                currentStatusTargetId = null;
+            }
+            await loadStatusHistory(false);
+            if (document.getElementById('status-diagnostics-panel')?.style.display === 'flex') await loadStatusDiagnostics();
+        } catch(e) {
+            notifyToast(e.message || 'Erro ao apagar status.', true, 4200);
+        }
+    }
+
+    let currentStatusTargetId = null;
+    let currentStatusTargetFilter = 'all';
+
+    function renderStatusTargetSummary(summary = {}) {
+        const total = summary.total || 0;
+        const viewed = summary.viewed || 0;
+        const pending = summary.pending || 0;
+        const percent = statusProgressPercent(viewed, total);
+        const summaryBox = document.getElementById('status-target-summary');
+        if (!summaryBox) return;
+        summaryBox.innerHTML = `
+            <div style="grid-column:1 / -1; border:1px solid var(--border); border-radius:8px; padding:10px; background:rgba(255,255,255,0.03);">
+                <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:7px; color:var(--text-muted); font-size:0.72rem;">
+                    <span>Progresso de visualização</span>
+                    <strong style="color:var(--text-main);">${percent}%</strong>
+                </div>
+                ${renderStatusProgress(viewed, total)}
+            </div>
+            ${[
+                ['Enviados', total, 'send', 'var(--primary)'],
+                ['Visualizados', viewed, 'visibility', '#00A884'],
+                ['Pendentes', pending, 'schedule', '#C9A227']
+            ].map(item => `
+                <div style="border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--surface); display:flex; align-items:center; gap:8px; min-width:0;">
+                    <span class="material-symbols-outlined" style="font-size:18px; color:${item[3]};">${item[2]}</span>
+                    <div style="min-width:0;">
+                        <div style="font-size:1rem; font-weight:800; color:var(--text-main);">${item[1]}</div>
+                        <div style="font-size:0.68rem; color:var(--text-muted);">${item[0]}</div>
+                    </div>
+                </div>
+            `).join('')}
+        `;
+    }
+
+    function setStatusTargetFilterActive(filterName) {
+        ['all', 'viewed', 'pending'].forEach(name => {
+            const btn = document.getElementById(`status-filter-${name}`);
+            if (!btn) return;
+            btn.classList.toggle('btn-primary', name === filterName);
+        });
+    }
+
+    async function loadStatusTargets(filterName = currentStatusTargetFilter, options = {}) {
+        if (!currentStatusTargetId) return;
+        currentStatusTargetFilter = filterName;
+        setStatusTargetFilterActive(filterName);
+        const box = document.getElementById('status-viewers-list');
+        if (!box) return;
+        if (!options.silent) box.innerHTML = '<div style="padding:12px; color:var(--text-muted);">Carregando destinatários...</div>';
+        try {
+            const res = await fetch('/api/status/' + encodeURIComponent(currentStatusTargetId) + '/targets?filter=' + encodeURIComponent(filterName));
+            const data = await res.json();
+            const targets = Array.isArray(data.targets) ? data.targets : [];
+            renderStatusTargetSummary(data.summary || {});
+            if (!targets.length) {
+                const emptyText = filterName === 'viewed'
+                    ? 'Nenhuma visualização recebida da Evolution ainda.'
+                    : filterName === 'pending'
+                        ? 'Nenhum destinatário pendente neste status.'
+                        : 'Nenhum contato enviado rastreado para este status. Status antigos podem ter apenas o total gravado.';
+                box.innerHTML = `<div style="padding:12px; color:var(--text-muted);">${emptyText}</div>`;
+                if (!options.realtime) setStatusAuditNote('status-target-realtime-note', `Consulta atualizada às ${statusAuditTimestamp()}.`, 'sync');
+                return;
+            }
+            box.innerHTML = targets.map(t => {
+                const name = escapeHtml(t.name && t.name !== 'None' ? t.name : cleanPhone(t.target_jid));
+                const jid = escapeHtml(cleanPhone(t.target_jid || ''));
+                const assigned = t.assigned_to ? `<span style="color:var(--text-muted); font-size:0.72rem;">${escapeHtml(t.assigned_to)}</span>` : '';
+                const viewed = Boolean(t.viewed_at);
+                const badgeColor = viewed ? '#00A884' : '#C9A227';
+                const badgeBg = viewed ? 'rgba(0,168,132,0.12)' : 'rgba(201,162,39,0.12)';
+                const dateLabel = viewed ? `Visualizado ${formatTime(t.viewed_at)}` : `Enviado ${formatTime(t.sent_at)}`;
+                return `
+                    <div style="border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--surface); display:flex; justify-content:space-between; gap:12px; align-items:center;">
+                        <div style="min-width:0;">
+                            <div style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</div>
+                            <div style="font-size:0.72rem; color:var(--text-muted); display:flex; gap:8px; flex-wrap:wrap;"><span>${jid}</span>${assigned}</div>
+                        </div>
+                        <div style="text-align:right; flex-shrink:0;">
+                            <div style="display:inline-flex; align-items:center; gap:4px; color:${badgeColor}; background:${badgeBg}; border:1px solid ${badgeColor}55; border-radius:999px; padding:3px 8px; font-size:0.68rem; font-weight:800;">
+                                <span class="material-symbols-outlined" style="font-size:14px;">${viewed ? 'visibility' : 'schedule'}</span>${viewed ? 'Visualizado' : 'Pendente'}
+                            </div>
+                            <div style="font-size:0.68rem; color:var(--text-muted); margin-top:4px;">${dateLabel}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            if (!options.realtime) setStatusAuditNote('status-target-realtime-note', `Consulta atualizada às ${statusAuditTimestamp()}.`, 'sync');
+        } catch(e) {
+            box.innerHTML = '<div style="padding:12px; color:#F15C6D;">Erro ao carregar destinatários do status.</div>';
+        }
+    }
+
+    async function openStatusViewers(statusId, initialFilter = 'all') {
+        const modal = document.getElementById('statusViewersModal');
+        currentStatusTargetId = statusId;
+        currentStatusTargetFilter = initialFilter;
+        modal.style.display = 'flex';
+        renderStatusTargetSummary({total: 0, viewed: 0, pending: 0});
+        await loadStatusTargets(initialFilter);
+    }
+    
+    function openTransfer() { document.getElementById('transferModal').style.display = 'flex'; }
+    async function submitTransfer() { await fetch('/api/transfer', {method: 'POST', body: JSON.stringify({phone: currentPhone, target: document.getElementById('transfer-target').value})}); document.getElementById('transferModal').style.display = 'none'; document.getElementById('no-chat').style.display = 'flex'; document.getElementById('chat-header').style.display = 'none'; document.getElementById('chat-controls').style.display = 'none'; currentPhone = null; currentMessageCount = 0; mobileView('list'); lastActiveListState = null; buildDashboard(); }
+
+    async function buildDashboard() {
+        try {
+            const res = await fetch('/api/poll_updates');
+            if (!res.ok) throw new Error(`poll_updates ${res.status}`);
+            const data = await res.json();
+            const clientes = Array.isArray(data.clientes) ? [...data.clientes] : [];
+            clientes.sort((a, b) => {
+                const stageRank = (stage) => stage === 'pendente_assumir' ? 0 : 1;
+                const rankDiff = stageRank(a.stage) - stageRank(b.stage);
+                if (rankDiff !== 0) return rankDiff;
+                return queueTimestamp(a) - queueTimestamp(b);
+            });
+            const stateStr = clientes.map(c => c.phone + c.stage + c.assigned_to + (c.last_interaction || '') + (c.attendance_start || '')).join('|');
+            checkOpenAttendanceNotice(clientes);
+
+            if (stateStr === lastActiveListState) return;
+            lastActiveListState = stateStr;
+
+            document.getElementById('count-ativos').innerText = clientes.length;
+            const box = document.getElementById('ativos-list'); 
+            const maxDraw = Math.min(clientes.length, 50);
+            const visibleClientes = clientes.slice(0, maxDraw);
+            const groups = [
+                {stage: 'pendente_assumir', title: 'Aguardando atendimento', icon: 'hourglass_top', empty: 'Nenhum chat aguardando.'},
+                {stage: 'em_atendimento', title: 'Em atendimento', icon: 'forum', empty: 'Nenhum chat ativo.'}
+            ];
+            let htmlStr = groups.map(group => {
+                const groupItems = visibleClientes.filter(c => c.stage === group.stage);
+                let groupHtml = `<div class="queue-section" data-stage="${group.stage}">
+                    <div class="queue-section-header">
+                        <span class="queue-section-title"><span class="material-symbols-outlined">${group.icon}</span>${group.title}</span>
+                        <span class="queue-count">${groupItems.length}</span>
+                    </div>`;
+                if (!groupItems.length) {
+                    groupHtml += `<div style="padding:14px 16px; color:var(--text-muted); font-size:0.8rem; border-bottom:1px solid var(--border);">${group.empty}</div></div>`;
+                    return groupHtml;
+                }
+                let lastDateLabel = '';
+                groupItems.forEach(c => {
+                    const rawNome = c.name ? c.name : cleanPhone(c.phone);
+                    const nomeStr = getCleanName(rawNome);
+                    const pendenteClass = c.stage === 'pendente_assumir' ? 'pendente' : '';
+                    const statusTxt = c.stage === 'pendente_assumir' ? 'Aguardar' : 'Ativo';
+                    let tagsHtml = '';
+                    if(c.tags_data) { c.tags_data.split(',').forEach(t => { let p = t.split('|'); if(p.length===3) tagsHtml += `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${p[2]}; margin-right:4px;"></span>`; }); }
+                    const activeCls = (currentPhone === c.phone) ? 'active' : '';
+                    const arrivalRaw = c.stage === 'em_atendimento'
+                        ? (c.attendance_start || c.last_interaction)
+                        : (c.last_interaction || c.attendance_start);
+                    const dateLabel = queueDateLabel(arrivalRaw);
+                    if (dateLabel !== lastDateLabel) {
+                        if (lastDateLabel) groupHtml += '</div>';
+                        groupHtml += `<div class="queue-day"><div class="queue-day-header">${escapeHtml(dateLabel)}</div>`;
+                        lastDateLabel = dateLabel;
+                    }
+                    const chegada = arrivalRaw ? formatTime(arrivalRaw) : '--';
+                    const tempoLabel = c.stage === 'em_atendimento' ? `Desde ${chegada}` : `Chegou ${chegada}`;
+                    groupHtml += `<div id="contact-${c.phone}" class="contact-card contact-item ${pendenteClass} ${activeCls}" onclick='selectChat(${jsArg(c.phone)}, ${jsArg(rawNome)}, ${jsArg(c.notes || '')}, ${jsArg(c.extra_info || '')}, ${jsArg(c.stage)}, ${jsArg(c.tags_data || '')}, ${jsArg(c.list_data || '')})'>
+                        <div class="avatar">${nomeStr.charAt(0).toUpperCase()}</div><div class="card-info"><div class="card-title">${nomeStr}</div><div class="card-meta"><span>${statusTxt} ${tagsHtml}</span><span>${tempoLabel}</span></div></div></div>`;
+                });
+                if (lastDateLabel) groupHtml += '</div>';
+                groupHtml += '</div>';
+                return groupHtml;
+            }).join('');
+            if(clientes.length > 50) htmlStr += `<div style="text-align:center; padding:12px; color:var(--text-muted); font-size:0.8rem;">+ ${clientes.length - 50} ocultos</div>`;
+            box.innerHTML = htmlStr;
+            const activeSearch = document.getElementById('search-input');
+            if (activeSearch && activeSearch.value.trim()) filterList(activeSearch.value);
+        } catch(e) {
+            console.error('Falha ao carregar atendimentos ativos:', e);
+            const box = document.getElementById('ativos-list');
+            if (box) {
+                box.innerHTML = '<div style="padding:16px; color:#F15C6D; font-size:0.82rem; line-height:1.4;">Erro ao carregar atendimentos. Atualize a página ou verifique a sessão.</div>';
+            }
+        }
+    }
+
+    /** Monta a URL realtime usando ws/wss conforme o protocolo atual da pagina. */
+    function realtimeWebSocketUrl() {
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        return `${protocol}://${window.location.host}/ws`;
+    }
+    /** Agenda reconexao progressiva para recuperar eventos sem exigir F5 do painel. */
+    function scheduleRealtimeReconnect() {
+        if (wsReconnectTimer) return;
+        setRealtimeStatus(wsReconnectAttempts >= 3 ? 'offline' : 'reconnecting');
+        const delay = Math.min(WS_MAX_RECONNECT_DELAY, 1000 * Math.pow(2, wsReconnectAttempts));
+        wsReconnectAttempts += 1;
+        wsReconnectTimer = setTimeout(() => {
+            wsReconnectTimer = null;
+            connectRealtime();
+        }, delay);
+    }
+    /** Abre o WebSocket do painel e reinstala handlers quando a conexao cair. */
+    function connectRealtime() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+        setRealtimeStatus('reconnecting');
+        try {
+            ws = new WebSocket(realtimeWebSocketUrl());
+            ws.onopen = () => {
+                const shouldNotifyRecovery = realtimeWasConnected && realtimeDropNotified;
+                wsReconnectAttempts = 0;
+                realtimeWasConnected = true;
+                realtimeDropNotified = false;
+                setRealtimeStatus('online');
+                syncInternalUnreadSince('ws_open');
+                if (shouldNotifyRecovery) notifyToast('Tempo real reconectado.', false, 2200);
+            };
+            ws.onmessage = handleRealtimeMessage;
+            ws.onclose = () => {
+                if (realtimeWasConnected && !realtimeDropNotified) {
+                    notifyToast('Conexão em tempo real caiu. Tentando reconectar...', true, 4500);
+                    realtimeDropNotified = true;
+                }
+                scheduleRealtimeReconnect();
+            };
+            ws.onerror = () => {
+                try { ws.close(); } catch(e) {}
+            };
+        } catch(e) {
+            scheduleRealtimeReconnect();
+        }
+    }
+    async function handleRealtimeMessage(event) {
+        const data = String(event.data || '');
+        let payload = null;
+        if (data.startsWith('{')) {
+            try { payload = JSON.parse(data); } catch (e) {}
+        }
+        if (payload && payload.type === 'panel_notice') {
+            const myRole = '{{ user.role }}';
+            const targets = Array.isArray(payload.targets) ? payload.targets : [];
+            if (targets.includes(myRole)) {
+                playMsnSound();
+                enqueueAttentionNotice(
+                    `Comunicado de ${payload.sender || 'Admin'}`,
+                    payload.text || 'Novo comunicado.',
+                    'admin'
+                );
+            }
+            return;
+        }
+        if (payload && payload.type === 'calendar_reminder') {
+            const myRole = '{{ user.role }}';
+            const myName = {{ user.name|tojson }};
+            const target = payload.assigned_to || payload.user_name || '';
+            if (target === myName || target === myRole) {
+                playMsnSound();
+                enqueueAttentionNotice(
+                    payload.title || 'Agenda pendente',
+                    `${payload.text || 'Tarefa de agenda pendente.'}\n\nAbra a Agenda para marcar como contatado ou remarcar.`,
+                    'warning'
+                );
+            }
+            return;
+        }
+        if (payload && payload.type === 'internal_message') {
+            await handleInternalChatEvent(payload);
+            return;
+        }
+        if (payload && (payload.type === 'internal_reaction' || payload.type === 'internal_message_update')) {
+            if (document.getElementById('tab-internal').classList.contains('active')) await loadInternalChat();
+            return;
+        }
+        if (data === 'update') {
+            buildDashboard();
+        } else if (data === 'calendar_update') {
+            if (document.getElementById('tab-tools')?.classList.contains('active')) renderCalendar();
+        } else if (data.startsWith('chat_')) {
+            const phone = data.split('_')[1];
+            if (typeof currentPhone !== 'undefined' && phone === currentPhone) {
+                await loadChatHistory();
+            } else {
+                const card = document.getElementById('contact-' + phone);
+                if (card) {
+                    const clientName = card.querySelector('.card-title')?.innerText || "Cliente";
+                    playBeep(`Mensagem de ${clientName}`, "Clique aqui para visualizar.", phone);
+                    card.style.borderLeft = "4px solid var(--wa-green)"; 
+                }
+            }
+        } else if (data === 'status_update') {
+            refreshStatusAuditFromRealtime();
+        }
+    }

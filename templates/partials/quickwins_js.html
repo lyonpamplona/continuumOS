@@ -1,0 +1,257 @@
+/* ===================================================================
+   Quick wins — Painel de produtividade (respostas rápidas c/ variáveis,
+   agendamento, notas internas, CSAT, assinatura, exportação).
+   JS puro; incluído dentro do bloco <script> dos dashboards.
+   Sem chaves-duplas literais (evita conflito com Jinja).
+=================================================================== */
+(function () {
+  if (window.__qwLoaded) return; window.__qwLoaded = true;
+  var OB = '{' + '{', CB = '}' + '}';
+  var VARS = ['nome', 'primeiro_nome', 'atendente', 'data', 'hora', 'saudacao'];
+
+  function qwPhone() {
+    if (typeof currentPhone !== 'undefined' && currentPhone) return currentPhone;
+    return window.currentPhone || '';
+  }
+  function composer() {
+    return document.getElementById('chat-input') ||
+           document.querySelector('#message-input, .composer textarea, .chat-input, textarea');
+  }
+  async function api(method, url, body) {
+    var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opt.body = JSON.stringify(body);
+    try {
+      var r = await fetch(url, opt);
+      var t = await r.text();
+      var d = null; try { d = t ? JSON.parse(t) : null; } catch (e) { d = t; }
+      return { ok: r.ok, status: r.status, data: d };
+    } catch (e) { return { ok: false, status: 0, data: null }; }
+  }
+  function toast(msg, bad) {
+    var n = document.createElement('div');
+    n.textContent = msg;
+    n.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:99999;' +
+      'padding:10px 16px;border-radius:8px;font:600 13px/1.2 Space Grotesk,system-ui,sans-serif;' +
+      'color:#0a0a0a;background:' + (bad ? '#ffb020' : '#ff6a00') + ';box-shadow:0 8px 24px rgba(0,0,0,.4)';
+    document.body.appendChild(n);
+    setTimeout(function () { n.remove(); }, 2600);
+  }
+  function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function needPhone() { if (!qwPhone()) { toast('Abra uma conversa primeiro.', true); return false; } return true; }
+
+  var css = document.createElement('style');
+  css.textContent = [
+    '.qw-fab{position:fixed;right:22px;bottom:22px;z-index:9998;width:52px;height:52px;border-radius:14px;',
+    'border:1px solid #2a2a30;background:#141417;color:#ff6a00;cursor:pointer;display:flex;align-items:center;',
+    'justify-content:center;box-shadow:0 10px 30px rgba(0,0,0,.5);transition:.15s}',
+    '.qw-fab:hover{border-color:#ff6a00;transform:translateY(-2px)}',
+    '.qw-panel{position:fixed;right:22px;bottom:86px;z-index:9999;width:360px;max-height:72vh;display:none;',
+    'flex-direction:column;background:#0d0d0f;border:1px solid #2a2a30;border-radius:16px;overflow:hidden;',
+    'box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:Space Grotesk,system-ui,sans-serif;color:#f2ede6}',
+    '.qw-panel.open{display:flex}',
+    '.qw-head{display:flex;gap:4px;padding:8px;border-bottom:1px solid #2a2a30;background:#141417;flex-wrap:wrap}',
+    '.qw-tab{flex:1;min-width:54px;padding:7px 6px;border:0;border-radius:8px;background:transparent;color:#9a9aa0;',
+    'font:600 11px/1 Space Grotesk;cursor:pointer;letter-spacing:.02em}',
+    '.qw-tab.on{background:#ff6a00;color:#0a0a0a}',
+    '.qw-body{padding:12px;overflow:auto}',
+    '.qw-sec{display:none}.qw-sec.on{display:block}',
+    '.qw-in,.qw-ta,.qw-sel{width:100%;box-sizing:border-box;background:#141417;border:1px solid #2a2a30;',
+    'border-radius:8px;color:#f2ede6;padding:8px 10px;font:500 13px Space Grotesk;margin-bottom:8px}',
+    '.qw-ta{min-height:64px;resize:vertical;font-family:JetBrains Mono,monospace}',
+    '.qw-btn{width:100%;padding:9px;border:0;border-radius:8px;background:#ff6a00;color:#0a0a0a;font:700 13px Space Grotesk;cursor:pointer;margin-bottom:6px}',
+    '.qw-btn.ghost{background:transparent;border:1px solid #2a2a30;color:#f2ede6}',
+    '.qw-item{border:1px solid #2a2a30;border-radius:8px;padding:8px;margin-bottom:6px;background:#141417}',
+    '.qw-item b{color:#ffb020;font-size:12px}',
+    '.qw-item .txt{font-size:12px;color:#cfcac2;margin-top:3px;white-space:pre-wrap}',
+    '.qw-row{display:flex;gap:6px;align-items:center}',
+    '.qw-x{background:transparent;border:0;color:#ff6a00;cursor:pointer;font:700 12px Space Grotesk}',
+    '.qw-chip{display:inline-block;margin:0 4px 4px 0;padding:2px 7px;border:1px solid #2a2a30;border-radius:20px;',
+    'font:600 11px JetBrains Mono;color:#ffb020;cursor:pointer;background:#141417}',
+    '.qw-lbl{font:600 11px Space Grotesk;color:#9a9aa0;margin:2px 0 4px;text-transform:uppercase;letter-spacing:.04em}',
+    '.qw-kpi{display:flex;gap:8px;margin-bottom:8px}.qw-kpi>div{flex:1;background:#141417;border:1px solid #2a2a30;border-radius:8px;padding:8px;text-align:center}',
+    '.qw-kpi .n{font:800 20px Space Grotesk;color:#ff6a00}.qw-kpi .l{font:600 10px Space Grotesk;color:#9a9aa0}'
+  ].join('');
+  document.head.appendChild(css);
+
+  var fab = document.createElement('button');
+  fab.className = 'qw-fab'; fab.title = 'Ferramentas de atendimento';
+  fab.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>';
+  var panel = document.createElement('div'); panel.className = 'qw-panel';
+  var tabsDef = [['snip', 'Respostas'], ['sched', 'Agendar'], ['notes', 'Notas'], ['csat', 'CSAT'], ['sign', 'Assinatura'], ['exp', 'Exportar']];
+  var head = document.createElement('div'); head.className = 'qw-head';
+  var body = document.createElement('div'); body.className = 'qw-body';
+  tabsDef.forEach(function (t, i) {
+    var b = document.createElement('button'); b.className = 'qw-tab' + (i === 0 ? ' on' : ''); b.textContent = t[1]; b.dataset.k = t[0];
+    b.onclick = function () { selectTab(t[0]); };
+    head.appendChild(b);
+    var s = document.createElement('div'); s.className = 'qw-sec' + (i === 0 ? ' on' : ''); s.dataset.k = t[0]; s.id = 'qwsec-' + t[0];
+    body.appendChild(s);
+  });
+  panel.appendChild(head); panel.appendChild(body);
+  document.body.appendChild(fab); document.body.appendChild(panel);
+  fab.onclick = function () { panel.classList.toggle('open'); if (panel.classList.contains('open')) refreshCurrent(); };
+
+  var current = 'snip';
+  function selectTab(k) {
+    current = k;
+    head.querySelectorAll('.qw-tab').forEach(function (b) { b.classList.toggle('on', b.dataset.k === k); });
+    body.querySelectorAll('.qw-sec').forEach(function (s) { s.classList.toggle('on', s.dataset.k === k); });
+    refreshCurrent();
+  }
+  function refreshCurrent() {
+    if (current === 'snip') loadSnippets();
+    else if (current === 'sched') loadScheduled();
+    else if (current === 'notes') loadNotes();
+    else if (current === 'csat') loadCsat();
+    else if (current === 'sign') loadSignature();
+    else if (current === 'exp') renderExport();
+  }
+  function sec(k) { return document.getElementById('qwsec-' + k); }
+
+  async function loadSnippets() {
+    var s = sec('snip');
+    var legenda = VARS.map(function (v) { return '<span class="qw-chip" data-v="' + OB + v + CB + '">' + OB + v + CB + '</span>'; }).join('');
+    s.innerHTML = '<div class="qw-lbl">Variáveis (clique p/ inserir)</div><div>' + legenda + '</div>' +
+      '<div class="qw-lbl" style="margin-top:8px">Nova resposta</div>' +
+      '<input class="qw-in" id="qw-sc" placeholder="atalho (ex: bemvindo)">' +
+      '<textarea class="qw-ta" id="qw-ct" placeholder="Ola ' + OB + 'primeiro_nome' + CB + ', tudo bem?"></textarea>' +
+      '<label class="qw-row" style="margin-bottom:8px;font-size:12px"><input type="checkbox" id="qw-sh"> Compartilhar com a equipe</label>' +
+      '<button class="qw-btn" id="qw-add">Salvar resposta</button>' +
+      '<div class="qw-lbl" style="margin-top:6px">Minhas / compartilhadas</div><div id="qw-list"></div>';
+    s.querySelectorAll('.qw-chip').forEach(function (c) { c.onclick = function () { insertText(c.dataset.v); }; });
+    s.querySelector('#qw-add').onclick = async function () {
+      var sc = s.querySelector('#qw-sc').value.trim(), ct = s.querySelector('#qw-ct').value.trim(), sh = s.querySelector('#qw-sh').checked;
+      if (!sc || !ct) { toast('Preencha atalho e conteudo.', true); return; }
+      var r = await api('POST', '/api/snippets/create', { shortcut: sc, content: ct, shared: sh });
+      if (r.ok) { toast('Resposta salva.'); loadSnippets(); } else { toast('Erro ao salvar.', true); }
+    };
+    var r = await api('GET', '/api/snippets/all');
+    var list = s.querySelector('#qw-list');
+    var arr = (r.data && r.data.length) ? r.data : [];
+    if (!arr.length) { list.innerHTML = '<div class="txt" style="color:#9a9aa0">Nenhuma resposta ainda.</div>'; return; }
+    list.innerHTML = arr.map(function (it) {
+      return '<div class="qw-item"><div class="qw-row" style="justify-content:space-between">' +
+        '<b>/' + esc(it.shortcut) + (it.shared ? ' - equipe' : '') + '</b>' +
+        '<span><button class="qw-x" data-use="' + esc(it.content) + '">usar</button>' +
+        '<button class="qw-x" data-del="' + it.id + '">x</button></span></div>' +
+        '<div class="txt">' + esc(it.content) + '</div></div>';
+    }).join('');
+    list.querySelectorAll('[data-use]').forEach(function (b) { b.onclick = function () { insertText(b.getAttribute('data-use')); }; });
+    list.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = async function () {
+      var d = await api('DELETE', '/api/snippets/' + b.getAttribute('data-del'));
+      if (d.ok) { toast('Removida.'); loadSnippets(); } else { toast('Erro.', true); }
+    }; });
+  }
+  function insertText(t) {
+    var c = composer();
+    if (!c) { toast('Campo de mensagem nao encontrado.', true); return; }
+    var cur = c.value || '';
+    c.value = cur ? (cur + ' ' + t) : t;
+    c.focus();
+    c.dispatchEvent(new Event('input', { bubbles: true }));
+    toast('Inserido no campo de mensagem.');
+  }
+
+  async function loadScheduled() {
+    var s = sec('sched');
+    s.innerHTML = '<div class="qw-lbl">Agendar para a conversa aberta</div>' +
+      '<input class="qw-in" type="datetime-local" id="qw-dt">' +
+      '<textarea class="qw-ta" id="qw-mt" placeholder="Mensagem (aceita variaveis)"></textarea>' +
+      '<button class="qw-btn" id="qw-schb">Agendar envio</button>' +
+      '<div class="qw-lbl" style="margin-top:6px">Pendentes</div><div id="qw-slist"></div>';
+    s.querySelector('#qw-schb').onclick = async function () {
+      if (!needPhone()) return;
+      var dt = s.querySelector('#qw-dt').value, mt = s.querySelector('#qw-mt').value.trim();
+      if (!dt || !mt) { toast('Informe data/hora e mensagem.', true); return; }
+      var r = await api('POST', '/api/chat/schedule', { phone: qwPhone(), text: mt, scheduled_at: dt });
+      if (r.ok) { toast('Mensagem agendada.'); loadScheduled(); } else { toast((r.data && r.data.error) || 'Erro ao agendar.', true); }
+    };
+    var r = await api('GET', '/api/chat/scheduled');
+    var list = s.querySelector('#qw-slist');
+    var arr = (r.data && r.data.length) ? r.data : [];
+    if (!arr.length) { list.innerHTML = '<div class="txt" style="color:#9a9aa0">Nada agendado.</div>'; return; }
+    list.innerHTML = arr.map(function (it) {
+      var when = it.scheduled_at ? new Date(it.scheduled_at).toLocaleString('pt-BR') : '';
+      return '<div class="qw-item"><div class="qw-row" style="justify-content:space-between">' +
+        '<b>' + esc(it.phone) + '</b><button class="qw-x" data-c="' + it.id + '">cancelar</button></div>' +
+        '<div class="txt">' + esc(when) + ' - ' + esc(it.text) + '</div></div>';
+    }).join('');
+    list.querySelectorAll('[data-c]').forEach(function (b) { b.onclick = async function () {
+      var d = await api('DELETE', '/api/chat/scheduled/' + b.getAttribute('data-c'));
+      if (d.ok) { toast('Cancelado.'); loadScheduled(); }
+    }; });
+  }
+
+  async function loadNotes() {
+    var s = sec('notes');
+    s.innerHTML = '<div class="qw-lbl">Notas da conversa (use @nome p/ mencionar)</div>' +
+      '<textarea class="qw-ta" id="qw-nt" placeholder="Anotacao interna (nao vai ao cliente)"></textarea>' +
+      '<button class="qw-btn" id="qw-nadd">Adicionar nota</button><div id="qw-nlist"></div>';
+    s.querySelector('#qw-nadd').onclick = async function () {
+      if (!needPhone()) return;
+      var nt = s.querySelector('#qw-nt').value.trim();
+      if (!nt) { toast('Escreva a nota.', true); return; }
+      var r = await api('POST', '/api/contacts/' + qwPhone() + '/notes', { note: nt });
+      if (r.ok) { toast('Nota adicionada.'); loadNotes(); } else { toast('Erro.', true); }
+    };
+    if (!qwPhone()) { s.querySelector('#qw-nlist').innerHTML = '<div class="txt" style="color:#9a9aa0">Abra uma conversa.</div>'; return; }
+    var r = await api('GET', '/api/contacts/' + qwPhone() + '/notes');
+    var list = s.querySelector('#qw-nlist');
+    var arr = (r.data && r.data.length) ? r.data : [];
+    if (!arr.length) { list.innerHTML = '<div class="txt" style="color:#9a9aa0">Sem notas.</div>'; return; }
+    list.innerHTML = arr.map(function (it) {
+      var when = it.created_at ? new Date(it.created_at).toLocaleString('pt-BR') : '';
+      var men = (it.mentions && it.mentions.length) ? ' - @' + it.mentions.map(esc).join(' @') : '';
+      return '<div class="qw-item"><div class="qw-row" style="justify-content:space-between">' +
+        '<b>' + esc(it.author) + men + '</b><button class="qw-x" data-n="' + it.id + '">x</button></div>' +
+        '<div class="txt">' + esc(it.note) + '</div><div class="txt" style="color:#6a6a70">' + esc(when) + '</div></div>';
+    }).join('');
+    list.querySelectorAll('[data-n]').forEach(function (b) { b.onclick = async function () {
+      var d = await api('DELETE', '/api/notes/' + b.getAttribute('data-n'));
+      if (d.ok) { toast('Removida.'); loadNotes(); }
+    }; });
+  }
+
+  async function loadCsat() {
+    var s = sec('csat');
+    s.innerHTML = '<button class="qw-btn" id="qw-csend">Enviar pesquisa p/ conversa aberta</button>' +
+      '<div class="qw-lbl" style="margin-top:6px">Relatorio (30 dias)</div><div id="qw-crep">Carregando...</div>';
+    s.querySelector('#qw-csend').onclick = async function () {
+      if (!needPhone()) return;
+      var r = await api('POST', '/api/csat/send', { phone: qwPhone() });
+      if (r.ok) toast('Pesquisa enviada.'); else toast((r.data && r.data.error) || 'Erro ao enviar.', true);
+    };
+    var r = await api('GET', '/api/csat/report?days=30');
+    var d = r.data || {};
+    var rep = s.querySelector('#qw-crep');
+    var sellers = d.by_seller ? Object.keys(d.by_seller).map(function (k) { return '<div class="qw-item"><div class="qw-row" style="justify-content:space-between"><b>' + esc(k) + '</b><span>' + d.by_seller[k] + '</span></div></div>'; }).join('') : '';
+    rep.innerHTML = '<div class="qw-kpi"><div><div class="n">' + (d.avg || 0) + '</div><div class="l">Media</div></div>' +
+      '<div><div class="n">' + (d.csat_pct || 0) + '%</div><div class="l">Satisfacao</div></div>' +
+      '<div><div class="n">' + (d.total || 0) + '</div><div class="l">Respostas</div></div></div>' +
+      '<div class="qw-lbl">Por atendente</div>' + (sellers || '<div class="txt" style="color:#9a9aa0">Sem dados.</div>');
+  }
+
+  async function loadSignature() {
+    var s = sec('sign');
+    var r = await api('GET', '/api/me/signature');
+    var d = r.data || {};
+    s.innerHTML = '<div class="qw-lbl">Assinatura anexada ao enviar</div>' +
+      '<textarea class="qw-ta" id="qw-sig" placeholder="Ex: Att, Joao - continnumOS">' + esc(d.signature || '') + '</textarea>' +
+      '<label class="qw-row" style="margin-bottom:8px;font-size:12px"><input type="checkbox" id="qw-sige" ' + (d.signature_enabled ? 'checked' : '') + '> Ativar assinatura automatica</label>' +
+      '<button class="qw-btn" id="qw-sigb">Salvar assinatura</button>';
+    s.querySelector('#qw-sigb').onclick = async function () {
+      var sig = s.querySelector('#qw-sig').value, en = s.querySelector('#qw-sige').checked;
+      var w = await api('POST', '/api/me/signature', { signature: sig, enabled: en });
+      if (w.ok) toast('Assinatura salva.'); else toast('Erro.', true);
+    };
+  }
+
+  function renderExport() {
+    var s = sec('exp');
+    s.innerHTML = '<div class="qw-lbl">Exportar conversa aberta</div>' +
+      '<button class="qw-btn" id="qw-ecsv">Baixar CSV</button>' +
+      '<button class="qw-btn ghost" id="qw-ehtml">Baixar HTML (imprimivel)</button>';
+    s.querySelector('#qw-ecsv').onclick = function () { if (needPhone()) window.open('/api/contacts/' + qwPhone() + '/export?fmt=csv', '_blank'); };
+    s.querySelector('#qw-ehtml').onclick = function () { if (needPhone()) window.open('/api/contacts/' + qwPhone() + '/export?fmt=html', '_blank'); };
+  }
+})();

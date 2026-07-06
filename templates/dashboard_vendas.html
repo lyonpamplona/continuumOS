@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>continnumOS</title>
+    <meta name="theme-color" content="#0B1014">
+    <meta name="application-name" content="continnumOS">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="continnumOS">
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="icon" href="/static/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script defer src="/static/pwa-register.js"></script>
+    <link rel="stylesheet" href="/static/css/dashboard_vendas.css">
+    <link rel="stylesheet" href="/static/continnum-console.css">
+</head>
+<body>
+
+<header class="topbar">
+    <div class="brand-box">
+        <button class="menu-toggle" onclick="toggleSidebar()"><span class="material-symbols-outlined">menu</span></button>
+        <img src="/static/logo.png" alt="Logo" style="height: 36px; width: auto; object-fit: contain;">
+    </div>
+    <div style="display:flex; align-items:center; gap:16px;">
+        <div class="realtime-status reconnecting" id="realtime-status" title="Conexão em tempo real"><span> </span></div>
+        <div class="sys-clock" id="sys-clock">--:--</div>
+        <div class="profile-menu" onclick="document.getElementById('dropdown').classList.toggle('active')">
+            <div class="profile-trigger">
+                <div class="avatar">{% if user.avatar %}<img src="{{ user.avatar }}">{% else %}{{ user.name[0] }}{% endif %}</div>
+                <div class="status-dot" id="hdr-status-dot" style="background:{% if status == 'online' %}var(--wa-green){% elif status == 'ausente' %}#ffcc00{% else %}#ff5252{% endif %}; position:absolute; bottom:0; right:0; border: 2px solid var(--bg-base);"></div>
+            </div>
+            <div class="dropdown" id="dropdown">
+                <div style="padding:16px; border-bottom:1px solid var(--border);">
+                    <div style="font-weight:700; color:var(--primary);">{{ user.name.split(' ')[0] }}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">{{ user.role.upper() }}</div>
+                </div>
+                <div class="drop-item" onclick="updateStatus('online')"><div class="status-dot" style="background:var(--wa-green);"></div> Online</div>
+                <div class="drop-item" onclick="updateStatus('ausente')"><div class="status-dot" style="background:#ffcc00;"></div> Ausente</div>
+                <div class="drop-item" onclick="updateStatus('offline')"><div class="status-dot" style="background:#ff5252;"></div> Off-line</div>
+                {% if user.role == 'financeiro' %}
+                <a href="/painel/admin" target="_blank" rel="noopener noreferrer" class="drop-item" title="Abrir opções administrativas em nova guia"><span class="material-symbols-outlined" style="font-size:18px;">admin_panel_settings</span> Visão Admin <span class="material-symbols-outlined" style="font-size:16px; margin-left:auto;">open_in_new</span></a>
+                {% endif %}
+                <a href="/logout" class="drop-item" style="border-top:1px solid var(--border); color:#f15c6d;"><span class="material-symbols-outlined" style="font-size:18px;">logout</span> Sair</a>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="layout">
+    <aside class="sidebar collapsed" id="sidebar">
+        <nav class="nav-menu">
+            <div class="nav-item active main-tab-btn" onclick="switchMainTab('tab-atendimentos', this)"><span class="material-symbols-outlined">forum</span><span class="nav-lbl">Atendimentos</span><span class="nav-badge" id="count-ativos">{{ clientes|length }}</span></div>
+            {% if user.role == 'financeiro' %}
+            <a class="nav-item" href="/painel/admin" target="_blank" rel="noopener noreferrer" title="Abrir opções administrativas em nova guia" style="text-decoration:none;"><span class="material-symbols-outlined">admin_panel_settings</span><span class="nav-lbl">Visão Admin</span><span class="material-symbols-outlined nav-lbl" style="font-size:16px; margin-left:auto;">open_in_new</span></a>
+            {% endif %}
+            <div class="nav-item main-tab-btn" onclick="switchMainTab('tab-carteira', this)"><span class="material-symbols-outlined">contacts</span><span class="nav-lbl">Contatos</span></div>
+            <div class="nav-item main-tab-btn" onclick="switchMainTab('tab-internal', this)"><span class="material-symbols-outlined">groups</span><span class="nav-lbl">Chat</span><span class="nav-badge internal-unread-badge" style="display:none;">0</span></div>
+            <div class="nav-item main-tab-btn" onclick="switchMainTab('tab-tools', this)"><span class="material-symbols-outlined">construction</span><span class="nav-lbl">Ajustes</span></div>
+            <div class="nav-item main-tab-btn" onclick="switchMainTab('tab-settings', this)"><span class="material-symbols-outlined">person</span><span class="nav-lbl">Perfil</span></div>
+        </nav>
+    </aside>
+
+    <div class="workspace">
+        <div id="tab-atendimentos" class="tab-content active">
+            <div class="panel panel-list active-mobile" id="col-list">
+                <div class="panel-header active-search-header" id="active-search-header">
+                    <button type="button" class="btn search-toggle-btn" title="Buscar ativos" onclick="toggleActiveSearch(true)">
+                        <span class="material-symbols-outlined">search</span>
+                    </button>
+                    <div class="active-search-box">
+                        <input type="text" id="search-input" class="input-text" placeholder="Buscar ativo..." onkeyup="filterList(this.value)">
+                        <button type="button" class="btn search-close-btn" title="Fechar busca" onclick="toggleActiveSearch(false)">
+                            <span class="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="scroll-y" id="ativos-list"></div>
+            </div>
+            
+            <div class="panel panel-chat" id="col-chat">
+                <div id="no-chat" class="empty-state" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-muted);"><span class="material-symbols-outlined" style="font-size:48px; opacity:0.5;">forum</span><p style="margin-top:12px;">Selecione um cliente</p></div>
+                <div class="panel-header" id="chat-header" style="display:none;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button class="btn-back-mobile" onclick="mobileView('list')"><span class="material-symbols-outlined">arrow_back</span></button>
+                        <div class="avatar" style="width:36px; height:36px;" id="chat-hdr-avatar">#</div>
+                        <span id="chat-title-bar" style="font-weight:700;">Cliente</span>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn" style="padding:6px 12px; background:var(--wa-green); color:#000; border:none;" onclick="openWaWeb()"><span class="material-symbols-outlined" style="font-size:18px;">smartphone</span></button>
+                        <button class="btn btn-back-mobile" style="padding:6px 12px;" onclick="mobileView('info')"><span class="material-symbols-outlined" style="font-size:18px;">info</span></button>
+                    </div>
+                </div>
+                
+                <div id="pinned-message-banner" style="display:none; padding:8px 16px; background:rgba(255, 102, 0, 0.1); border-bottom:1px solid var(--border); border-left:4px solid var(--primary); align-items:center; justify-content:space-between; font-size:0.8rem;">
+                    <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+                        <span class="material-symbols-outlined" style="font-size:16px; color:var(--primary);">push_pin</span>
+                        <span id="pinned-text-content" style="color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></span>
+                    </div>
+                    <span class="material-symbols-outlined act-icon" style="margin:0;" onclick="unpinMessage()">close</span>
+                </div>
+
+                <div class="chat-area" id="chat-history"></div>
+                
+                <div class="input-area" id="chat-controls" style="display:none;">
+                    <div id="assumir-box" style="display:none;"><button class="btn btn-primary" style="width:100%; height:44px;" onclick="assumirAtual()">Iniciar atendimento</button></div>
+                    <div id="active-box" style="flex-direction:column;">
+                        <div class="macros" id="snippets-container"></div>
+                        
+                        <div id="reply-bar" style="display:none; padding:8px 16px; background:var(--surface-hover); border-top:1px solid var(--border); border-left:4px solid var(--primary); align-items:center; justify-content:space-between; font-size:0.8rem; margin-bottom:8px; border-radius:4px;">
+                           <span id="reply-preview-text" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:80%; color:var(--text-main);"></span>
+                           <button class="menu-toggle" onclick="cancelReply()"><span class="material-symbols-outlined" style="font-size:18px; color:var(--text-muted);">close</span></button>
+                        </div>
+                        
+                        <div class="chat-input-box">
+                            <input type="file" id="media-upload" style="display:none;" onchange="uploadMedia()">
+                            <button class="btn" style="border-radius:50%; width:44px; height:44px; padding:0; flex-shrink:0; display:flex; align-items:center; justify-content:center;" onclick="document.getElementById('media-upload').click()">
+                                <span class="material-symbols-outlined">attach_file</span>
+                            </button>
+                            <button class="btn" id="btn-mic" style="border-radius:50%; width:44px; height:44px; padding:0; flex-shrink:0; display:flex; align-items:center; justify-content:center;" onclick="toggleRecording('client')">
+                                <span class="material-symbols-outlined">mic</span>
+                            </button>
+                            <input type="text" id="chat-input" class="input-text" style="border-radius:24px;" placeholder="Mensagem (ou Ctrl+V para colar)..." onkeypress="if(event.key==='Enter') sendChatMessage()">
+                            <button class="btn-send" onclick="sendChatMessage()"><span class="material-symbols-outlined">send</span></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel panel-info" id="col-info">
+                <div class="panel-header">
+                    <button class="btn-back-mobile" onclick="mobileView('chat')"><span class="material-symbols-outlined">arrow_back</span></button>
+                    <span style="font-weight:700;">Dados do Cliente</span>
+                    <div></div>
+                </div>
+                <div class="scroll-y" style="padding: 16px;">
+                    <div class="form-group"><label>Celular</label><input type="text" id="info-phone" disabled style="background:transparent; border:none; padding:0; color:var(--primary); font-weight:700; font-size:1.1rem !important;"></div>
+                    <div class="form-group"><label>Nome</label><input type="text" id="info-name" class="input-text"></div>
+                    <div class="form-group"><label>Tags</label><div id="client-tags-box" class="tag-box"></div><button class="btn" style="width:100%; border-style:dashed; margin-top:8px;" onclick="document.getElementById('manageTagsModal').style.display='flex'">+ Gerenciar Tags</button></div>
+                    <div class="form-group"><label>Listas</label><div id="client-lists-box" class="tag-box"></div><button class="btn" style="width:100%; border-style:dashed; margin-top:8px;" onclick="document.getElementById('manageListsModal').style.display='flex'">+ Gerenciar Listas</button></div>
+                    <div class="form-group"><label>Anotações</label><textarea id="info-notes" class="input-text" rows="3"></textarea></div>
+                    <div class="form-group"><label>Info Extras</label><textarea id="info-extra" class="input-text" rows="3"></textarea></div>
+                    <button class="btn" style="width:100%; margin-bottom: 24px;" onclick="saveContactInfo()"><span class="material-symbols-outlined" style="font-size:18px;">save</span> Salvar</button>
+                    <button class="btn" style="width:100%; margin-bottom: 12px;" onclick="scheduleCurrentContact()"><span class="material-symbols-outlined" style="font-size:18px;">event_upcoming</span> Agendar Retorno</button>
+                    <div style="border-top: 1px solid var(--border); padding-top: 16px;">
+                        <button class="btn btn-primary" style="width:100%; margin-bottom:8px;" onclick="submitFinish('vendeu')">Finalizar com Venda</button>
+                        <button class="btn btn-danger" style="width:100%; border:none;" onclick="submitFinish('nao_vendeu')">Encerrar e Ocultar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-carteira" class="tab-content" style="flex-direction: column;">
+            <div class="panel-header contacts-toolbar-header" style="border-bottom:1px solid var(--border);">
+                <div class="contacts-topbar">
+                    <div class="contacts-title"><span class="material-symbols-outlined">contacts</span><span>Contatos</span></div>
+                    <div class="contacts-actions">
+                        <button class="btn btn-primary contacts-action-btn" onclick="document.getElementById('statusModal').style.display='flex'"><span class="material-symbols-outlined">add_circle</span>Status</button>
+                        <button class="btn contacts-action-btn" onclick="openStatusHistory()"><span class="material-symbols-outlined">history</span>Publicados</button>
+                        <button class="btn contacts-action-btn" onclick="document.getElementById('manageListsModal').style.display='flex'"><span class="material-symbols-outlined">format_list_bulleted</span>Listas</button>
+                        <button class="btn contacts-action-btn" onclick="openContactReviewGuide()"><span class="material-symbols-outlined">rule</span>Revisão</button>
+                        <button class="btn contacts-action-btn" onclick="selectVisibleContacts()"><span class="material-symbols-outlined">select_all</span>Selecionar</button>
+                    </div>
+                </div>
+                <div class="contacts-filter-row">
+                    <label class="contact-search-field" for="search-contact-input">
+                        <span class="material-symbols-outlined">search</span>
+                        <input type="text" id="search-contact-input" placeholder="Buscar por nome, telefone, lista ou tag" onkeyup="debounceContactSearch(this.value)">
+                        <button type="button" class="btn contact-search-clear" id="contact-search-clear" onclick="clearContactSearch()" title="Limpar busca"><span class="material-symbols-outlined">close</span></button>
+                    </label>
+                    <select id="contact-list-filter" class="input-text contacts-list-select" onchange="filterContactsByList(this.value)"><option value="">Todas as listas</option></select>
+                </div>
+            </div>
+            <div class="contact-bucket-bar" id="contact-bucket-bar">
+                <button class="btn bucket-chip active" data-bucket="carteira" onclick="setContactBucket('carteira')"><span class="material-symbols-outlined" style="font-size:16px;">contacts</span> Carteira <span data-count="carteira">0</span></button>
+                <button class="btn bucket-chip" data-bucket="fornecedores" onclick="setContactBucket('fornecedores')"><span class="material-symbols-outlined" style="font-size:16px;">warehouse</span> Fornecedores <span data-count="fornecedores">0</span></button>
+                <button class="btn bucket-chip" data-bucket="listas" onclick="setContactBucket('listas')"><span class="material-symbols-outlined" style="font-size:16px;">format_list_bulleted</span> Listas <span data-count="listas">0</span></button>
+                <button class="btn bucket-chip" data-bucket="sem_responsavel" onclick="setContactBucket('sem_responsavel')"><span class="material-symbols-outlined" style="font-size:16px;">person_alert</span> Sem resp. <span data-count="sem_responsavel">0</span></button>
+                <button class="btn bucket-chip" data-bucket="revisar_numero" onclick="setContactBucket('revisar_numero')"><span class="material-symbols-outlined" style="font-size:16px;">dialpad</span> Revisar nº <span data-count="revisar_numero">0</span></button>
+                <button class="btn bucket-chip" data-bucket="revisar_nome" onclick="setContactBucket('revisar_nome')"><span class="material-symbols-outlined" style="font-size:16px;">badge</span> Revisar nome <span data-count="revisar_nome">0</span></button>
+            </div>
+            <div class="contact-alpha-bar" id="contact-alpha-bar"></div>
+            <div class="contact-filter-summary" id="contact-filter-summary"></div>
+            <div class="contact-bulk-bar" id="contact-bulk-bar">
+                <span class="bulk-count-pill"><span class="material-symbols-outlined" style="font-size:16px;">checklist</span><span id="contact-bulk-count">0 selecionados</span></span>
+                <button class="btn contacts-action-btn" onclick="selectVisibleContacts()"><span class="material-symbols-outlined">select_all</span>Selecionar visíveis</button>
+                <button class="btn contacts-action-btn" onclick="clearContactSelection()"><span class="material-symbols-outlined">playlist_remove</span>Limpar seleção</button>
+                <select id="bulk-contact-action" class="input-text bulk-control" onchange="renderBulkActionFields()">
+                    <option value="">Escolha uma ação</option>
+                    <option value="add_list">Adicionar à lista</option>
+                    <option value="add_prefix">Adicionar prefixo</option>
+                    <option value="replace_word">Substituir palavra</option>
+                    <option value="sanitize_evolution">Sanitizar Evolution</option>
+                </select>
+                <span id="bulk-dynamic-fields" class="bulk-dynamic-fields"></span>
+                <button class="btn btn-primary contacts-action-btn" onclick="applyBulkContactAction()"><span class="material-symbols-outlined">done_all</span>Aplicar</button>
+            </div>
+            <div class="scroll-y" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-content: start; padding:16px;" id="dyn-contacts-list"></div>
+            <div style="text-align: center; padding: 16px;"><button class="btn" style="margin:0 auto;" id="btn-load-more" onclick="loadMoreContacts()">Carregar Mais</button></div>
+            <button class="floating-btn" onclick="document.getElementById('newContactModal').style.display='flex'"><span class="material-symbols-outlined">person_add</span></button>
+        </div>
+
+        <div id="tab-internal" class="tab-content">
+            <div class="panel panel-list active-mobile" id="int-col-list">
+                <div class="panel-header"><span style="font-weight:700;">Equipe</span></div>
+                <div class="scroll-y" style="padding:0;">
+                    <div class="contact-card active" onclick="openInternalChat('geral', this)"><div class="avatar" style="background:var(--wa-green);"><span class="material-symbols-outlined">public</span></div><div class="card-info"><div class="card-title">Comunicação Interna</div></div><span class="nav-badge internal-contact-badge" data-internal-badge-target="geral" style="display:none;">0</span></div>
+                    {% for su in sys_users %}
+                    {% if su.name != user.name %}
+                    <div class="contact-card" onclick="openInternalChat('{{ su.name }}', this)"><div class="avatar">{{ su.name[0] }}</div><div class="card-info"><div class="card-title">{{ su.name }}</div></div><span class="nav-badge internal-contact-badge" data-internal-badge-target="{{ su.name }}" style="display:none;">0</span></div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="panel panel-chat" id="int-chat-col">
+                <div class="panel-header">
+                    <button class="btn-back-mobile" onclick="internalMobileView('list')"><span class="material-symbols-outlined">arrow_back</span></button>
+                    <span id="int-chat-title" style="font-weight:700;">Comunicação Interna</span><div></div>
+                </div>
+                <div class="chat-area" id="internal-chat-history"></div>
+                <div id="internal-reply-bar" style="display:none; margin:10px 16px 0; padding:10px 12px; border-left:3px solid var(--primary); background:var(--surface); border-radius:8px; align-items:center; justify-content:space-between; gap:10px;">
+                    <div style="min-width:0;"><div style="font-size:0.72rem; color:var(--primary); font-weight:700;" id="internal-reply-sender"></div><div style="font-size:0.78rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="internal-reply-text"></div></div>
+                    <button class="btn" style="padding:4px 8px;" onclick="cancelInternalReply()"><span class="material-symbols-outlined" style="font-size:18px;">close</span></button>
+                </div>
+                <div class="input-area internal-chat-input">
+                    <input type="file" id="media-upload-internal" style="display:none;" onchange="uploadInternalMedia()">
+                    <button class="btn" style="border-radius:50%; width:44px; height:44px; padding:0; flex-shrink:0; display:flex; align-items:center; justify-content:center;" onclick="document.getElementById('media-upload-internal').click()">
+                        <span class="material-symbols-outlined">attach_file</span>
+                    </button>
+                    <button class="btn" id="btn-mic-internal" style="border-radius:50%; width:44px; height:44px; padding:0; flex-shrink:0; display:flex; align-items:center; justify-content:center;" onclick="toggleRecording('internal')">
+                        <span class="material-symbols-outlined">mic</span>
+                    </button>
+                    <input type="text" id="internal-input" class="input-text" list="internal-mentions-list" style="border-radius:24px;" placeholder="Mensagem... use @Rosana ou @vendas_1" onkeypress="if(event.key==='Enter') sendInternalMessage()">
+                    <datalist id="internal-mentions-list">
+                        {% for su in sys_users %}
+                        <option value="@{{ su.name }}">
+                        <option value="@{{ su.role }}">
+                        {% endfor %}
+                    </datalist>
+                    <button class="btn-send" onclick="sendInternalMessage()"><span class="material-symbols-outlined">send</span></button>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-tools" class="tab-content">
+            <div class="panel panel-chat">
+                <div class="panel-header"><span style="font-weight:700;">Agenda</span></div>
+                <div class="scroll-y" style="padding:16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; background:var(--surface); padding:8px; border-radius:8px;">
+                        <button class="btn" style="padding:4px;" onclick="changeMonth(-1)"><span class="material-symbols-outlined">chevron_left</span></button>
+                        <span id="cal-month-label" style="font-weight:700;"></span>
+                        <button class="btn" style="padding:4px;" onclick="changeMonth(1)"><span class="material-symbols-outlined">chevron_right</span></button>
+                    </div>
+                    <div class="cal-grid" style="color:var(--text-muted); font-size:0.8rem; padding-bottom:8px;"><div>D</div><div>S</div><div>T</div><div>Q</div><div>Q</div><div>S</div><div>S</div></div>
+                    <div class="cal-grid" id="cal-days"></div>
+                    <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:16px;">
+                        <h4 style="margin:0 0 12px 0; color:var(--text-muted);">Tarefas: <span id="agenda-date-label" style="color:var(--primary);">Selecione</span></h4>
+                        <div id="agenda-due-list" class="agenda-due-list"></div>
+                        <div id="agenda-notes-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;"></div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); gap:8px;"><input type="time" id="agenda-time" class="input-text" value="09:00" title="Horário"><input type="text" id="agenda-phone" class="input-text" placeholder="Celular vinculado"><input type="text" id="agenda-input" class="input-text" placeholder="Lembrete..."><button class="btn btn-primary" onclick="saveAgendaNote()"><span class="material-symbols-outlined">add</span></button></div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-info">
+                <div class="panel-header"><span style="font-weight:700;">Atalhos de Mensagem</span></div>
+                <div class="scroll-y" style="padding:16px;">
+                    <div class="form-group"><label>Comando (Ex: /pix)</label><input type="text" id="new-snip-title" class="input-text"></div>
+                    <div class="form-group"><label>Texto Completo</label><textarea id="new-snip-text" class="input-text" rows="3"></textarea></div>
+                    <button class="btn btn-primary" style="width:100%; margin-bottom:24px;" onclick="addSnippet()">Adicionar</button>
+                    <div style="border-top:1px solid var(--border); padding-top:16px;" id="snippets-manage-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-settings" class="tab-content settings-tab" style="align-items: center; justify-content: center; min-height: 100%; width: 100%;">
+                 <div class="settings-card" style="width: 100%; max-width: 500px; margin: 0 auto;">
+                <div class="panel-header"><span style="font-weight:700;">Perfil & Aparência</span></div>
+                <div class="scroll-y settings-scroll">
+                    <div class="settings-avatar-block">
+                        <input type="file" id="avatar-upload" style="display:none;" accept="image/*" onchange="uploadAvatarAction(this)">
+                        <div class="avatar" style="width:100px; height:100px; font-size:2.5rem; cursor:pointer; box-shadow: 0 0 0 2px var(--border);" id="preview-avatar" onclick="document.getElementById('avatar-upload').click()" title="Clique para alterar a foto">
+                            {% if user.avatar %}<img src="{{ user.avatar }}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">{% else %}{{ user.name[0] }}{% endif %}
+                        </div>
+                        <span style="font-size:0.75rem; color:var(--text-muted); margin-top:12px;">Clique na foto para alterar</span>
+                    </div>
+                    
+                    <div class="form-group"><label>Nome de Exibição</label><input type="text" id="prof-name" class="input-text" value="{{ user.name }}"></div>
+                    
+                    <div class="settings-fold" id="settings-theme-fold">
+                        <button type="button" class="settings-fold-header" onclick="toggleSettingsSection('settings-theme-fold')">
+                            <span><span class="material-symbols-outlined" style="font-size:18px;">palette</span>Temas Rápidos & Cores</span>
+                            <span class="material-symbols-outlined">expand_more</span>
+                        </button>
+                        <div class="settings-fold-body">
+                            <div class="preset-grid" style="display:flex; gap:8px; margin-bottom:16px;">
+                                <button class="btn" style="flex:1; padding:6px; font-size:0.75rem;" onclick="applyPreset('#0B1014', '#ff6600', '#E9EDEF')"><span class="material-symbols-outlined" style="font-size:14px; margin-right:4px;">local_fire_department</span>continnum</button>
+                                <button class="btn" style="flex:1; padding:6px; font-size:0.75rem;" onclick="applyPreset('#1A1116', '#FF2A7A', '#FDECEF')"><span class="material-symbols-outlined" style="font-size:14px; margin-right:4px;">local_florist</span>Rosa</button>
+                                <button class="btn" style="flex:1; padding:6px; font-size:0.75rem;" onclick="applyPreset('#282A36', '#BD93F9', '#F8F8F2')"><span class="material-symbols-outlined" style="font-size:14px; margin-right:4px;">terminal</span>Cypher</button>
+                                <button class="btn" style="flex:1; padding:6px; font-size:0.75rem; background:#F4EFF4; color:#1D192B;" onclick="applyPreset('#F4EFF4', '#6750A4', '#1D192B')"><span class="material-symbols-outlined" style="font-size:14px; margin-right:4px;">light_mode</span>Light</button>
+                            </div>
+
+                            <div style="border-top: 1px solid var(--border); padding-top: 16px;">
+                                <label style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; display: block;">Ajuste Manual</label>
+                                <div class="settings-color-grid" style="display:flex; gap:8px;">
+                                    <div class="form-group" style="flex:1;"><label>Fundo</label><input type="color" id="prof-bg" class="input-text" value="{{ user.bg_color if user.bg_color else '#0B1014' }}" style="height:44px; padding:4px; cursor:pointer;" onchange="previewColor()"></div>
+                                    <div class="form-group" style="flex:1;"><label>Destaque</label><input type="color" id="prof-primary" class="input-text" value="{{ user.primary_color if user.primary_color else '#ff6600' }}" style="height:44px; padding:4px; cursor:pointer;" onchange="previewColor()"></div>
+                                    <div class="form-group" style="flex:1;"><label>Texto</label><input type="color" id="prof-text" class="input-text" value="{{ user.text_color if user.text_color else '#E9EDEF' }}" style="height:44px; padding:4px; cursor:pointer;" onchange="previewColor()"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-fold" id="settings-notifications-fold">
+                        <button type="button" class="settings-fold-header" onclick="toggleSettingsSection('settings-notifications-fold')">
+                            <span><span class="material-symbols-outlined" style="font-size:18px;">notifications</span>Notificações</span>
+                            <span class="material-symbols-outlined">expand_more</span>
+                        </button>
+                        <div class="settings-fold-body">
+                        <div class="settings-notify-grid">
+                            <button class="btn" id="btn-desktop-notify" onclick="toggleDesktopNotifications()"><span class="material-symbols-outlined" style="font-size:18px;">notifications</span> Minimizado</button>
+                            <button class="btn" id="btn-sound-notify" onclick="toggleSoundNotifications()"><span class="material-symbols-outlined" style="font-size:18px;">volume_up</span> Som MSN</button>
+                            <button class="btn" style="width:44px; padding:0; justify-content:center;" title="Testar som" onclick="playBeep('Teste de notificação', 'Som e aviso ativos.')"><span class="material-symbols-outlined">play_arrow</span></button>
+                        </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-actions" style="display:flex; gap:8px; margin-top:24px; padding-top:16px; border-top: 1px solid var(--border);">
+                        <button class="btn btn-primary" style="flex:2;" onclick="saveProfile()">Salvar Configurações</button>
+                        <button class="btn btn-danger" style="flex:1;" onclick="applyPreset('#0B1014', '#ff6600', '#E9EDEF'); saveProfile();" title="Restaurar Padrão"><span class="material-symbols-outlined">settings_backup_restore</span></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <nav class="bottom-nav">
+        <div class="menu-toggle main-tab-btn active" style="padding:12px;" onclick="switchMainTab('tab-atendimentos')"><span class="material-symbols-outlined">forum</span></div>
+        {% if user.role == 'financeiro' %}
+        <a class="menu-toggle" href="/painel/admin" target="_blank" rel="noopener noreferrer" title="Abrir opções administrativas em nova guia" style="padding:12px; color:var(--text-muted); text-decoration:none;"><span class="material-symbols-outlined">admin_panel_settings</span></a>
+        {% endif %}
+        <div class="menu-toggle main-tab-btn" style="padding:12px;" onclick="switchMainTab('tab-carteira')"><span class="material-symbols-outlined">contacts</span></div>
+        <div class="menu-toggle main-tab-btn" style="padding:12px;" onclick="switchMainTab('tab-internal')"><span class="material-symbols-outlined">groups</span><span class="nav-badge bottom-unread-badge internal-unread-badge" style="display:none;">0</span></div>
+        <div class="menu-toggle main-tab-btn" style="padding:12px;" onclick="switchMainTab('tab-tools')"><span class="material-symbols-outlined">construction</span></div>
+        <div class="menu-toggle main-tab-btn" style="padding:12px;" onclick="switchMainTab('tab-settings')"><span class="material-symbols-outlined">person</span></div>
+    </nav>
+</div>
+
+<div id="newContactModal" class="modal">
+    <div class="modal-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:var(--primary);">Novo Contato</h3>
+            <button class="menu-toggle" onclick="document.getElementById('newContactModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="form-group"><label>Celular (com DDD)</label><input type="text" id="new-phone" class="input-text" placeholder="Ex: 11999998888"></div>
+        <div class="form-group"><label>Nome</label><input type="text" id="new-name" class="input-text"></div>
+        <button class="btn btn-primary" style="width:100%; margin-bottom:12px;" onclick="saveNewContact()">Salvar</button>
+    </div>
+</div>
+
+<div id="transferModal" class="modal">
+    <div class="modal-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:var(--primary);">Transferir Atendimento</h3>
+            <button class="menu-toggle" onclick="document.getElementById('transferModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="form-group">
+            <select id="transfer-target" class="input-text">
+                <optgroup label="Filas dos Setores">
+                    <option value="vendas_1">Fila: Vendas 1</option>
+                    <option value="vendas_2">Fila: Vendas 2</option>
+                    <option value="financeiro">Fila: Financeiro</option>
+                </optgroup>
+                <optgroup label="Operadores">
+                {% for target in transfer_targets %}
+                    {% if target.name != user.name %}
+                    <option value="{{ target.name }}">{{ target.name }} - {{ target.role|replace('_', ' ') }} ({{ target.status }})</option>
+                    {% endif %}
+                {% endfor %}
+                </optgroup>
+            </select>
+        </div>
+        <button class="btn btn-primary" style="width:100%; margin-bottom:12px;" onclick="submitTransfer()">Confirmar Transferência</button>
+    </div>
+</div>
+
+<div id="manageTagsModal" class="modal">
+    <div class="modal-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:var(--primary);">Tags</h3>
+            <button class="menu-toggle" onclick="document.getElementById('manageTagsModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="available-tags-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
+        <div style="border-top:1px solid var(--border); padding-top:16px;">
+            <div class="form-group"><label>Nova Tag</label><input type="text" id="new-tag-name" class="input-text"></div>
+            <div class="form-group"><input type="color" id="new-tag-color" value="#00a884" style="height:40px; padding:0; cursor:pointer; width:100%; border:none; background:transparent;"></div>
+            <button class="btn btn-primary" style="width:100%;" onclick="createNewTag()">Criar Tag</button>
+        </div>
+    </div>
+</div>
+
+<div id="manageListsModal" class="modal">
+    <div class="modal-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:var(--primary);">Listas</h3>
+            <button class="menu-toggle" onclick="document.getElementById('manageListsModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="available-lists-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
+        <div style="border-top:1px solid var(--border); padding-top:16px;">
+            <div class="form-group"><label>Nova Lista</label><input type="text" id="new-list-name" class="input-text" placeholder="Ex: Fornecedores motores"></div>
+            <div class="form-group"><input type="color" id="new-list-color" value="#00a884" style="height:40px; padding:0; cursor:pointer; width:100%; border:none; background:transparent;"></div>
+            <button class="btn btn-primary" style="width:100%;" onclick="createNewContactList()">Criar Lista</button>
+        </div>
+    </div>
+</div>
+
+<div id="statusModal" class="modal">
+    <div class="modal-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:var(--primary);">Postar Status</h3>
+            <button class="menu-toggle" onclick="document.getElementById('statusModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:16px;">Este status será publicado no WhatsApp e ficará visível <strong>APENAS</strong> para os clientes da sua carteira.</p>
+        
+        <div class="form-group">
+            <label>Filtrar por palavra-chave (opcional)</label>
+            <input type="text" id="status-filter" class="input-text" placeholder="Ex: fio, promoção, arquiteto">
+        </div>
+
+        <div class="form-group">
+            <label>Filtrar por lista (opcional)</label>
+            <select id="status-list-filter" class="input-text"><option value="">Todas as listas</option></select>
+        </div>
+        
+        <div class="form-group">
+            <label>Limite de Envios (Proteção Anti-Spam)</label>
+            <select id="status-limit" class="input-text">
+                <option value="10" selected>Até 10 clientes</option>
+                <option value="20">Até 20 clientes</option>
+                <option value="30">Até 30 clientes</option>
+                <option value="50">Até 50 clientes</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Tipo de Status</label>
+            <select id="status-type" class="input-text" onchange="document.getElementById('status-text-group').style.display = this.value === 'text' ? 'block' : 'none'; document.getElementById('status-image-group').style.display = this.value === 'image' ? 'block' : 'none';">
+                <option value="text">Texto</option>
+                <option value="image">Imagem</option>
+            </select>
+        </div>
+        <div class="form-group" id="status-text-group">
+            <label>Mensagem</label>
+            <textarea id="status-text" class="input-text" rows="3" placeholder="O que você quer compartilhar hoje?"></textarea>
+        </div>
+        <div class="form-group" id="status-image-group" style="display:none;">
+            <label>Escolha uma foto</label>
+            <input type="file" id="status-image-file" accept="image/*" style="color:var(--text-main); margin-top:8px;">
+        </div>
+        <button class="btn btn-primary" style="width:100%; margin-top:16px;" onclick="submitStatus()">Publicar no WhatsApp</button>
+    </div>
+</div>
+
+<div id="statusHistoryModal" class="modal">
+    <div class="modal-content" style="max-width:760px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:var(--primary);">Status Publicados</h3>
+            <button class="menu-toggle" onclick="document.getElementById('statusHistoryModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="status-history-realtime-note" style="display:flex; align-items:center; gap:6px; margin:-6px 0 12px; color:var(--text-muted); font-size:0.72rem;">
+            <span class="material-symbols-outlined" style="font-size:15px; color:var(--wa-green);">sensors</span>
+            Atualizando automaticamente quando a Evolution confirmar visualizações.
+        </div>
+        <button class="btn" style="width:100%; margin-bottom:12px;" onclick="loadStatusDiagnostics()">
+            <span class="material-symbols-outlined" style="font-size:16px;">troubleshoot</span>
+            Diagnóstico do Fluxo Evolution
+        </button>
+        <div id="status-diagnostics-panel" style="display:none; flex-direction:column; gap:10px; margin-bottom:12px;"></div>
+        <div id="status-history-list" style="display:flex; flex-direction:column; gap:10px; max-height:60vh; overflow:auto;"></div>
+    </div>
+</div>
+
+<div id="statusViewersModal" class="modal">
+    <div class="modal-content" style="max-width:720px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:var(--primary);">Contatos Enviados</h3>
+            <button class="menu-toggle" onclick="document.getElementById('statusViewersModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="status-target-summary" style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; margin-bottom:12px;"></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+            <button id="status-filter-all" class="btn" style="flex:1; min-width:130px;" onclick="loadStatusTargets('all')">Enviados</button>
+            <button id="status-filter-viewed" class="btn" style="flex:1; min-width:130px;" onclick="loadStatusTargets('viewed')">Visualizados</button>
+            <button id="status-filter-pending" class="btn" style="flex:1; min-width:130px;" onclick="loadStatusTargets('pending')">Pendentes</button>
+        </div>
+        <div id="status-target-realtime-note" style="display:flex; align-items:center; gap:6px; margin:-4px 0 12px; color:var(--text-muted); font-size:0.72rem;">
+            <span class="material-symbols-outlined" style="font-size:15px; color:var(--wa-green);">sync</span>
+            Aguardando atualizações em tempo real.
+        </div>
+        <div id="status-viewers-list" style="display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow:auto;"></div>
+    </div>
+</div>
+
+<div id="agendaDayModal" class="modal">
+    <div class="modal-content" style="max-width:680px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:12px;">
+            <h3 id="agenda-modal-date-label" style="margin:0; color:var(--primary); font-size:1rem;">Agenda</h3>
+            <button class="menu-toggle" onclick="document.getElementById('agendaDayModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="agenda-modal-notes-list" style="display:flex; flex-direction:column; gap:8px; max-height:45vh; overflow-y:auto; margin-bottom:16px;"></div>
+        <div style="border-top:1px solid var(--border); padding-top:16px;">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px;">
+                <input type="time" id="agenda-modal-time" class="input-text" value="09:00" title="Horário">
+                <input type="text" id="agenda-modal-phone" class="input-text" placeholder="Celular vinculado">
+                <input type="text" id="agenda-modal-input" class="input-text" placeholder="Nova tarefa...">
+            </div>
+            <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="saveAgendaNote('modal')"><span class="material-symbols-outlined" style="font-size:18px;">add</span> Criar tarefa</button>
+        </div>
+    </div>
+</div>
+
+<div id="bulkPreviewModal" class="modal">
+    <div class="modal-content" style="max-width:640px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+            <h3 style="margin:0; color:var(--primary); font-size:1rem;">Prévia da ação em lote</h3>
+            <button class="menu-toggle" onclick="document.getElementById('bulkPreviewModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="bulk-preview-summary" style="font-size:0.82rem; color:var(--text-muted); line-height:1.45;"></div>
+        <div id="bulk-preview-list" class="bulk-preview-list"></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <button class="btn" onclick="document.getElementById('bulkPreviewModal').style.display='none'">Cancelar</button>
+            <button class="btn btn-primary" onclick="confirmBulkContactAction()"><span class="material-symbols-outlined" style="font-size:18px;">done_all</span>Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<div id="contactReviewModal" class="modal">
+    <div class="modal-content" style="max-width:720px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+            <h3 style="margin:0; color:var(--primary); font-size:1rem;">Revisão de contatos</h3>
+            <button class="menu-toggle" onclick="document.getElementById('contactReviewModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="review-guide-grid" id="contact-review-grid"></div>
+    </div>
+</div>
+
+<div id="contactEditModal" class="modal">
+    <div class="modal-content" style="max-width:560px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+            <div>
+                <h3 style="margin:0; color:var(--primary); font-size:1rem;">Editar contato</h3>
+                <div id="contact-edit-phone-label" style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;"></div>
+            </div>
+            <button class="menu-toggle" onclick="closeContactEditModal()"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="form-group"><label>Nome</label><input id="contact-edit-name" class="input-text"></div>
+        <div class="form-group"><label>Anotações</label><textarea id="contact-edit-notes" class="input-text" rows="4"></textarea></div>
+        <div class="form-group"><label>Info extras</label><textarea id="contact-edit-extra" class="input-text" rows="4"></textarea></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <button class="btn" onclick="closeContactEditModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveContactEditModal()"><span class="material-symbols-outlined" style="font-size:18px;">save</span>Salvar</button>
+        </div>
+    </div>
+</div>
+
+<div id="assistedReviewModal" class="modal">
+    <div class="modal-content" style="max-width:720px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+            <div>
+                <h3 id="assisted-review-title" style="margin:0; color:var(--primary); font-size:1rem;">Revisão assistida</h3>
+                <div id="assisted-review-progress" style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;"></div>
+            </div>
+            <button class="menu-toggle" onclick="document.getElementById('assistedReviewModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="assisted-review-body" class="assisted-review-shell"></div>
+    </div>
+</div>
+
+<div id="reactionModal" class="modal">
+    <div class="modal-content" style="text-align:center;">
+        <h3 style="margin-top:0; color:var(--primary); margin-bottom:16px;">Reagir</h3>
+        <div style="display:flex; justify-content:center; gap:16px; font-size:2rem; margin-bottom:24px;">
+            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('👍')">👍</span>
+            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('❤️')">❤️</span>
+            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('😂')">😂</span>
+            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('😮')">😮</span>
+            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('😢')">😢</span>
+            <span style="cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" onclick="submitReaction('🙏')">🙏</span>
+        </div>
+    </div>
+</div>
+
+<div id="forwardModal" class="modal">
+    <div class="modal-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:var(--primary);">Encaminhar Mensagem</h3>
+            <button class="menu-toggle" onclick="document.getElementById('forwardModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="form-group">
+            <label>Selecione o Contato Destino</label>
+            <select id="forward-target" class="input-text"></select>
+        </div>
+        <button class="btn btn-primary" style="width:100%; margin-top:16px;" onclick="submitForward()">Encaminhar</button>
+    </div>
+</div>
+
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; color:var(--primary);">Editar Mensagem</h3>
+            <button class="menu-toggle" onclick="document.getElementById('editModal').style.display='none'"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="form-group">
+            <textarea id="edit-text-input" class="input-text" rows="4"></textarea>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="submitEdit()">Salvar Edição</button>
+    </div>
+</div>
+
+<div id="changelogModal" class="modal">
+    <div class="modal-content" style="max-width:640px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:12px;">
+            <h3 id="changelog-title" style="margin:0; color:var(--primary); font-size:1rem;">Novidades do sistema</h3>
+            <button class="menu-toggle" onclick="closeChangelogModal()"><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div id="changelog-body" style="max-height:55vh; overflow-y:auto; color:var(--text-main); font-size:0.85rem; line-height:1.5;"></div>
+        <button class="btn btn-primary" style="width:100%; margin-top:16px;" onclick="closeChangelogModal()">Entendi</button>
+    </div>
+</div>
+
+<div id="attentionModal" class="modal attention-modal" onclick="if(event.target===this){closeAttentionNotice();}">
+    <div class="modal-content" onclick="closeAttentionNotice()">
+        <div class="attention-tag" id="attention-tag"><span class="material-symbols-outlined" style="font-size:16px;">notification_important</span><span id="attention-kind">Aviso</span></div>
+        <h3 id="attention-title" class="attention-title">Notificação</h3>
+        <div id="attention-body" class="attention-body">-</div>
+        <button id="attention-close-btn" class="btn btn-primary" style="width:100%; margin-top:16px;">Fechar (Esc)</button>
+    </div>
+</div>
+
+<script>
+{% include "partials/vendas_js_01.html" %}
+{% include "partials/vendas_js_02.html" %}
+{% include "partials/vendas_js_03.html" %}
+{% include "partials/vendas_js_04.html" %}
+
+{% include 'partials/quickwins_js.html' %}
+{% include 'partials/ai_copilot_js.html' %}
+{% include 'partials/omnichannel_js.html' %}
+{% include 'partials/sales_js.html' %}
+{% include 'partials/team_js.html' %}
+</script>
+<script src="/static/dock.js" defer></script>
+</body>
+</html>

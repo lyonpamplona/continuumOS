@@ -1,0 +1,733 @@
+    async function loadTeamThermometer(yearMonth) {
+        const box = document.getElementById('team-thermometer-list');
+        const hint = document.getElementById('team-month-hint');
+        if (!box) return;
+        const month = yearMonth || currentYearMonth();
+        if (hint) hint.innerText = `Carregando ${formatYearMonthLabel(month)}...`;
+        try {
+            const res = await fetch(`/api/admin/monthly_report?month=${encodeURIComponent(month)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Falha');
+            teamThermometerMonth = data.month || month;
+            ensureTeamMonthOption(teamThermometerMonth);
+            const users = data.users || [];
+            if (!users.length) {
+                box.innerHTML = '<div class="breakdown-empty">Nenhum usuário encontrado para o termômetro.</div>';
+            } else {
+                box.innerHTML = users.map(renderTeamThermometerCard).join('');
+            }
+            if (hint) {
+                const start = data.start_date ? data.start_date.split('-').reverse().join('/') : '';
+                const end = data.end_date ? data.end_date.split('-').reverse().join('/') : '';
+                hint.innerText = `Exibindo ${formatYearMonthLabel(teamThermometerMonth)}${start && end ? ` · ${start} até ${end}` : ''}`;
+            }
+        } catch(e) {
+            if (hint) hint.innerText = `Falha ao carregar ${formatYearMonthLabel(month)}.`;
+            if (!box.children.length) box.innerHTML = '<div class="breakdown-empty" style="color:#F15C6D;">Falha ao carregar termômetro da equipe.</div>';
+        }
+    }
+
+    function renderMonthEvent(event) {
+        const contact = event.contact_name || cleanPhone(event.phone || '');
+        const meta = [
+            event.created_at_label || '',
+            event.actor_name || '',
+            contact ? `Cliente: ${contact}` : '',
+            event.target ? `Destino: ${event.target}` : ''
+        ].filter(Boolean).join(' · ');
+        return `
+            <div class="month-history-row">
+                <div class="month-history-main">
+                    <strong>${escapeHtml(actionLabel(event.action))}</strong>
+                    <span>${escapeHtml(meta)}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderAttendanceBreakdown(data) {
+        const box = document.getElementById('active-chats-breakdown');
+        if (!box) return;
+        const totals = data.totals || {};
+        bindBreakdownValue('breakdown-total', totals.total || 0);
+        bindBreakdownValue('breakdown-active', totals.ativos || 0);
+        bindBreakdownValue('breakdown-waiting', totals.aguardando || 0);
+
+        const rows = [...(data.users || [])];
+        if (data.unassigned && data.unassigned.total > 0) rows.push(data.unassigned);
+        rows.sort((a, b) => (b.total || 0) - (a.total || 0) || String(a.name || '').localeCompare(String(b.name || '')));
+        if (!rows.length) {
+            box.innerHTML = '<div class="breakdown-empty">Nenhum atendimento ativo ou aguardando no momento.</div>';
+            return;
+        }
+        box.innerHTML = rows.map(item => {
+            const inactive = Number(item.is_active ?? 1) === 0 ? ' · bloqueado' : '';
+            return `
+                <div class="breakdown-row">
+                    <div class="breakdown-user">
+                        <div class="breakdown-name">${escapeHtml(item.name || item.username || 'Sem nome')}</div>
+                        <div class="breakdown-role">${escapeHtml(roleLabel(item.role))}${inactive}</div>
+                    </div>
+                    <div class="breakdown-count">${item.ativos || 0}<span>ativos</span></div>
+                    <div class="breakdown-count">${item.aguardando || 0}<span>aguardando</span></div>
+                    <div class="breakdown-count" style="color:var(--primary);">${item.total || 0}<span>total</span></div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function openActiveChatsModal() {
+        const modal = document.getElementById('activeChatsModal');
+        const box = document.getElementById('active-chats-breakdown');
+        if (!modal || !box) return;
+        modal.style.display = 'flex';
+        box.innerHTML = '<div class="breakdown-empty">Carregando distribuição...</div>';
+        try {
+            const res = await fetch('/api/admin/attendance_breakdown');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Falha');
+            renderAttendanceBreakdown(data);
+        } catch(e) {
+            box.innerHTML = '<div class="breakdown-empty" style="color:#F15C6D;">Falha ao carregar distribuição de atendimentos.</div>';
+        }
+    }
+
+    function closeActiveChatsModal() {
+        const modal = document.getElementById('activeChatsModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function periodLabel(key) {
+        const labels = {
+            weekly: 'Semanal',
+            fortnightly: 'Quinzenal',
+            monthly: 'Mês calendário'
+        };
+        return labels[key] || key;
+    }
+
+    function renderPeriodCard(key, userPeriod) {
+        return `
+            <div class="period-card">
+                <div class="period-title">${escapeHtml(periodLabel(key))}</div>
+                <div class="period-metrics">
+                    <div class="mini-metric clickable" data-sales-period="${key}" onclick="renderPeriodSales('${key}')"><strong>${userPeriod?.vendas || 0}</strong><span>vendas</span></div>
+                    <div class="mini-metric"><strong>${userPeriod?.nao_vendas || 0}</strong><span>sem venda</span></div>
+                    <div class="mini-metric"><strong>${userPeriod?.atendimentos || 0}</strong><span>atendimentos</span></div>
+                    <div class="mini-metric"><strong>${userPeriod?.tma || '--'}</strong><span>TMA</span></div>
+                    <div class="mini-metric"><strong>${userPeriod?.conversion || 0}%</strong><span>conversão</span></div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderPeriodSales(key) {
+        const box = document.getElementById('user-performance-sales');
+        if (!box || !currentUserPerformanceData) return;
+        document.querySelectorAll('[data-sales-period]').forEach(el => {
+            el.classList.toggle('active', el.dataset.salesPeriod === key);
+        });
+        const sales = currentUserPerformanceData.sales?.[key] || [];
+        const expectedSales = currentUserPerformanceData.periods?.[key]?.vendas || 0;
+        const label = periodLabel(key);
+        if (!sales.length) {
+            box.innerHTML = expectedSales > 0
+                ? `<div class="breakdown-empty">${expectedSales} venda(s) registrada(s) no período ${escapeHtml(label.toLowerCase())}, mas sem detalhe de cliente nos logs antigos.</div>`
+                : `<div class="breakdown-empty">Nenhuma venda registrada no período ${escapeHtml(label.toLowerCase())}.</div>`;
+            return;
+        }
+        const missingDetails = Math.max(0, expectedSales - sales.length);
+        box.innerHTML = `
+            <div style="color:var(--primary); font-weight:700; margin-bottom:2px;">Vendas do período ${escapeHtml(label.toLowerCase())}</div>
+            ${sales.map(item => `
+                <div class="breakdown-row sales-row">
+                    <div class="breakdown-user">
+                        <div class="breakdown-name">${escapeHtml(item.contact_name || item.phone || 'Cliente')}</div>
+                        <div class="breakdown-role">${escapeHtml(cleanPhone(item.phone || ''))}</div>
+                    </div>
+                    <div class="breakdown-count">${escapeHtml(item.finished_at || '-')}<span>finalizado</span></div>
+                    <div class="breakdown-count" style="color:var(--primary);">Venda<span>resultado</span></div>
+                </div>
+            `).join('')}
+            ${missingDetails ? `<div class="breakdown-empty">${missingDetails} venda(s) também estão no agregado, mas sem cliente detalhado em audit_logs.</div>` : ''}
+        `;
+    }
+
+    function auditCount(byAction, keys) {
+        return keys.reduce((total, key) => total + Number(byAction?.[key] || 0), 0);
+    }
+
+    function renderMonthlyActions(data) {
+        const box = document.getElementById('user-performance-actions');
+        if (!box) return;
+        const monthly = data.monthly || {};
+        const metrics = data.periods?.monthly || monthly.metrics || {};
+        const audit = monthly.audit?.by_action || {};
+        const statusPosts = monthly.status_posts || {};
+        const items = [
+            { label: 'Vendas', value: metrics.vendas || 0 },
+            { label: 'Sem venda', value: metrics.nao_vendas || 0 },
+            { label: 'Atendimentos', value: metrics.atendimentos || 0 },
+            { label: 'TMA', value: metrics.tma || '--' },
+            { label: 'Conversão', value: `${metrics.conversion || 0}%` },
+            { label: 'Clientes vendidos', value: Math.max(Number(data.sales?.monthly?.length || 0), Number(metrics.vendas || 0)) },
+            { label: 'Contatos criados', value: auditCount(audit, ['contact_created', 'contact_existing_added']) },
+            { label: 'Contatos editados', value: auditCount(audit, ['contact_edited']) },
+            { label: 'Transferências', value: auditCount(audit, ['chat_transferred']) },
+            { label: 'Atend. assumidos', value: auditCount(audit, ['chat_taken', 'admin_takeover']) },
+            { label: 'Status postados', value: statusPosts.total || 0 },
+            { label: 'Agenda concluída', value: auditCount(audit, ['calendar_event_completed']) },
+            { label: 'Agenda remarcada', value: auditCount(audit, ['calendar_event_rescheduled']) },
+        ];
+        box.innerHTML = `
+            <div class="period-title">Resumo operacional de ${escapeHtml(formatYearMonthLabel(data.month || teamThermometerMonth || currentYearMonth()))}</div>
+            <div class="monthly-actions-grid">
+                ${items.map(item => `
+                    <div class="mini-metric">
+                        <strong>${escapeHtml(item.value)}</strong>
+                        <span>${escapeHtml(item.label)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="color:var(--text-muted); font-size:0.68rem;">Status enviados para ${statusPosts.targets || 0} destinatário(s) no mês selecionado.</div>
+        `;
+    }
+
+    function renderUserPerformanceReport(data) {
+        const content = document.getElementById('user-performance-content');
+        if (!content) return;
+        currentUserPerformanceData = data;
+        const user = data.user || {};
+        const periods = data.periods || {};
+        const queues = data.queues || {};
+        document.getElementById('user-performance-title').innerHTML = `<span class="material-symbols-outlined">query_stats</span> ${escapeHtml(user.name || 'Usuário')}`;
+        const monthLabel = data.month ? ` · mês ${data.month}` : '';
+        document.getElementById('user-performance-subtitle').innerText = `${roleLabel(user.role)} · últimos 7/15 dias e mês calendário${monthLabel}`;
+        bindBreakdownValue('user-report-active', queues.ativos || 0);
+        bindBreakdownValue('user-report-waiting', queues.aguardando || 0);
+        bindBreakdownValue('user-report-conversion', `${periods.monthly?.conversion || 0}%`);
+        content.innerHTML = ['weekly', 'fortnightly', 'monthly'].map(key => renderPeriodCard(key, periods[key])).join('');
+        renderMonthlyActions(data);
+        const salesBox = document.getElementById('user-performance-sales');
+        if (salesBox) salesBox.innerHTML = '<div class="breakdown-empty">Clique em vendas no período desejado para ver os clientes que fecharam.</div>';
+    }
+
+    async function openUserPerformanceModal(seller) {
+        const modal = document.getElementById('userPerformanceModal');
+        const content = document.getElementById('user-performance-content');
+        const salesBox = document.getElementById('user-performance-sales');
+        const actionsBox = document.getElementById('user-performance-actions');
+        if (!modal || !content) return;
+        modal.style.display = 'flex';
+        currentUserPerformanceData = null;
+        content.innerHTML = '<div class="breakdown-empty">Carregando relatório...</div>';
+        if (salesBox) salesBox.innerHTML = '<div class="breakdown-empty">Clique em vendas no período desejado para ver os clientes que fecharam.</div>';
+        if (actionsBox) actionsBox.innerHTML = '<div class="breakdown-empty">Carregando ações operacionais...</div>';
+        try {
+            const month = teamThermometerMonth || currentYearMonth();
+            const res = await fetch(`/api/admin/user_performance?seller=${encodeURIComponent(seller)}&month=${encodeURIComponent(month)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Falha');
+            renderUserPerformanceReport(data);
+        } catch(e) {
+            content.innerHTML = '<div class="breakdown-empty" style="color:#F15C6D;">Falha ao carregar relatório do usuário.</div>';
+        }
+    }
+
+    function closeUserPerformanceModal() {
+        const modal = document.getElementById('userPerformanceModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function renderChart(metrics) {
+        const ctx = document.getElementById('overviewChart');
+        if(!ctx) return;
+        const emptyHint = document.getElementById('overview-chart-empty');
+        const chartContainer = ctx.closest('.chart-container');
+        const canvasEl = ctx;
+        const source = metrics || {
+            vendas_hoje: {{ global_metrics.vendas_hoje }},
+            nao_vendas_hoje: {{ global_metrics.nao_vendas_hoje }},
+            atendimentos_hoje: {{ global_metrics.atendimentos_hoje }},
+        };
+        const values = [source.vendas_hoje || 0, source.nao_vendas_hoje || 0, source.atendimentos_hoje || 0];
+        const hasData = values.some(value => Number(value) > 0);
+        if (emptyHint) emptyHint.style.display = hasData ? 'none' : 'flex';
+        if (canvasEl) canvasEl.style.visibility = 'visible';
+        if (chartContainer) chartContainer.classList.toggle('no-data', !hasData);
+        if (!overviewChart) {
+            overviewChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Com venda', 'Sem venda', 'Atendimentos'],
+                    datasets: [{
+                        label: 'Hoje',
+                        data: values,
+                        backgroundColor: ['#00A884', '#F15C6D', '#64B5F6'],
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0, stepSize: 1, color: '#8696A0' },
+                            grid: { color: '#2a3942' }
+                        },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+            return;
+        }
+        overviewChart.data.datasets[0].data = values;
+        overviewChart.update();
+    }
+    function operationBadge(label, ok, detail) {
+        const color = ok ? 'var(--wa-green)' : '#F15C6D';
+        return `<div class="ops-badge">
+            <span>${escapeHtml(label)}</span>
+            <strong style="color:${color};">${escapeHtml(detail)}</strong>
+        </div>`;
+    }
+    function formatOpsTime(value) {
+        if (!value) return '-';
+        try { return new Date(value).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}); } catch(e) { return '-'; }
+    }
+    function formatOpsCheckedAt(value) {
+        if (!value) return '-';
+        try { return new Date(value).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', second:'2-digit'}); } catch(e) { return '-'; }
+    }
+    async function loadOperationsStatus() {
+        const box = document.getElementById('operations-status');
+        if (!box) return;
+        try {
+            const res = await fetch('/api/admin/operations_status');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Falha');
+            const checks = data.checks || {};
+            const queues = data.queues || {};
+            const system = data.system || {};
+            const failures = data.evolution_failures || [];
+            const statusColor = data.status === 'ok' ? 'var(--wa-green)' : '#F15C6D';
+            const failureRows = failures.length ? failures.slice(0, 3).map(item => `<div class="ops-log" title="${escapeHtml(item)}">${escapeHtml(item)}</div>`).join('') : '<div style="color:var(--wa-green);">Sem falhas Evolution recentes nos logs.</div>';
+            box.innerHTML = `
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                    <span>Estado geral</span>
+                    <strong style="color:${statusColor};">${escapeHtml(data.status || 'unknown')}</strong>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:0.72rem;">
+                    <span>Atualizado</span>
+                    <strong>${escapeHtml(formatOpsCheckedAt(data.checked_at))}</strong>
+                </div>
+                ${operationBadge('PostgreSQL', !!checks.database?.ok, checks.database?.ok ? 'OK' : 'Falha')}
+                ${operationBadge('Redis', !!checks.redis?.ok, checks.redis?.ok ? 'OK' : 'Falha')}
+                ${operationBadge('Evolution', !!checks.evolution_vendas?.ok, checks.evolution_vendas?.status || 'Falha')}
+                <div class="ops-grid">
+                    ${operationBadge('SLA', true, String(queues.sla ?? '-'))}
+                    ${operationBadge('Retorno', true, String(queues.morning_followup ?? '-'))}
+                </div>
+                <div class="ops-grid compact">
+                    ${operationBadge('CPU', (system.cpu_percent || 0) < 95, `${system.cpu_percent ?? 0}%`)}
+                    ${operationBadge('Memória', (system.memory_percent || 0) < 90, `${system.memory_percent ?? 0}%`)}
+                    ${operationBadge('Disco', (system.disk_percent || 0) < 90, `${system.disk_percent ?? 0}%`)}
+                </div>
+                <div style="font-size:0.72rem;">Próx. SLA: ${escapeHtml(formatOpsTime(queues.next_sla_at))} · Próx. retorno: ${escapeHtml(formatOpsTime(queues.next_morning_followup_at))}</div>
+                <div style="border-top:1px solid var(--border); padding-top:8px;">${failureRows}</div>
+            `;
+        } catch(e) {
+            box.innerHTML = '<div style="color:#F15C6D;">Falha ao carregar status operacional.</div>';
+        }
+    }
+    function debounceAuditSearch(val) { clearTimeout(auditTimeout); auditTimeout = setTimeout(() => { auditSearch = val; auditOffset = 0; const box = document.getElementById('audit-contacts-list'); box.innerHTML = ''; box.dataset.lastStage = ''; document.getElementById('btn-audit-load').style.display = 'block'; loadMoreAudit(); }, 500); }
+    function loadAuditContacts() { auditOffset = 0; const box = document.getElementById('audit-contacts-list'); box.innerHTML = ''; box.dataset.lastStage = ''; document.getElementById('btn-audit-load').style.display = 'block'; loadMoreAudit(); }
+    function getCleanName(rawName) { if(!rawName) return ""; let parts = rawName.split(' - '); return parts.length > 1 ? parts.slice(1).join(' - ').trim() : rawName.trim(); }
+    async function loadAuditTags() {
+        try {
+            const res = await fetch('/api/tags');
+            allAuditTags = await res.json();
+        } catch(e) {
+            allAuditTags = [];
+        }
+    }
+    function renderAuditTagsUI(tagsDataStr) {
+        currentAuditTags = [];
+        if (tagsDataStr) {
+            tagsDataStr.split(',').forEach(item => {
+                const parts = item.split('|');
+                if (parts.length === 3) currentAuditTags.push({id: parseInt(parts[0]), name: parts[1], color: parts[2]});
+            });
+        }
+        const selectedBox = document.getElementById('audit-client-tags-box');
+        const availableBox = document.getElementById('audit-available-tags-list');
+        if (!selectedBox || !availableBox) return;
+        selectedBox.innerHTML = currentAuditTags.length ? '' : '<span style="color:var(--text-muted); font-size:0.75rem;">Sem tags vinculadas.</span>';
+        currentAuditTags.forEach(tag => {
+            const action = ADMIN_CAN_MANAGE_CONTACTS ? ` onclick="toggleAuditTag(${tag.id}, 'remove')"` : '';
+            const suffix = ADMIN_CAN_MANAGE_CONTACTS ? ' &times;' : '';
+            selectedBox.insertAdjacentHTML('beforeend', `<span class="tag-pill" style="background:${tag.color};"${action}>${escapeHtml(tag.name)}${suffix}</span>`);
+        });
+        availableBox.innerHTML = '';
+        if (!ADMIN_CAN_MANAGE_CONTACTS) {
+            availableBox.innerHTML = '<span style="color:var(--text-muted); font-size:0.75rem;">Edição de tags bloqueada neste modo.</span>';
+            return;
+        }
+        allAuditTags.forEach(tag => {
+            if (!currentAuditTags.some(current => current.id === tag.id)) {
+                availableBox.insertAdjacentHTML('beforeend', `<span class="tag-pill" style="background:${tag.color}; border:1px solid var(--border); color:var(--text-main);" onclick="toggleAuditTag(${tag.id}, 'add')">+ ${escapeHtml(tag.name)}</span>`);
+            }
+        });
+        if (!availableBox.innerHTML) availableBox.innerHTML = '<span style="color:var(--text-muted); font-size:0.75rem;">Nenhuma tag disponível.</span>';
+    }
+    async function toggleAuditTag(tagId, action) {
+        if (!ADMIN_CAN_MANAGE_CONTACTS) return notifyToast('Você não tem permissão para alterar tags aqui.', true);
+        if (!currentAuditPhone) return;
+        await fetch('/api/contacts/tags', {method: 'POST', body: JSON.stringify({phone: currentAuditPhone, tag_id: tagId, action: action})});
+        await loadAuditTags();
+        const res = await fetch(`/api/admin/contact_details/${encodeURIComponent(currentAuditPhone)}`);
+        const data = await res.json();
+        renderAuditTagsUI(data.tags_data || '');
+        loadAuditContacts();
+    }
+    function setupAuditLogFilters() {
+        updateLogActionOptions(false);
+        setAuditLogPeriod('all', false);
+    }
+    function formatDateInput(date) {
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+    function setAuditLogPeriod(period, reload = true) {
+        auditLogPeriod = period || 'all';
+        document.querySelectorAll('.log-period-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.period === auditLogPeriod));
+        const customBox = document.getElementById('log-custom-range');
+        if (customBox) customBox.classList.toggle('active', auditLogPeriod === 'custom');
+        if (auditLogPeriod !== 'custom') {
+            const from = document.getElementById('log-date-from');
+            const to = document.getElementById('log-date-to');
+            if (from) from.value = '';
+            if (to) to.value = '';
+        }
+        if (reload) loadAuditLogs(true);
+    }
+    function getAuditLogDateRange() {
+        const today = new Date();
+        const fromInput = document.getElementById('log-date-from')?.value || '';
+        const toInput = document.getElementById('log-date-to')?.value || '';
+        if (auditLogPeriod === 'custom') return {date_from: fromInput, date_to: toInput};
+        if (auditLogPeriod === 'all') return {date_from: '', date_to: ''};
+        const end = new Date(today);
+        const start = new Date(today);
+        if (auditLogPeriod === 'yesterday') {
+            start.setDate(today.getDate() - 1);
+            end.setDate(today.getDate() - 1);
+        } else if (auditLogPeriod === '7d') {
+            start.setDate(today.getDate() - 6);
+        } else if (auditLogPeriod === '15d') {
+            start.setDate(today.getDate() - 14);
+        } else if (auditLogPeriod === '30d') {
+            start.setDate(today.getDate() - 29);
+        }
+        return {date_from: formatDateInput(start), date_to: formatDateInput(end)};
+    }
+    function updateLogActionOptions(reload = false) {
+        const category = document.getElementById('log-category-filter')?.value || '';
+        const actionSelect = document.getElementById('log-action-filter');
+        if (!actionSelect) return;
+        let selectedStillVisible = !actionSelect.value;
+        Array.from(actionSelect.options).forEach(option => {
+            if (!option.value) {
+                option.hidden = false;
+                return;
+            }
+            const cats = (option.dataset.cat || '').split(/\s+/);
+            const visible = !category || cats.includes(category);
+            option.hidden = !visible;
+            if (visible && option.value === actionSelect.value) selectedStillVisible = true;
+        });
+        if (!selectedStillVisible) actionSelect.value = '';
+        if (reload) loadAuditLogs(true);
+    }
+    function auditActionCategory(action) {
+        for (const [category, actions] of Object.entries(auditActionCategories)) {
+            if (actions.includes(action)) return category;
+        }
+        return '';
+    }
+    function auditLogDayLabel(timestamp) {
+        const date = parseLocalTimestamp(timestamp);
+        if (!date) return 'Sem data';
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const sameDay = (a, b) => a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+        if (sameDay(date, today)) return `Hoje - ${date.toLocaleDateString('pt-BR')}`;
+        if (sameDay(date, yesterday)) return `Ontem - ${date.toLocaleDateString('pt-BR')}`;
+        return date.toLocaleDateString('pt-BR', {weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric'});
+    }
+    function parseAuditDetails(log) {
+        try {
+            return typeof log.details === 'string' ? JSON.parse(log.details || '{}') : (log.details || {});
+        } catch(e) {
+            return {};
+        }
+    }
+    function toggleLogDetails(id) {
+        const detail = document.getElementById(id);
+        if (detail) detail.classList.toggle('active');
+    }
+    function exportAuditLogs() {
+        const params = auditLogQueryParams(false);
+        window.location.href = `/api/admin/audit_logs/export?${params.toString()}`;
+    }
+    function actionLabel(action) {
+        const labels = {
+            contact_created: 'Contato criado',
+            contact_existing_added: 'Contato já existente',
+            contact_edited: 'Contato editado',
+            contact_reviewed: 'Contato revisado',
+            contact_bulk_action_applied: 'Ação em lote',
+            contact_list_created: 'Lista criada',
+            contact_list_updated: 'Lista atualizada',
+            chat_taken: 'Atendimento assumido',
+            admin_takeover: 'Admin assumiu',
+            chat_transferred: 'Atendimento transferido',
+            chat_finished: 'Atendimento finalizado',
+            external_whatsapp_opened: 'WhatsApp externo',
+            session_cleared: 'Sessão liberada',
+            system_user_created: 'Usuário criado',
+            system_user_updated: 'Usuário editado',
+            contact_prefix_lists_applied: 'Listas por prefixo',
+            contact_owner_repair_applied: 'Carteira corrigida',
+            admin_contacts_synced: 'Sync contatos admin',
+            contacts_synced: 'Sync contatos',
+            panel_notice_sent: 'Comunicado em tela',
+            calendar_event_created: 'Agenda criada',
+            calendar_event_completed: 'Agenda contatada',
+            calendar_event_rescheduled: 'Agenda remarcada',
+            calendar_event_cancelled: 'Agenda cancelada',
+            status_post_deleted: 'Status apagado'
+        };
+        return labels[action] || action;
+    }
+    function summarizeAuditLog(log) {
+        const details = parseAuditDetails(log);
+        if (log.action === 'chat_transferred') return `Destino: ${escapeHtml(log.target || '-')}. Antes: ${escapeHtml(details.previous_assigned_to || '-')}`;
+        if (log.action === 'contact_edited') return `Nome: ${escapeHtml(details.old_name || '-')} -> ${escapeHtml(details.new_name || '-')}`;
+        if (log.action === 'contact_reviewed') return `Nome: ${escapeHtml(details.name || log.contact_name || '-')}. Listas removidas: ${escapeHtml((details.removed_lists || []).join(', ') || '-')}`;
+        if (log.action === 'contact_bulk_action_applied') return `Ação: ${escapeHtml(details.action || log.target || '-')}. Atualizados: ${escapeHtml(String(details.updated || 0))}/${escapeHtml(String(details.requested || 0))}`;
+        if (log.action === 'contact_created' || log.action === 'contact_existing_added') return `Nome: ${escapeHtml(details.name || log.contact_name || '-')}`;
+        if (log.action === 'chat_finished') return `Resultado: ${escapeHtml(details.result || '-')}`;
+        if (log.action === 'chat_taken' || log.action === 'admin_takeover') return `Antes: ${escapeHtml(details.previous_assigned_to || '-')} (${escapeHtml(details.previous_stage || '-')})`;
+        if (log.action === 'session_cleared') return `Usuário liberado: ${escapeHtml(log.target || details.released_username || '-')}`;
+        if (log.action === 'system_user_created' || log.action === 'system_user_updated') return `Usuário: ${escapeHtml(details.username || '-')} | Perfil: ${escapeHtml(details.role || '-')}`;
+        if (log.action === 'external_whatsapp_opened') return `Sessão: ${escapeHtml(details.session_id || '-')}`;
+        if (log.action === 'contact_prefix_lists_applied') return `Prefixos: ${escapeHtml((details.prefixes || []).join(', '))}. Total: ${escapeHtml(String((details.groups || []).reduce((sum, group) => sum + (group.count || 0), 0)))}`;
+        if (log.action === 'contact_owner_repair_applied') return `Atualizados: ${escapeHtml(String(details.result?.updated || details.summary?.total_updates || 0))}`;
+        if (log.action === 'admin_contacts_synced' || log.action === 'contacts_synced') return `Novos: ${escapeHtml(String(details.created || details.summary?.created || details.summary?.new_contacts || 0))}`;
+        if (log.action === 'panel_notice_sent') return `Destinos: ${escapeHtml((details.targets || []).join(', '))} | Texto: ${escapeHtml(details.text || '-')}`;
+        return '';
+    }
+    function debounceAuditLogSearch() {
+        clearTimeout(auditLogSearchTimeout);
+        auditLogSearchTimeout = setTimeout(() => loadAuditLogs(true), 450);
+    }
+    function auditLogQueryParams(includeOffset = true) {
+        const range = getAuditLogDateRange();
+        const params = new URLSearchParams({
+            action: document.getElementById('log-action-filter')?.value || '',
+            actor: document.getElementById('log-actor-filter')?.value || '',
+            category: document.getElementById('log-category-filter')?.value || '',
+            search: document.getElementById('log-search')?.value || '',
+            date_from: range.date_from || '',
+            date_to: range.date_to || ''
+        });
+        if (includeOffset) params.set('offset', String(auditLogOffset));
+        return params;
+    }
+    async function loadAuditLogs(reset = false) {
+        const box = document.getElementById('audit-log-list');
+        if (!box) return;
+        if (reset) {
+            auditLogOffset = 0;
+            auditLogLastDateLabel = '';
+            box.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted);">Carregando logs...</div>';
+        }
+        try {
+            const url = `/api/admin/audit_logs?${auditLogQueryParams(true).toString()}`;
+            const res = await fetch(url);
+            const logs = await res.json();
+            if (!res.ok || !Array.isArray(logs)) {
+                const detail = logs?.detail || logs?.error || `HTTP ${res.status}`;
+                throw new Error(detail);
+            }
+            if (reset) box.innerHTML = '';
+            if (!logs.length && auditLogOffset === 0) {
+                box.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted);">Nenhum log encontrado.</div>';
+                document.getElementById('btn-log-load').style.display = 'none';
+                return;
+            }
+            const html = logs.map(log => {
+                const dayLabel = auditLogDayLabel(log.created_at);
+                const dayHeader = dayLabel !== auditLogLastDateLabel ? `<div class="log-day-separator">${escapeHtml(dayLabel)}</div>` : '';
+                auditLogLastDateLabel = dayLabel;
+                const contact = log.contact_name || cleanPhone(log.phone || '');
+                const meta = [contact ? `Cliente: ${escapeHtml(contact)}` : '', log.phone ? cleanPhone(log.phone) : '', log.target ? `Destino: ${escapeHtml(log.target)}` : ''].filter(Boolean).join(' · ');
+                const category = auditActionCategory(log.action);
+                const detailId = `audit-log-detail-${log.id}`;
+                const details = parseAuditDetails(log);
+                const detailsText = JSON.stringify(details, null, 2);
+                return `${dayHeader}<div class="log-card">
+                    <div class="log-meta">${formatTime(log.created_at)}<br><strong style="color:var(--primary); font-size:0.85rem;">${escapeHtml(log.actor_name || '-')}</strong><br>${escapeHtml(log.actor_role || '')}</div>
+                    <div class="log-content">
+                        <div class="log-action-row">
+                            <div class="log-action-name">${escapeHtml(actionLabel(log.action))}</div>
+                            <span class="log-category-badge">${escapeHtml(auditCategoryLabels[category] || 'Operação')}</span>
+                        </div>
+                        <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:6px;">${meta}</div>
+                        <div style="font-size:0.82rem; color:var(--text-main); overflow:hidden; text-overflow:ellipsis;">${summarizeAuditLog(log)}</div>
+                        <button class="log-detail-toggle" type="button" onclick="toggleLogDetails('${detailId}')">Ver detalhes</button>
+                        <pre class="log-detail" id="${detailId}">${escapeHtml(detailsText)}</pre>
+                    </div>
+                </div>`;
+            }).join('');
+            box.insertAdjacentHTML('beforeend', html);
+            auditLogOffset += logs.length;
+            document.getElementById('btn-log-load').style.display = logs.length < 50 ? 'none' : 'flex';
+        } catch(e) {
+            console.error('Falha ao carregar logs de auditoria:', e);
+            if (reset) box.innerHTML = `<div style="padding:24px; text-align:center; color:#F15C6D;">Falha ao carregar logs.<br><span style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(e.message || 'Erro desconhecido')}</span></div>`;
+        }
+    }
+    function loadMoreAuditLogs() { loadAuditLogs(false); }
+    function auditStageMeta(stage) {
+        if (stage === 'pendente_assumir') return {key: 'pendente_assumir', title: 'Aguardando atendimento', icon: 'hourglass_top', label: 'Aguardando'};
+        if (stage === 'em_atendimento') return {key: 'em_atendimento', title: 'Em atendimento', icon: 'forum', label: 'Ativo'};
+        return {key: 'carteira', title: 'Carteira de contatos', icon: 'contacts', label: 'Carteira'};
+    }
+    async function loadMoreAudit() {
+        try {
+            const seller = document.getElementById('audit-seller-select').value;
+            if(seller === 'all' && auditSearch === '') { document.getElementById('audit-contacts-list').innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted);">Selecione um vendedor ou busque um nome.</div>'; document.getElementById('btn-audit-load').style.display='none'; return;}
+            const url = `/api/admin/contacts_by_seller?seller=${encodeURIComponent(seller)}&offset=${auditOffset}&search=${encodeURIComponent(auditSearch)}`;
+            const res = await fetch(url); const data = await res.json(); const box = document.getElementById('audit-contacts-list');
+            if(data.length < 30) document.getElementById('btn-audit-load').style.display = 'none'; else document.getElementById('btn-audit-load').style.display = 'block';
+            let htmlStr = '';
+            let lastStage = auditOffset === 0 ? '' : (box.dataset.lastStage || '');
+            const counts = data.reduce((acc, item) => {
+                const key = auditStageMeta(item.stage).key;
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+            }, {});
+            data.forEach(c => {
+                let rawNome = c.name ? c.name : cleanPhone(c.phone); let nome = getCleanName(rawNome);
+                let tagsHtml = ''; if(c.tags_data) { c.tags_data.split(',').forEach(t => { let p = t.split('|'); if(p.length===3) tagsHtml += `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${p[2]}; margin-right:4px;"></span>`; }); }
+                const stageMeta = auditStageMeta(c.stage);
+                if (stageMeta.key !== lastStage) {
+                    htmlStr += `<div class="audit-group-header">
+                        <span class="audit-group-title"><span class="material-symbols-outlined">${stageMeta.icon}</span>${stageMeta.title}</span>
+                        <span class="audit-group-count">${counts[stageMeta.key] || 0}</span>
+                    </div>`;
+                    lastStage = stageMeta.key;
+                }
+                htmlStr += `<div id="audit-contact-${c.phone}" class="contact-card" onclick='openAuditChat(${jsArg(c.phone)}, ${jsArg(rawNome)}, ${jsArg(c.notes || '')}, ${jsArg(c.extra_info || '')}, ${jsArg(c.assigned_to || 'N/A')}, ${jsArg(c.tags_data || '')}, ${jsArg(c.stage || '')}, this)'><div class="avatar" style="flex-shrink:0;">${nome.charAt(0).toUpperCase()}</div><div class="card-info"><div class="card-title">${nome}</div><div class="card-meta"><span>${stageMeta.label} · ${cleanPhone(c.phone)} ${tagsHtml}</span><span style="color:var(--primary);">${c.assigned_to || ''}</span></div></div></div>`;
+            });
+            box.dataset.lastStage = lastStage;
+            box.insertAdjacentHTML('beforeend', htmlStr); auditOffset += 30;
+        } catch(e) {}
+    }
+    async function openAuditChat(phone, name, notes, extra, owner, tagsData, stage, element) {
+        currentAuditPhone = phone; currentMessageCount = 0; 
+        currentReplyId = null; currentReactionMsgId = null; currentForwardMsgId = null; currentEditMsgId = null;
+        document.getElementById('audit-reply-bar').style.display = 'none';
+        document.getElementById('reactionModal').style.display = 'none';
+        document.getElementById('forwardModal').style.display = 'none';
+        document.getElementById('editModal').style.display = 'none';
+        document.getElementById('admin-chat-input').value = '';
+        document.getElementById('audit-chat-history').innerHTML = '<div style="display:flex; height:100%; align-items:center; justify-content:center; color:var(--text-muted);">Carregando...</div>';
+        document.querySelectorAll('#audit-list-col .contact-card').forEach(el => el.classList.remove('active')); if(element) element.classList.add('active');
+        document.getElementById('audit-chat-title').innerText = `${getCleanName(name)}`; document.getElementById('audit-info-phone').value = cleanPhone(phone); document.getElementById('audit-info-name').value = name; document.getElementById('audit-info-notes').value = notes; document.getElementById('audit-info-extra').value = extra; renderAuditTagsUI(tagsData || '');
+        if (!ADMIN_CAN_AUDIT) {
+            document.getElementById('admin-takeover-box').style.display = 'none';
+            document.getElementById('admin-chat-controls').style.display = 'none';
+        } else if (owner === '{{ user.name }}' || adminTakenAuditPhones.has(phone)) {
+            document.getElementById('admin-takeover-box').style.display = 'none';
+            document.getElementById('admin-chat-controls').style.display = 'flex';
+        } else {
+            document.getElementById('admin-takeover-box').style.display = 'block';
+            document.getElementById('admin-chat-controls').style.display = 'none';
+        }
+        
+        const auditPhoneAtRequest = phone;
+        const pinRes = await fetch('/api/chat/' + auditPhoneAtRequest + '/pinned'); const pinData = await pinRes.json();
+        if (currentAuditPhone !== auditPhoneAtRequest) return;
+        if (pinData.pinned_message) { document.getElementById('audit-pinned-text-content').innerText = pinData.pinned_message; document.getElementById('audit-pinned-message-banner').style.display = 'flex'; } 
+        else { document.getElementById('audit-pinned-message-banner').style.display = 'none'; }
+
+        await refreshAuditChat(true); auditMobileView('chat');
+    }
+    async function refreshAuditChat(force = false) {
+        if(!currentAuditPhone) return;
+        const phoneAtRequest = currentAuditPhone;
+        const res = await fetch('/api/admin/spy_chat/' + phoneAtRequest); 
+        const msgs = await res.json(); 
+        if (currentAuditPhone !== phoneAtRequest) return;
+        const box = document.getElementById('audit-chat-history'); 
+        if(force || currentMessageCount === 0 || msgs.length < currentMessageCount) {
+            let htmlStr = '';
+            msgs.forEach(m => {
+                let wahaId = m.waha_id || m.id; let msgId = m.id; 
+                let isSeller = (m.sender !== phoneAtRequest && m.sender !== 'bot' && m.sender !== 'sistema');
+                let cls = m.sender === phoneAtRequest ? 'msg-client' : (m.sender === 'bot' ? 'msg-bot' : (m.sender === 'sistema' ? 'msg-system' : 'msg-seller'));
+                let senderTag = m.sender !== phoneAtRequest && m.sender !== 'bot' && m.sender !== 'sistema' ? `<div style="font-size:0.65rem; opacity:0.7; margin-bottom:4px;">${m.sender}</div>` : '';
+                let timeStr = m.timestamp ? `<span style="font-size:0.65rem; opacity:0.6; margin-left:6px;">${formatTime(m.timestamp)}</span>` : '';
+                
+                let actionsHtml = '';
+                if (ADMIN_CAN_AUDIT && m.sender !== 'sistema' && m.msg_type !== 'deleted') {
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="setAuditReply('${wahaId}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">reply</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openReactionModal('${wahaId}')">mood</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="pinAuditMessage('${phoneAtRequest}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">push_pin</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openForwardModal(${msgId})">forward</span>`;
+                    if (canEditRemoteMessage(m, currentAuditPhone)) {
+                        actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openEditModal('${wahaId}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">edit</span>`;
+                    }
+                    if (canDeleteRemoteMessage(m, currentAuditPhone)) {
+                        actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="confirmDelete('${wahaId}')">delete</span>`;
+                    }
+                }
+                htmlStr += `<div class="msg-bubble ${cls}">${senderTag}${formatMessage(m.msg_text)}<div style="display:flex; justify-content:flex-end; align-items:center; margin-top:4px;">${actionsHtml}${timeStr}</div></div>`;
+            });
+            box.innerHTML = htmlStr;
+        } else if (msgs.length > currentMessageCount) {
+            const newMsgs = msgs.slice(currentMessageCount); let htmlStr = '';
+            newMsgs.forEach(m => {
+                let wahaId = m.waha_id || m.id; let msgId = m.id; 
+                let isSeller = (m.sender !== phoneAtRequest && m.sender !== 'bot' && m.sender !== 'sistema');
+                let cls = m.sender === phoneAtRequest ? 'msg-client' : (m.sender === 'bot' ? 'msg-bot' : (m.sender === 'sistema' ? 'msg-system' : 'msg-seller'));
+                let senderTag = m.sender !== phoneAtRequest && m.sender !== 'bot' && m.sender !== 'sistema' ? `<div style="font-size:0.65rem; opacity:0.7; margin-bottom:4px;">${m.sender}</div>` : '';
+                let timeStr = m.timestamp ? `<span style="font-size:0.65rem; opacity:0.6; margin-left:6px;">${formatTime(m.timestamp)}</span>` : '';
+                
+                let actionsHtml = '';
+                if (ADMIN_CAN_AUDIT && m.sender !== 'sistema' && m.msg_type !== 'deleted') {
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="setAuditReply('${wahaId}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">reply</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openReactionModal('${wahaId}')">mood</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="pinAuditMessage('${phoneAtRequest}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">push_pin</span>`;
+                    actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openForwardModal(${msgId})">forward</span>`;
+                    if (canEditRemoteMessage(m, currentAuditPhone)) {
+                        actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="openEditModal('${wahaId}', \`${btoa(unescape(encodeURIComponent(m.msg_text)))}\`)">edit</span>`;
+                    }
+                    if (canDeleteRemoteMessage(m, currentAuditPhone)) {
+                        actionsHtml += `<span class="material-symbols-outlined act-icon" onclick="confirmDelete('${wahaId}')">delete</span>`;
+                    }
+                }
+                htmlStr += `<div class="msg-bubble ${cls}">${senderTag}${formatMessage(m.msg_text)}<div style="display:flex; justify-content:flex-end; align-items:center; margin-top:4px;">${actionsHtml}${timeStr}</div></div>`;
+            });
+            box.insertAdjacentHTML('beforeend', htmlStr);
+        }
+        currentMessageCount = msgs.length; box.scrollTop = box.scrollHeight;
+    }

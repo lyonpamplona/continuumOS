@@ -1,0 +1,21 @@
+# Fase 7 — Dependencias OPCIONAIS de observabilidade/alertas.
+#
+# O nucleo da Fase 7 funciona SEM estes pacotes:
+# - /metrics gera exposicao Prometheus em Python puro (services/observability.py).
+# - Sentry e OpenTelemetry sao ativados apenas se instalados E configurados;
+#   caso contrario viram no-op com log informativo (o boot nunca quebra).
+#
+# Instale conforme a necessidade do ambiente:
+#   pip install -r requirements-optional.txt
+
+# Alertas de erro
+sentry-sdk==2.19.2
+
+# Tracing distribuido (OpenTelemetry) sobre o middleware existente
+opentelemetry-sdk==1.29.0
+opentelemetry-exporter-otlp-proto-http==1.29.0
+opentelemetry-instrumentation-fastapi==0.50b0
+
+# Opcional: metricas process/GC padrao do prometheus_client (o /metrics ja
+# funciona sem isto). Util se quiser complementar com coletores nativos.
+prometheus-client==0.21.1

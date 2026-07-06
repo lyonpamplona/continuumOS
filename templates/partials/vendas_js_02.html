@@ -1,0 +1,699 @@
+    function getCleanName(rawName) {
+        if(!rawName) return "";
+        let parts = rawName.split(' - ');
+        return parts.length > 1 ? parts.slice(1).join(' - ').trim() : rawName.trim();
+    }
+
+    function contactDomId(phone) {
+        return String(phone || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    function formatMessage(text) {
+        if (!text) return "";
+        if (text.includes("Mídia do histórico")) return `<div style="padding:10px 16px; background:rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(8px); border-radius:12px; font-size:0.8rem; color:var(--text-muted); display:inline-flex; align-items:center; gap:8px;"><span class="material-symbols-outlined" style="font-size:18px;">cloud_sync</span> <span>Mídia em nuvem (visualize no aparelho)</span></div>`;
+        if (text.startsWith("[IMAGE] ")) { const url = text.replace("[IMAGE] ", ""); return `<a href="${url}" target="_blank"><img src="${url}" style="max-width:100%; max-height:200px; border-radius:8px; cursor:pointer; margin-top:4px;"></a>`; }
+        if (text.startsWith("[VIDEO] ")) { const url = text.replace("[VIDEO] ", ""); return `<video src="${url}" controls style="max-width:100%; max-height:200px; border-radius:8px; margin-top:4px;"></video>`; }
+        if (text.startsWith("[AUDIO] ") || text.startsWith("[PTT] ")) { const url = text.replace("[AUDIO] ", "").replace("[PTT] ", ""); return `<audio src="${url}" controls preload="metadata" style="max-width:250px; margin-top:4px; height:40px;"></audio>`; }
+        if (text.startsWith("[DOCUMENT] ")) { const url = text.replace("[DOCUMENT] ", ""); return `<a href="${url}" target="_blank" style="color:var(--primary); text-decoration:none; display:flex; align-items:center; gap:4px; margin-top:4px;"><span class="material-symbols-outlined">description</span> Abrir Documento</a>`; }
+        return text;
+    }
+
+    let notificationAudioCtx = null;
+    let lastDesktopNotificationAt = 0;
+
+    function notificationSetting(key, fallback = 'on') {
+        return localStorage.getItem(key) || fallback;
+    }
+
+    function setupNotificationPreferences() {
+        if (!localStorage.getItem('continnumOS:soundNotifications')) localStorage.setItem('continnumOS:soundNotifications', 'on');
+        if (!localStorage.getItem('continnumOS:desktopNotifications')) localStorage.setItem('continnumOS:desktopNotifications', 'on');
+        updateNotificationButtons();
+        document.addEventListener('click', unlockNotificationAudio, {once:true});
+    }
+
+    function updateNotificationButtons() {
+        const desktopBtn = document.getElementById('btn-desktop-notify');
+        const soundBtn = document.getElementById('btn-sound-notify');
+        if (desktopBtn) desktopBtn.classList.toggle('btn-primary', notificationSetting('continnumOS:desktopNotifications') === 'on');
+        if (soundBtn) soundBtn.classList.toggle('btn-primary', notificationSetting('continnumOS:soundNotifications') === 'on');
+    }
+
+    function toggleSettingsSection(id) {
+        const section = document.getElementById(id);
+        if (section) section.classList.toggle('active');
+    }
+
+    async function unlockNotificationAudio() {
+        try {
+            notificationAudioCtx = notificationAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            if (notificationAudioCtx.state === 'suspended') await notificationAudioCtx.resume();
+        } catch(e) {}
+        if (notificationSetting('continnumOS:desktopNotifications') === 'on' && 'Notification' in window && Notification.permission === 'default') {
+            await Notification.requestPermission();
+            updateNotificationButtons();
+        }
+    }
+
+    async function toggleDesktopNotifications() {
+        if (notificationSetting('continnumOS:desktopNotifications') === 'on' && 'Notification' in window && Notification.permission === 'default') {
+            await Notification.requestPermission();
+            updateNotificationButtons();
+            notifyToast(Notification.permission === 'granted' ? 'Notificações da área de trabalho autorizadas.' : 'Permissão de notificação não autorizada.', Notification.permission !== 'granted');
+            return;
+        }
+        const enabled = notificationSetting('continnumOS:desktopNotifications') !== 'on';
+        localStorage.setItem('continnumOS:desktopNotifications', enabled ? 'on' : 'off');
+        if (enabled && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+        updateNotificationButtons();
+        notifyToast(enabled ? 'Notificações da área de trabalho ativadas.' : 'Notificações da área de trabalho desativadas.');
+    }
+
+    function toggleSoundNotifications() {
+        const enabled = notificationSetting('continnumOS:soundNotifications') !== 'on';
+        localStorage.setItem('continnumOS:soundNotifications', enabled ? 'on' : 'off');
+        updateNotificationButtons();
+        if (enabled) playMsnSound();
+        notifyToast(enabled ? 'Som MSN ativado.' : 'Som de notificação desativado.');
+    }
+
+    function playMsnSound() {
+        if (notificationSetting('continnumOS:soundNotifications') !== 'on') return;
+        try {
+            const ctx = notificationAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            notificationAudioCtx = ctx;
+            const now = ctx.currentTime;
+            const notes = [{freq: 988, start: 0, end: 0.11}, {freq: 1318, start: 0.12, end: 0.25}, {freq: 988, start: 0.27, end: 0.38}];
+            notes.forEach(note => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(note.freq, now + note.start);
+                gain.gain.setValueAtTime(0.0001, now + note.start);
+                gain.gain.exponentialRampToValueAtTime(0.42, now + note.start + 0.015);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + note.end);
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.start(now + note.start);
+                osc.stop(now + note.end + 0.02);
+            });
+        } catch(e) {}
+    }
+
+    function showDesktopNotification(title, body, phoneToOpen = null, internalTarget = null) {
+        if (!document.hidden || notificationSetting('continnumOS:desktopNotifications') !== 'on' || !('Notification' in window) || Notification.permission !== 'granted') return;
+        const now = Date.now();
+        if (now - lastDesktopNotificationAt < 1200) return;
+        lastDesktopNotificationAt = now;
+        const note = new Notification(title, {body: body, icon: '/static/logo.png', badge: '/static/logo.png', tag: phoneToOpen || internalTarget || title, renotify: true});
+        note.onclick = function() {
+            window.focus();
+            if (internalTarget) {
+                openInternalTargetFromToast(internalTarget);
+            } else if (phoneToOpen) {
+                const card = document.getElementById('contact-' + phoneToOpen);
+                if (card) { card.click(); if(window.innerWidth <= 1024) mobileView('chat'); }
+            }
+            note.close();
+        };
+    }
+
+    function playBeep(title, body, phoneToOpen = null) {
+        playMsnSound();
+        showDesktopNotification(title, body, phoneToOpen);
+        
+        Toastify({
+            text: phoneToOpen ? `💬 ${title}\n${body}\n👉 Clique para abrir` : `💬 ${title}\n${body}`,
+            duration: 5000,
+            close: true,
+            gravity: "top",
+            position: "right",
+            stopOnFocus: true,
+            style: {
+                background: "#F4EFF4", color: "#1D192B", borderRadius: "16px", boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
+                fontFamily: "'JetBrains Mono', monospace", border: "1px solid #EADDFF", padding: "12px 24px",
+                fontWeight: "500", display: "flex", alignItems: "center", gap: "8px", whiteSpace: "pre-wrap",
+                cursor: phoneToOpen ? "pointer" : "default"
+            },
+            onClick: function() {
+                if (phoneToOpen) {
+                    const card = document.getElementById('contact-' + phoneToOpen);
+                    if (card) {
+                        card.click();
+                        if(window.innerWidth <= 1024) mobileView('chat');
+                    }
+                }
+            }
+        }).showToast();
+    }
+
+    async function uploadMedia() {
+        const fileInput = document.getElementById('media-upload');
+        if (!fileInput.files.length || !currentPhone) return;
+        const formData = new FormData();
+        formData.append("phone", currentPhone);
+        formData.append("file", fileInput.files[0]);
+        if (currentReplyId) formData.append("quoted_id", currentReplyId);
+        try {
+            const res = await fetch('/api/chat/send_media', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.status !== 'ok') {
+                Toastify({text: `Falha ao enviar mídia: ${data.message || 'sem confirmação da Evolution'}`, duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+            }
+        } catch(e) {
+            Toastify({text: "Falha de conexão ao enviar mídia.", duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        }
+        fileInput.value = "";
+        cancelReply();
+    }
+
+    async function uploadInternalMedia() {
+        const fileInput = document.getElementById('media-upload-internal');
+        if (!fileInput.files.length) return;
+        const formData = new FormData();
+        formData.append("target", currentInternalTarget);
+        formData.append("file", fileInput.files[0]);
+        try { await fetch('/api/internal_chat/send_media', { method: 'POST', body: formData }); } catch(e) {}
+        fileInput.value = "";
+    }
+
+    async function uploadAvatarAction(inputElement) {
+        if (!inputElement.files.length) return;
+        const formData = new FormData();
+        formData.append("file", inputElement.files[0]);
+        try {
+            const res = await fetch('/api/profile/upload_avatar', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                document.getElementById('preview-avatar').innerHTML = `<img src="${data.url}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+                const topAvatar = document.querySelector('.profile-trigger .avatar');
+                if(topAvatar) topAvatar.innerHTML = `<img src="${data.url}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+            }
+        } catch(e) {}
+    }
+
+    let mediaRecorder; let audioChunks = []; let isRecording = false;
+
+    async function toggleRecording(chatType) {
+        let btnId = chatType === 'internal' ? 'btn-mic-internal' : 'btn-mic';
+        let targetId = chatType === 'internal' ? currentInternalTarget : currentPhone;
+        let isInternal = chatType === 'internal';
+
+        const btn = document.getElementById(btnId);
+        
+        if (isRecording) {
+            mediaRecorder.stop();
+            isRecording = false;
+            btn.style.color = "var(--text-main)";
+            btn.innerHTML = '<span class="material-symbols-outlined">mic</span>';
+            return;
+        }
+
+        if (!targetId) return;
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            mediaRecorder.addEventListener("dataavailable", event => { audioChunks.push(event.data); });
+            mediaRecorder.addEventListener("stop", async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
+                const file = new File([audioBlob], "audio_message.ogg", { type: 'audio/ogg' });
+                const formData = new FormData();
+                if (isInternal) {
+                    formData.append("target", targetId); formData.append("file", file);
+                    await fetch('/api/internal_chat/send_media', { method: 'POST', body: formData });
+                } else {
+                    formData.append("phone", targetId); formData.append("file", file);
+                    if (currentReplyId) formData.append("quoted_id", currentReplyId);
+                    await fetch('/api/chat/send_media', { method: 'POST', body: formData });
+                }
+                stream.getTracks().forEach(track => track.stop());
+                cancelReply();
+            });
+            mediaRecorder.start();
+            isRecording = true;
+            btn.style.color = "#ff5252";
+            btn.innerHTML = '<span class="material-symbols-outlined">stop_circle</span>';
+        } catch (err) {}
+    }
+
+    function fetchProfilePic(phone) {
+        fetch(`/api/chat/${phone}/picture`).then(r => r.json()).then(d => {
+            if (currentPhone !== phone) return;
+            const avatarDiv = document.getElementById('chat-hdr-avatar');
+            if (d.url && avatarDiv) {
+                avatarDiv.innerHTML = `<img src="${d.url}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
+            }
+        });
+    }
+
+    let lastLetter = '';
+    async function loadMoreContacts() {
+        try {
+            const res = await fetch(`/api/contacts/load?offset=${contactOffset}&search=${encodeURIComponent(contactSearch)}&list_id=${encodeURIComponent(contactListId)}&bucket=${encodeURIComponent(contactBucket)}&initial=${encodeURIComponent(contactInitial)}`);
+            let data = await res.json();
+            const box = document.getElementById('dyn-contacts-list'); if(data.length < 30) document.getElementById('btn-load-more').style.display = 'none';
+            if(contactOffset === 0) lastLetter = '';
+            if(contactOffset === 0 && data.length === 0) {
+                box.innerHTML = '<div style="grid-column:1/-1; padding:32px 16px; text-align:center; color:var(--text-muted); border:1px dashed var(--border); border-radius:8px;">Nenhum contato encontrado com os filtros atuais.</div>';
+                return;
+            }
+            data.sort((a, b) => getCleanName(a.name || a.phone).localeCompare(getCleanName(b.name || b.phone)));
+            let htmlStr = '';
+            data.forEach(c => {
+                let rawNome = c.name ? c.name : cleanPhone(c.phone); 
+                let cleanNome = getCleanName(rawNome);
+                let initial = cleanNome.charAt(0).toUpperCase();
+                if(initial !== lastLetter && /[A-Z]/.test(initial) && !contactSearch) { htmlStr += `<div class="az-header" style="grid-column: 1/-1;">${initial}</div>`; lastLetter = initial; }
+                let listHtml = '';
+                if(c.list_data) {
+                    const listItems = c.list_data.split(',');
+                    listItems.slice(0, 2).forEach(item => {
+                        let p = item.split('|');
+                        if(p.length===3) listHtml += `<span class="tag-pill" style="background:${p[2]}; font-size:0.62rem;">${escapeHtml(p[1])}</span>`;
+                    });
+                    if (listItems.length > 2) listHtml += `<span class="contact-mini-pill">+${listItems.length - 2}</span>`;
+                }
+                const ownerPill = c.assigned_to ? `<span class="contact-mini-pill"><span class="material-symbols-outlined" style="font-size:13px;">person</span>${escapeHtml(c.assigned_to)}</span>` : '<span class="contact-mini-pill" style="color:#F15C6D;"><span class="material-symbols-outlined" style="font-size:13px;">person_alert</span>Sem responsável</span>';
+                const stagePill = c.stage && c.stage !== 'carteira' ? `<span class="contact-mini-pill"><span class="material-symbols-outlined" style="font-size:13px;">inventory_2</span>${escapeHtml(c.stage)}</span>` : '';
+                const domId = contactDomId(c.phone);
+                const checked = selectedContactPhones.has(c.phone) ? 'checked' : '';
+                htmlStr += `<div id="contact-inline-${domId}" class="contact-card contact-card-advanced" data-name="${escapeHtml(rawNome)}" data-notes="${escapeHtml(c.notes || '')}" data-extra="${escapeHtml(c.extra_info || '')}">
+                    <div class="contact-card-main" onclick='openContactFromCard(${jsArg(c.phone)}, ${jsArg(rawNome)}, ${jsArg(c.notes || '')}, ${jsArg(c.extra_info || '')}, ${jsArg(c.tags_data || '')}, ${jsArg(c.list_data || '')})'>
+                        <label class="contact-select-box" onclick="event.stopPropagation();" title="Selecionar contato"><input type="checkbox" class="contact-select-checkbox" value="${escapeHtml(c.phone)}" ${checked} onchange="toggleContactSelection(this.value, this.checked, event)"></label>
+                        <div class="avatar">${initial}</div>
+                        <div class="card-info">
+                            <div class="card-title">${escapeHtml(cleanNome)}</div>
+                            <div class="card-meta"><span class="contact-phone-text">${escapeHtml(cleanPhone(c.phone))}</span>${ownerPill}${stagePill}</div>
+                            <div class="contact-list-pills">${listHtml || '<span style="font-size:0.66rem; color:var(--text-muted);">Sem lista</span>'}</div>
+                        </div>
+                        <div class="contact-inline-actions">
+                            <button class="btn contact-icon-btn" onclick='startInlineContactEdit(${jsArg(c.phone)}, event)' title="Editar contato"><span class="material-symbols-outlined">edit</span></button>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            box.insertAdjacentHTML('beforeend', htmlStr);
+            updateBulkContactBar();
+            contactOffset += 30;
+        } catch(e) {}
+    }
+
+    function openInternalChat(target, element) {
+        currentInternalTarget = target;
+        clearInternalUnread(target);
+        cancelInternalReply();
+        document.getElementById('internal-chat-history').innerHTML = '<div style="display:flex; height:100%; align-items:center; justify-content:center; color:var(--text-muted);">Carregando...</div>';
+        document.querySelectorAll('#int-col-list .contact-card').forEach(el => el.classList.remove('active'));
+        if(element) element.classList.add('active');
+        document.getElementById('int-chat-title').innerText = target === 'geral' ? 'Mural Geral' : target;
+        loadInternalChat();
+        internalMobileView('chat');
+        ensureInternalChatComposer();
+    }
+
+    function formatInternalMessage(text, lightBubble = false) {
+        if (!text) return "";
+        if (text.startsWith("[IMAGE] ") || text.startsWith("[VIDEO] ") || text.startsWith("[AUDIO] ") || text.startsWith("[PTT] ") || text.startsWith("[DOCUMENT] ")) return formatMessage(text);
+        const mentionColor = lightBubble ? '#05382f' : 'var(--primary)';
+        return escapeHtml(text).replace(/@([\wÀ-ÿ.-]+)/g, `<span style="color:${mentionColor}; font-weight:700;">@$1</span>`);
+    }
+    function renderInternalReactions(reactions) {
+        const counts = {};
+        Object.values(reactions || {}).forEach(emoji => { if (emoji) counts[emoji] = (counts[emoji] || 0) + 1; });
+        return Object.entries(counts).map(([emoji, count]) => `<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; background:rgba(255,255,255,0.08); border:1px solid var(--border); font-size:0.72rem;">${emoji}${count > 1 ? ` ${count}` : ''}</span>`).join('');
+    }
+    function setInternalReply(messageId, sender, text) {
+        currentInternalReplyId = messageId;
+        document.getElementById('internal-reply-sender').innerText = `Respondendo ${sender || 'Equipe'}`;
+        document.getElementById('internal-reply-text').innerText = text || '';
+        document.getElementById('internal-reply-bar').style.display = 'flex';
+        document.getElementById('internal-input').focus();
+    }
+    function setInternalReplyFromCache(messageId) {
+        const item = internalMessageCache[messageId] || {};
+        setInternalReply(messageId, item.sender || 'Equipe', item.text || '');
+    }
+    function cancelInternalReply() {
+        currentInternalReplyId = null;
+        const bar = document.getElementById('internal-reply-bar');
+        if (bar) bar.style.display = 'none';
+    }
+    async function reactInternalMessage(messageId, emoji) {
+        await fetch('/api/internal_chat/react', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId, emoji})});
+    }
+    function hideInternalMessagePanels(exceptId = '') {
+        document.querySelectorAll('.internal-msg-menu, .internal-reaction-panel, .internal-forward-panel, .internal-edit-panel').forEach(el => {
+            if (el.id !== exceptId) el.style.display = 'none';
+        });
+    }
+    function toggleInternalMessageMenu(messageId, event) {
+        event.stopPropagation();
+        const panel = document.getElementById(`internal-menu-${messageId}`);
+        if (!panel) return;
+        const willShow = panel.style.display !== 'flex';
+        hideInternalMessagePanels(willShow ? panel.id : '');
+        panel.style.display = willShow ? 'flex' : 'none';
+        if (willShow) setTimeout(() => panel.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'}), 30);
+    }
+    function toggleInternalReactionPanel(messageId) {
+        const panel = document.getElementById(`internal-reactions-${messageId}`);
+        if (!panel) return;
+        const willShow = panel.style.display !== 'flex';
+        hideInternalMessagePanels(willShow ? panel.id : '');
+        panel.style.display = willShow ? 'flex' : 'none';
+        if (willShow) setTimeout(() => panel.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'}), 30);
+    }
+    function toggleInternalForwardPanel(messageId) {
+        const panel = document.getElementById(`internal-forward-${messageId}`);
+        if (!panel) return;
+        const willShow = panel.style.display !== 'block';
+        hideInternalMessagePanels(willShow ? panel.id : '');
+        panel.style.display = willShow ? 'block' : 'none';
+        if (willShow) setTimeout(() => panel.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'}), 30);
+    }
+    function toggleInternalEditPanel(messageId) {
+        const panel = document.getElementById(`internal-edit-${messageId}`);
+        if (!panel) return;
+        const willShow = panel.style.display !== 'block';
+        hideInternalMessagePanels(willShow ? panel.id : '');
+        panel.style.display = willShow ? 'block' : 'none';
+        if (willShow) panel.querySelector('textarea')?.focus();
+        if (willShow) setTimeout(() => panel.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'}), 30);
+    }
+    function internalTargetOptionsHtml() {
+        return Array.from(document.querySelectorAll('#int-col-list .contact-card')).map(card => {
+            const title = (card.querySelector('.card-title')?.innerText || '').trim();
+            const target = title === 'Comunicação Interna' ? 'geral' : title;
+            return `<option value="${escapeHtml(target)}">${escapeHtml(title)}</option>`;
+        }).join('');
+    }
+    async function forwardInternalMessage(messageId) {
+        const select = document.getElementById(`internal-forward-target-${messageId}`);
+        if (!select) return;
+        await fetch('/api/internal_chat/forward', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId, target: select.value})});
+        hideInternalMessagePanels();
+    }
+    async function editInternalMessage(messageId) {
+        const input = document.getElementById(`internal-edit-text-${messageId}`);
+        const text = (input?.value || '').trim();
+        if (!text) return;
+        const res = await fetch('/api/internal_chat/edit', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId, text})});
+        const data = await res.json();
+        if (!res.ok || data.status !== 'ok') return Toastify({text: data.message || "Falha ao editar mensagem.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        hideInternalMessagePanels();
+        await loadInternalChat();
+    }
+    async function deleteInternalMessage(messageId) {
+        if (!confirm('Apagar esta mensagem para todos?')) return;
+        const res = await fetch('/api/internal_chat/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId})});
+        const data = await res.json();
+        if (!res.ok || data.status !== 'ok') return Toastify({text: data.message || "Falha ao apagar mensagem.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        hideInternalMessagePanels();
+        await loadInternalChat();
+    }
+    async function togglePinInternalMessage(messageId, shouldPin) {
+        const endpoint = shouldPin ? 'pin' : 'unpin';
+        const res = await fetch(`/api/internal_chat/${endpoint}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId})});
+        const data = await res.json();
+        if (!res.ok || data.status !== 'ok') return Toastify({text: data.message || "Falha ao atualizar fixação.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        hideInternalMessagePanels();
+        await loadInternalChat();
+    }
+
+    async function loadInternalChat() {
+        const box = document.getElementById('internal-chat-history');
+        const previousHtml = box ? box.innerHTML : '';
+        try {
+        const res = await fetch('/api/internal_chat/' + encodeURIComponent(currentInternalTarget));
+        if (!res.ok) throw new Error(`internal_chat ${res.status}`);
+        const msgs = await res.json();
+        if (!Array.isArray(msgs)) throw new Error('Resposta inválida do chat interno');
+        let htmlStr = '';
+        internalMessageCache = {};
+        let latestVisibleInternalId = 0;
+        msgs.forEach(m => {
+            latestVisibleInternalId = Math.max(latestVisibleInternalId, Number(m.id || 0));
+            internalMessageCache[m.id] = {sender: m.sender_name, text: m.msg_text || ''};
+            let isMe = m.sender_name === '{{ user.name }}';
+            let align = isMe ? 'flex-end' : 'flex-start'; 
+            let bg = isMe ? 'var(--wa-green)' : 'var(--surface)'; 
+            let color = isMe ? '#000' : 'var(--text-main)';
+            const metaColor = isMe ? 'rgba(0,0,0,0.68)' : 'var(--text-muted)';
+            const iconColor = isMe ? '#05382f' : 'var(--text-muted)';
+            const isDeleted = Boolean(m.deleted_at);
+            const isPinned = Boolean(m.pinned_at);
+            const canManage = isMe || '{{ user.role }}' === 'admin';
+            let nameDisplay = '';
+            if(currentInternalTarget === 'geral' && !isMe) {
+                let nameColor = getColorFromName(m.sender_name);
+                nameDisplay = `<div style="font-size:0.75rem; margin-bottom:4px; font-weight:700; color:${nameColor};">${m.sender_name}</div>`;
+            } else if (!isMe) {
+                nameDisplay = `<div style="font-size:0.7rem; opacity:0.7; margin-bottom:4px;">${m.sender_name}</div>`;
+            }
+            let timeStr = `<div style="font-size:0.6rem; color:${metaColor}; text-align:right; margin-top:4px;">${formatTime(m.timestamp)}</div>`;
+            const pinnedHtml = isPinned ? `<div style="display:flex; align-items:center; gap:4px; margin-bottom:6px; color:${isMe ? '#06352d' : 'var(--primary)'}; font-size:0.68rem; font-weight:700;"><span class="material-symbols-outlined" style="font-size:14px;">push_pin</span>Fixada por ${escapeHtml(m.pinned_by || 'Equipe')}</div>` : '';
+            const replyHtml = m.reply_to_id && !isDeleted ? `<div style="border-left:3px solid var(--primary); padding:6px 8px; margin-bottom:6px; background:rgba(0,0,0,0.12); border-radius:6px;"><div style="font-size:0.68rem; font-weight:700;">${escapeHtml(m.reply_sender_name || 'Mensagem')}</div><div style="font-size:0.72rem; opacity:0.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(m.reply_msg_text || '')}</div></div>` : '';
+            const forwardedHtml = m.forwarded_from_id ? '<div style="font-size:0.68rem; opacity:0.7; margin-bottom:4px;">Encaminhada</div>' : '';
+            const reactionsHtml = renderInternalReactions(m.reactions);
+            const menuButton = `<span class="material-symbols-outlined act-icon" style="color:${iconColor};" onclick="toggleInternalMessageMenu(${m.id}, event)">more_vert</span>`;
+            const messageHtml = isDeleted ? '<span style="font-style:italic; opacity:0.7;">Mensagem apagada</span>' : formatInternalMessage(m.msg_text, isMe);
+            const editedHtml = m.edited_at && !isDeleted ? `<span style="font-size:0.6rem; color:${metaColor};">editada</span>` : '';
+            const panelsHtml = `<div id="internal-menu-${m.id}" class="internal-msg-menu" style="display:none; flex-direction:column; gap:4px; margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:rgba(0,0,0,0.16);">
+                    ${!isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); setInternalReplyFromCache(${m.id}); hideInternalMessagePanels();"><span class="material-symbols-outlined">reply</span>Responder</button>` : ''}
+                    ${canManage && !isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); toggleInternalEditPanel(${m.id});"><span class="material-symbols-outlined">edit</span>Editar</button>` : ''}
+                    ${!isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); toggleInternalReactionPanel(${m.id});"><span class="material-symbols-outlined">add_reaction</span>Reagir</button>` : ''}
+                    ${!isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); toggleInternalForwardPanel(${m.id});"><span class="material-symbols-outlined">forward</span>Encaminhar</button>` : ''}
+                    ${!isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); togglePinInternalMessage(${m.id}, ${isPinned ? 'false' : 'true'});"><span class="material-symbols-outlined">push_pin</span>${isPinned ? 'Desfixar' : 'Fixar'}</button>` : ''}
+                    ${canManage && !isDeleted ? `<button class="btn btn-danger" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); deleteInternalMessage(${m.id});"><span class="material-symbols-outlined">delete</span>Apagar</button>` : ''}
+                </div>
+                <div id="internal-edit-${m.id}" class="internal-edit-panel" style="display:none; margin-top:6px; padding:8px; border:1px solid var(--border); border-radius:8px; background:rgba(0,0,0,0.16);">
+                    <textarea id="internal-edit-text-${m.id}" class="input-text" rows="3" style="margin-bottom:8px; resize:vertical;">${escapeHtml(m.msg_text || '')}</textarea>
+                    <button class="btn btn-primary" style="width:100%;" onclick="event.stopPropagation(); editInternalMessage(${m.id});">Salvar edição</button>
+                </div>
+                <div id="internal-reactions-${m.id}" class="internal-reaction-panel" style="display:none; gap:8px; margin-top:6px; padding:8px; border:1px solid var(--border); border-radius:8px; background:rgba(0,0,0,0.16);">
+                    ${['👍','❤️','✅','👀'].map(emoji => `<button class="btn" style="padding:6px 8px;" onclick="event.stopPropagation(); reactInternalMessage(${m.id}, '${emoji}'); hideInternalMessagePanels();">${emoji}</button>`).join('')}
+                </div>
+                <div id="internal-forward-${m.id}" class="internal-forward-panel" style="display:none; margin-top:6px; padding:8px; border:1px solid var(--border); border-radius:8px; background:rgba(0,0,0,0.16);">
+                    <select id="internal-forward-target-${m.id}" class="input-text" style="margin-bottom:8px;">${internalTargetOptionsHtml()}</select>
+                    <button class="btn" style="width:100%; height:38px; border-radius:8px; justify-content:center; background:var(--wa-green); color:#000; border:1px solid var(--wa-green); padding:0 12px;" onclick="event.stopPropagation(); forwardInternalMessage(${m.id});">Encaminhar</button>
+                </div>`;
+            htmlStr += `<div class="msg-bubble" style="align-self:${align}; background:${bg}; color:${color}; ${isPinned ? 'border:1px solid var(--primary); box-shadow:0 0 0 1px rgba(186,128,255,0.18);' : ''}">${nameDisplay}${pinnedHtml}${replyHtml}${forwardedHtml}${messageHtml}${reactionsHtml && !isDeleted ? `<div style="display:flex; gap:4px; margin-top:6px; flex-wrap:wrap;">${reactionsHtml}</div>` : ''}<div style="display:flex; justify-content:flex-end; align-items:center; gap:4px; margin-top:4px;">${editedHtml}${menuButton}${timeStr}</div>${panelsHtml}</div>`;
+        });
+        box.innerHTML = htmlStr; box.scrollTop = box.scrollHeight; ensureInternalChatComposer();
+        if (document.getElementById('tab-internal')?.classList.contains('active')) {
+            clearInternalUnread(currentInternalTarget, latestVisibleInternalId);
+        }
+        } catch(e) {
+            console.error('Falha ao carregar chat interno:', e);
+            if (box && previousHtml) box.innerHTML = previousHtml;
+            Toastify({text: "Falha ao carregar comunicação interna.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        }
+    }
+    async function sendInternalMessage() {
+        const input = document.getElementById('internal-input');
+        const text = input.value.trim();
+        if(!text) return;
+        const replyId = currentInternalReplyId;
+        try {
+            const res = await fetch('/api/internal_chat/send', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({target: currentInternalTarget, text, reply_to_id: replyId})});
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.message || 'Falha ao enviar');
+            input.value = '';
+            cancelInternalReply();
+            await loadInternalChat();
+        } catch(e) {
+            Toastify({text: "Falha ao enviar mensagem interna.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        }
+    }
+
+    function changeMonth(dir) { calDate.setMonth(calDate.getMonth() + dir); renderCalendar(); }
+    async function renderCalendar() {
+        const y = calDate.getFullYear(); const m = calDate.getMonth();
+        document.getElementById('cal-month-label').innerText = new Date(y, m, 1).toLocaleDateString('pt-BR', {month:'short', year:'numeric'}).toUpperCase();
+        const ymStr = `${y}-${String(m+1).padStart(2,'0')}`;
+        const res = await fetch('/api/calendar/' + ymStr); monthEvents = await res.json();
+        await loadDueCalendarTasks();
+        const firstDay = new Date(y, m, 1).getDay(); const daysInMonth = new Date(y, m+1, 0).getDate();
+        const box = document.getElementById('cal-days'); box.innerHTML = '';
+        for(let i=0; i<firstDay; i++) box.innerHTML += '<div></div>';
+        for(let i=1; i<=daysInMonth; i++) {
+            let dStr = `${ymStr}-${String(i).padStart(2,'0')}`; let hasEv = monthEvents.some(e => e.event_date === dStr) ? 'has-event' : '';
+            box.insertAdjacentHTML('beforeend', `<div class="cal-day ${hasEv}" data-date="${dStr}" onclick="selectDate('${dStr}', this)">${i}</div>`);
+        }
+    }
+    function agendaDateLabel(dStr) {
+        return dStr ? dStr.split('-').reverse().join('/') : 'Selecione';
+    }
+    function agendaStatusLabel(status) {
+        return {pendente:'Pendente', remarcado:'Remarcado', contatado:'Contatado', cancelado:'Cancelado'}[status || 'pendente'] || status;
+    }
+    function agendaDueLabel(eventItem) {
+        if (eventItem.due_at) return formatTime(eventItem.due_at);
+        return '--:--';
+    }
+    function agendaContactLabel(e) {
+        return e.contact_name || (e.phone ? cleanPhone(e.phone) : '');
+    }
+    function agendaCardHtml(e) {
+        const status = e.status || 'pendente';
+        const canAct = status !== 'contatado' && status !== 'cancelado';
+        const contactLabel = agendaContactLabel(e);
+        return `<div style="background:var(--surface); padding:12px; border-radius:8px; border:1px solid var(--border); display:flex; gap:10px; align-items:flex-start; justify-content:space-between;">
+            <div style="flex:1; min-width:0;">
+                <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
+                    <span class="agenda-status-pill">${escapeHtml(agendaDueLabel(e))}</span>
+                    <span class="agenda-status-pill">${escapeHtml(agendaStatusLabel(status))}</span>
+                    ${contactLabel ? `<span class="agenda-status-pill">${escapeHtml(contactLabel)}</span>` : ''}
+                </div>
+                <div style="font-size:0.86rem; line-height:1.4;">${escapeHtml(e.note || '')}</div>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                ${canAct ? `<button class="btn btn-primary" style="padding:5px 8px; font-size:0.72rem;" onclick="completeAgendaNote(${e.id})">Contatado</button><button class="btn" style="padding:5px 8px; font-size:0.72rem;" onclick="rescheduleAgendaNote(${e.id})">Remarcar</button>` : ''}
+                <button class="menu-toggle" style="color:#f15c6d;" onclick="delAgendaNote(${e.id})"><span class="material-symbols-outlined" style="font-size:16px;">delete</span></button>
+            </div>
+        </div>`;
+    }
+    function renderAgendaDayDetails() {
+        const label = agendaDateLabel(selectedDateStr);
+        const inlineLabel = document.getElementById('agenda-date-label');
+        const modalLabel = document.getElementById('agenda-modal-date-label');
+        if (inlineLabel) inlineLabel.innerText = label;
+        if (modalLabel) modalLabel.innerText = `Agenda de ${label}`;
+        const evs = monthEvents.filter(e => e.event_date === selectedDateStr);
+        const html = evs.length
+            ? evs.map(e => agendaCardHtml(e)).join('')
+            : '<div style="color:var(--text-muted); padding:16px; text-align:center; border:1px dashed var(--border); border-radius:8px;">Sem tarefas para este dia.</div>';
+        const inlineBox = document.getElementById('agenda-notes-list');
+        const modalBox = document.getElementById('agenda-modal-notes-list');
+        if (inlineBox) inlineBox.innerHTML = html;
+        if (modalBox) modalBox.innerHTML = html;
+    }
+    function selectDate(dStr, element = null, options = {}) {
+        document.querySelectorAll('.cal-day').forEach(el => el.classList.remove('active'));
+        const activeDay = element || document.querySelector(`.cal-day[data-date="${dStr}"]`);
+        if (activeDay) activeDay.classList.add('active');
+        selectedDateStr = dStr;
+        renderAgendaDayDetails();
+        if (options.openModal !== false) document.getElementById('agendaDayModal').style.display = 'flex';
+    }
+    function refreshSelectedAgendaDate(openModal = false) {
+        if (selectedDateStr) selectDate(selectedDateStr, null, {openModal});
+    }
+    async function loadDueCalendarTasks() {
+        const box = document.getElementById('agenda-due-list');
+        if (!box) return;
+        try {
+            const res = await fetch('/api/calendar/due/tasks');
+            const tasks = await res.json();
+            if (!Array.isArray(tasks) || tasks.length === 0) {
+                box.innerHTML = '';
+                return;
+            }
+            box.innerHTML = `<div style="font-size:0.76rem; color:#F15C6D; font-weight:700; display:flex; align-items:center; gap:6px;"><span class="material-symbols-outlined" style="font-size:16px;">notification_important</span>Tarefas vencidas</div>` + tasks.slice(0, 6).map(e => {
+                const contactLabel = agendaContactLabel(e);
+                return `<div style="background:#2A1114; border:1px solid #4A1C22; border-radius:8px; padding:10px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+                    <div style="min-width:0;">
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:5px;"><span class="agenda-status-pill overdue">${escapeHtml(agendaDueLabel(e))}</span>${contactLabel ? `<span class="agenda-status-pill overdue">${escapeHtml(contactLabel)}</span>` : ''}</div>
+                        <div style="font-size:0.82rem; color:var(--text-main); line-height:1.35;">${escapeHtml(e.note || '')}</div>
+                    </div>
+                    <button class="btn btn-primary" style="padding:6px 8px; font-size:0.72rem; flex-shrink:0;" onclick="completeAgendaNote(${e.id})">Contatado</button>
+                </div>`;
+            }).join('');
+        } catch(e) {}
+    }
+    function scheduleCurrentContact() {
+        if (!currentPhone) return notifyToast('Selecione um contato para agendar retorno.', true);
+        switchMainTab('tab-tools');
+        const phoneInput = document.getElementById('agenda-phone');
+        const noteInput = document.getElementById('agenda-input');
+        const today = new Date();
+        selectedDateStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+        if (phoneInput) phoneInput.value = cleanPhone(currentPhone);
+        if (noteInput && !noteInput.value.trim()) noteInput.value = `Retorno - ${document.getElementById('info-name')?.value || cleanPhone(currentPhone)}`;
+        renderCalendar().then(() => refreshSelectedAgendaDate(true));
+    }
+    async function saveAgendaNote(source = 'inline') {
+        const fromModal = source === 'modal';
+        const inp = document.getElementById(fromModal ? 'agenda-modal-input' : 'agenda-input');
+        const timeInp = document.getElementById(fromModal ? 'agenda-modal-time' : 'agenda-time');
+        const phoneInp = document.getElementById(fromModal ? 'agenda-modal-phone' : 'agenda-phone');
+        if(!inp.value.trim() || !selectedDateStr) return notifyToast('Selecione uma data e informe a tarefa.', true);
+        const res = await fetch('/api/calendar', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({date: selectedDateStr, time: timeInp?.value || '09:00', note: inp.value.trim(), phone: phoneInp?.value || '', repeat_until_done: true})});
+        const data = await res.json();
+        if (data.status !== 'ok') return notifyToast(data.message || 'Falha ao salvar agenda.', true);
+        inp.value = '';
+        if (phoneInp) phoneInp.value = '';
+        await renderCalendar();
+        refreshSelectedAgendaDate(fromModal);
+    }
+    async function completeAgendaNote(id) {
+        await fetch(`/api/calendar/${id}/complete`, {method: 'POST'});
+        await renderCalendar();
+        refreshSelectedAgendaDate();
+    }
+    async function rescheduleAgendaNote(id) {
+        const date = prompt('Nova data (AAAA-MM-DD):', selectedDateStr || '');
+        if (!date) return;
+        const time = prompt('Novo horário (HH:MM):', document.getElementById('agenda-time')?.value || '09:00') || '09:00';
+        const res = await fetch(`/api/calendar/${id}/reschedule`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({date, time})});
+        const data = await res.json();
+        if (data.status !== 'ok') return notifyToast(data.message || 'Falha ao remarcar agenda.', true);
+        selectedDateStr = date;
+        await renderCalendar();
+        refreshSelectedAgendaDate();
+    }
+    async function delAgendaNote(id) { await fetch('/api/calendar/' + id, {method: 'DELETE'}); await renderCalendar(); refreshSelectedAgendaDate();}
+
+    async function loadTags() { const res = await fetch('/api/tags'); allTags = await res.json(); }
+    async function loadContactLists() {
+        const res = await fetch('/api/contact_lists');
+        allContactLists = await res.json();
+        const filter = document.getElementById('contact-list-filter');
+        const statusFilter = document.getElementById('status-list-filter');
+        if (filter) filter.innerHTML = '<option value="">Todas as listas</option>';
+        if (statusFilter) statusFilter.innerHTML = '<option value="">Todas as listas</option>';
+        allContactLists.forEach(list => {
+            const label = `${list.name}${list.contact_count ? ' (' + list.contact_count + ')' : ''}`;
+            if (filter) filter.insertAdjacentHTML('beforeend', `<option value="${list.id}">${label}</option>`);
+            if (statusFilter) statusFilter.insertAdjacentHTML('beforeend', `<option value="${list.id}">${label}</option>`);
+        });
+        updateContactFilterSummary();
+        renderBulkActionFields();
+    }
+    function renderTagsUI(tagsDataStr) {
+        currentClientTags = [];
+        if(tagsDataStr) { tagsDataStr.split(',').forEach(t => { let p = t.split('|'); if(p.length === 3) currentClientTags.push({id: parseInt(p[0]), name: p[1], color: p[2]}); }); }
+        const box = document.getElementById('client-tags-box'); box.innerHTML = '';
+        currentClientTags.forEach(t => { box.innerHTML += `<span class="tag-pill" style="background:${t.color};" onclick="toggleTag(${t.id}, 'remove')">${t.name} &times;</span>`; });
+        const mBox = document.getElementById('available-tags-list'); mBox.innerHTML = '';
+        allTags.forEach(t => { if(!currentClientTags.some(ct => ct.id === t.id)) mBox.innerHTML += `<span class="tag-pill" style="background:${t.color}; border:1px solid var(--border); color:var(--text-main);" onclick="toggleTag(${t.id}, 'add')">+ ${t.name}</span>`; });
+    }
+    async function toggleTag(tagId, action) { if(!currentPhone) return; await fetch('/api/contacts/tags', {method: 'POST', body: JSON.stringify({phone: currentPhone, tag_id: tagId, action: action})}); document.getElementById('manageTagsModal').style.display = 'none'; lastActiveListState = null; buildDashboard(); }
+
+    function renderListsUI(listDataStr) {
+        currentClientLists = [];
+        if(listDataStr) { listDataStr.split(',').forEach(item => { let p = item.split('|'); if(p.length === 3) currentClientLists.push({id: parseInt(p[0]), name: p[1], color: p[2]}); }); }
+        const box = document.getElementById('client-lists-box'); box.innerHTML = '';
+        currentClientLists.forEach(list => { box.innerHTML += `<span class="tag-pill" style="background:${list.color};" onclick="toggleContactList(${list.id}, 'remove')">${list.name} &times;</span>`; });
+        const mBox = document.getElementById('available-lists-list'); mBox.innerHTML = '';
+        allContactLists.forEach(list => {
+            if(!currentClientLists.some(current => current.id === list.id)) mBox.innerHTML += `<span class="tag-pill" style="background:${list.color}; border:1px solid var(--border); color:var(--text-main);" onclick="toggleContactList(${list.id}, 'add')">+ ${list.name}</span>`;
+        });
+    }
+
+    async function toggleContactList(listId, action) {
+        if(!currentPhone) return;
+        await fetch('/api/contacts/list_toggle', {method: 'POST', body: JSON.stringify({phone: currentPhone, list_id: listId, action: action})});
+        document.getElementById('manageListsModal').style.display = 'none';
+        await loadContactLists();
+        if (action === 'add') {
+            const found = allContactLists.find(list => list.id === listId);
+            if (found && !currentClientLists.some(list => list.id === listId)) currentClientLists.push({id: found.id, name: found.name, color: found.color});
+        } else {
+            currentClientLists = currentClientLists.filter(list => list.id !== listId);
+        }
+        renderListsUI(currentClientLists.map(list => `${list.id}|${list.name}|${list.color}`).join(','));
+        resetContactsList(); loadMoreContacts(); loadContactBuckets();
+    }
+

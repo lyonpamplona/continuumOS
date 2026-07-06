@@ -1,0 +1,739 @@
+    let currentPhone = null; let contactOffset = 0; let contactSearch = ''; let contactTimeout = null; let contactListId = ''; let contactBucket = 'carteira'; let contactInitial = ''; let selectedContactPhones = new Set(); let pendingBulkPayload = null; let assistedReviewQueue = []; let assistedReviewIndex = 0; let assistedReviewBucket = ''; let contactInitialCounts = {}; let editingContact = null;
+    const CONTACT_ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    let chatFetchController = null;
+    let lastOpenAlertCount = 0;
+    let lastOpenAlertAt = 0;
+    let attentionQueue = [];
+    let attentionOpen = false;
+    const OPEN_ATTENDANCE_ALERT_THRESHOLD = 10;
+    const OPEN_ATTENDANCE_ALERT_INTERVAL_MS = 10 * 60 * 1000;
+    const OPEN_ATTENDANCE_ALERT_ENABLED = {{ 'true' if user.role.startswith('vendas') else 'false' }};
+    let allTags = []; let currentClientTags = []; let allContactLists = []; let currentClientLists = []; let lastActiveListState = null; let currentMessageCount = 0;
+    let isMobile = window.innerWidth <= 1024; let currentInternalTarget = 'geral'; let currentInternalReplyId = null; let internalMessageCache = {};
+    let calDate = new Date(); let selectedDateStr = null; let monthEvents = [];
+    let currentReplyId = null; let currentReactionMsgId = null; let currentForwardMsgId = null;
+    let currentEditMsgId = null;
+    const PANEL_TAB_STORAGE_KEY = 'continnumOS:panelActiveTab:{{ user.role }}';
+    const PANEL_DEFAULT_TAB = 'tab-atendimentos';
+    const PANEL_VALID_TABS = ['tab-atendimentos', 'tab-carteira', 'tab-internal', 'tab-tools', 'tab-settings'];
+    const WS_MAX_RECONNECT_DELAY = 15000;
+    let ws = null;
+    let wsReconnectTimer = null;
+    let wsReconnectAttempts = 0;
+    let realtimeWasConnected = false;
+    let realtimeDropNotified = false;
+    const groupColors = ['#ff8a65', '#64b5f6', '#81c784', '#4db6ac', '#aed581', '#ffd54f', '#ffb74d', '#f06292', '#ba68c8', '#9575cd', '#7986cb', '#4dd0e1'];
+
+    document.addEventListener("DOMContentLoaded", () => { 
+        refreshViewportVars();
+        loadSnippets(); loadTags(); loadContactLists(); loadContactBuckets(); loadContactInitialCounts(); updateContactFilterSummary(); updateClock(); buildDashboard(); renderCalendar(); loadInternalChat();
+        updateInternalUnreadBadges();
+        syncInternalUnreadSince('startup');
+        setupPasteHandlers(); setupEscKey(); setupNotificationPreferences(); setupAttentionNotice(); restorePanelActiveTab(); connectRealtime(); showLatestChangelog();
+    });
+    
+    function refreshViewportVars() {
+        const height = Math.max(320, Math.floor(window.visualViewport ? window.visualViewport.height : window.innerHeight));
+        document.documentElement.style.setProperty('--app-height', `${height}px`);
+    }
+
+    window.addEventListener('resize', () => {
+        refreshViewportVars();
+        isMobile = window.innerWidth <= 1024;
+        ensureInternalChatComposer();
+    });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+            refreshViewportVars();
+            isMobile = window.innerWidth <= 1024;
+            ensureInternalChatComposer();
+        });
+    }
+
+    function getColorFromName(name) {
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        return groupColors[Math.abs(hash) % groupColors.length];
+    }
+
+    function parseLocalTimestamp(timestampStr) {
+        if(!timestampStr) return '';
+        const raw = String(timestampStr).trim();
+        const normalized = raw.replace('T', ' ').split('.')[0].replace(/Z$/, '');
+        let match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]), Number(match[6] || 0));
+        match = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (match) return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]), Number(match[4]), Number(match[5]), Number(match[6] || 0));
+        const parsed = new Date(raw);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function formatTime(timestampStr) {
+        const d = parseLocalTimestamp(timestampStr);
+        if(!d) return '';
+        let now = new Date();
+        
+        const isToday = d.getDate() === now.getDate() && 
+                        d.getMonth() === now.getMonth() && 
+                        d.getFullYear() === now.getFullYear();
+
+        const config = { hour: '2-digit', minute: '2-digit' };
+        
+        if (isToday) {
+            return d.toLocaleTimeString('pt-BR', config);
+        } else {
+            return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', config);
+        }
+    }
+
+    function queueDateLabel(timestampStr) {
+        const d = parseLocalTimestamp(timestampStr);
+        if (!d) return 'Sem data';
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const sameDay = (a, b) => a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+        if (sameDay(d, today)) return 'Hoje';
+        if (sameDay(d, yesterday)) return 'Ontem';
+        return d.toLocaleDateString('pt-BR', {weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric'});
+    }
+
+    function queueTimestamp(client) {
+        const raw = client.stage === 'em_atendimento'
+            ? (client.attendance_start || client.last_interaction)
+            : (client.last_interaction || client.attendance_start);
+        const parsed = parseLocalTimestamp(raw);
+        return parsed ? parsed.getTime() : Number.MAX_SAFE_INTEGER;
+    }
+
+    function escapeHtml(text) {
+        return String(text || '').replace(/[&<>"']/g, ch => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;'}[ch]));
+    }
+
+    async function showLatestChangelog() {
+        try {
+            const res = await fetch('/api/changelog/latest');
+            const data = await res.json();
+            if (!data.id || localStorage.getItem('continnumOS:lastChangelog') === data.id) return;
+            document.getElementById('changelog-title').innerText = `Novidades - ${data.title || 'ultima versao'}`;
+            const sections = (data.sections || []).map(section => {
+                const items = (section.items || []).slice(0, 8).map(item => `<li style="margin:6px 0;">${escapeHtml(item)}</li>`).join('');
+                return `<div style="margin-bottom:14px;"><div style="font-weight:700; color:var(--primary); margin-bottom:6px;">${escapeHtml(section.title)}</div><ul style="padding-left:18px;">${items}</ul></div>`;
+            }).join('');
+            document.getElementById('changelog-body').innerHTML = sections || '<div style="color:var(--text-muted);">Ajustes aplicados nesta versao.</div>';
+            document.getElementById('changelogModal').style.display = 'flex';
+            localStorage.setItem('continnumOS:lastChangelog', data.id);
+        } catch(e) {}
+    }
+
+    function closeChangelogModal() {
+        document.getElementById('changelogModal').style.display = 'none';
+    }
+
+    function setupEscKey() {
+        document.addEventListener('keydown', function(e) {
+            if (e.key === "Escape") {
+                const attentionModal = document.getElementById('attentionModal');
+                if (attentionModal && attentionModal.style.display === 'flex') {
+                    closeAttentionNotice();
+                    return;
+                }
+                document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+                cancelReply();
+            }
+        });
+    }
+
+    function setupAttentionNotice() {
+        const closeButton = document.getElementById('attention-close-btn');
+        if (closeButton) closeButton.addEventListener('click', closeAttentionNotice);
+    }
+
+    function enqueueAttentionNotice(title, message, kind = 'notice') {
+        attentionQueue.push({
+            title: title || 'Notificação',
+            message: message || 'Novo aviso.',
+            kind: kind || 'notice'
+        });
+        showAttentionNotice();
+    }
+
+    function showAttentionNotice() {
+        if (attentionOpen) return;
+        const nextNotice = attentionQueue.shift();
+        if (!nextNotice) return;
+        const modal = document.getElementById('attentionModal');
+        if (!modal) return;
+        attentionOpen = true;
+        modal.classList.remove('warning', 'admin');
+        if (nextNotice.kind === 'warning') modal.classList.add('warning');
+        if (nextNotice.kind === 'admin') modal.classList.add('admin');
+        document.getElementById('attention-kind').innerText = nextNotice.kind === 'warning' ? 'Atenção' : (nextNotice.kind === 'admin' ? 'Comunicado' : 'Aviso');
+        document.getElementById('attention-title').innerText = nextNotice.title;
+        document.getElementById('attention-body').innerText = nextNotice.message;
+        modal.style.display = 'flex';
+    }
+
+    function closeAttentionNotice() {
+        const modal = document.getElementById('attentionModal');
+        if (modal) modal.style.display = 'none';
+        attentionOpen = false;
+        if (attentionQueue.length > 0) setTimeout(showAttentionNotice, 80);
+    }
+
+    function checkOpenAttendanceNotice(clientes) {
+        if (!OPEN_ATTENDANCE_ALERT_ENABLED || !Array.isArray(clientes)) return;
+        const openCount = clientes.filter(c => c.stage === 'em_atendimento').length;
+        if (openCount <= OPEN_ATTENDANCE_ALERT_THRESHOLD) {
+            lastOpenAlertCount = openCount;
+            lastOpenAlertAt = 0;
+            return;
+        }
+        const now = Date.now();
+        const shouldAlert = openCount !== lastOpenAlertCount || (now - lastOpenAlertAt) > OPEN_ATTENDANCE_ALERT_INTERVAL_MS;
+        if (shouldAlert) {
+            playMsnSound();
+            enqueueAttentionNotice(
+                'Atendimentos em aberto',
+                `Existem ${openCount} atendimentos em aberto sem finalizar. Revise e finalize os concluídos para não distorcer o TMA.`,
+                'warning'
+            );
+            lastOpenAlertAt = now;
+        }
+        lastOpenAlertCount = openCount;
+    }
+
+    function setupPasteHandlers() {
+        const chatInput = document.getElementById('chat-input');
+        if (chatInput) {
+            chatInput.addEventListener('paste', function(e) {
+                if (e.clipboardData && e.clipboardData.files.length > 0) {
+                    const file = e.clipboardData.files[0];
+                    if (file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('application/')) {
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+                        document.getElementById('media-upload').files = dataTransfer.files;
+                        uploadMedia();
+                        e.preventDefault();
+                    }
+                }
+            });
+        }
+        
+        const internalInput = document.getElementById('internal-input');
+        if (internalInput) {
+            internalInput.addEventListener('paste', function(e) {
+                if (e.clipboardData && e.clipboardData.files.length > 0) {
+                    const file = e.clipboardData.files[0];
+                    if (file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('application/')) {
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+                        document.getElementById('media-upload-internal').files = dataTransfer.files;
+                        uploadInternalMedia();
+                        e.preventDefault();
+                    }
+                }
+            });
+        }
+    }
+
+    function cleanPhone(phoneStr) { if (!phoneStr) return ""; return phoneStr.replace(/@c\.us|@lid/g, ''); }
+    function jsArg(value) { return JSON.stringify(value ?? '').replace(/</g, '\\u003c'); }
+    function updateClock() { const now = new Date(); document.getElementById('sys-clock').innerText = now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); setTimeout(updateClock, 10000); }
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); document.getElementById('sidebar').classList.toggle('open');}
+
+    function mobileView(view) {
+        if(!isMobile) return;
+        document.querySelectorAll('#tab-atendimentos .panel').forEach(el => el.classList.remove('active-mobile'));
+        document.getElementById('col-' + view).classList.add('active-mobile');
+    }
+    
+    function internalMobileView(view) {
+        if(!isMobile) return;
+        const targetId = view === 'chat' ? 'int-chat-col' : 'int-col-list';
+        const targetPanel = document.getElementById(targetId);
+        if (!targetPanel) return;
+        document.querySelectorAll('#tab-internal .panel').forEach(el => el.classList.remove('active-mobile'));
+        targetPanel.classList.add('active-mobile');
+        if (view === 'chat') ensureInternalChatComposer();
+    }
+
+    function ensureInternalChatComposer() {
+        const composer = document.querySelector('#int-chat-col .internal-chat-input');
+        const chatPanel = document.getElementById('int-chat-col');
+        if (!composer || !chatPanel) return;
+        composer.style.visibility = 'visible';
+        composer.style.display = isMobile ? 'grid' : 'flex';
+        chatPanel.style.minHeight = '0';
+    }
+
+    /** Retorna a última aba operacional salva, validando se ela ainda existe para o perfil logado. */
+    function storedPanelTab() {
+        const saved = localStorage.getItem(PANEL_TAB_STORAGE_KEY);
+        return PANEL_VALID_TABS.includes(saved) && document.getElementById(saved) ? saved : PANEL_DEFAULT_TAB;
+    }
+
+    /** Restaura a aba operacional após reload sem alterar o valor persistido. */
+    function restorePanelActiveTab() {
+        switchMainTab(storedPanelTab(), null, {persist: false});
+    }
+
+    /** Alterna a aba principal do painel operacional e mantém a escolha em reloads da página. */
+    function switchMainTab(tabId, element, options = {}) {
+        if (!PANEL_VALID_TABS.includes(tabId) || !document.getElementById(tabId)) tabId = PANEL_DEFAULT_TAB;
+        const shouldPersist = options.persist !== false;
+        if (shouldPersist) localStorage.setItem(PANEL_TAB_STORAGE_KEY, tabId);
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.main-tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        document.querySelectorAll(`.main-tab-btn[onclick*="${tabId}"]`).forEach(el => el.classList.add('active'));
+        if(isMobile) document.getElementById('sidebar').classList.remove('open');
+        if(tabId === 'tab-internal') { clearInternalUnread(currentInternalTarget); if (isMobile) internalMobileView('list'); loadInternalChat(); }
+        if(tabId === 'tab-carteira') {
+            if(contactOffset === 0) loadMoreContacts();
+            loadStatusHistory(false);
+        }
+        if(tabId === 'tab-tools') loadManageSnippets();
+    }
+
+    function filterList(val) {
+        const term = val.toLowerCase();
+        if (!term) {
+            document.querySelectorAll('#ativos-list .contact-item').forEach(el => el.style.display = 'flex');
+            document.querySelectorAll('#ativos-list .queue-day').forEach(day => day.style.display = 'flex');
+            document.querySelectorAll('#ativos-list .queue-section').forEach(section => section.style.display = 'flex');
+            return;
+        }
+        document.querySelectorAll('#ativos-list .contact-item').forEach(el => {
+            el.style.display = el.innerText.toLowerCase().includes(term) ? 'flex' : 'none';
+        });
+        document.querySelectorAll('#ativos-list .queue-day').forEach(day => {
+            const hasVisible = Array.from(day.querySelectorAll('.contact-item')).some(el => el.style.display !== 'none');
+            day.style.display = hasVisible ? 'flex' : 'none';
+        });
+        document.querySelectorAll('#ativos-list .queue-section').forEach(section => {
+            const hasVisible = Array.from(section.querySelectorAll('.contact-item')).some(el => el.style.display !== 'none');
+            section.style.display = hasVisible ? 'flex' : 'none';
+        });
+    }
+    function resetContactsList() {
+        contactOffset = 0;
+        lastLetter = '';
+        const box = document.getElementById('dyn-contacts-list');
+        if (box) box.innerHTML = '';
+        const btn = document.getElementById('btn-load-more');
+        if (btn) btn.style.display = 'block';
+    }
+    function contactBucketLabel(bucket) {
+        const labels = {carteira:'Carteira', fornecedores:'Fornecedores', listas:'Listas', sem_responsavel:'Sem responsável', revisar_numero:'Revisar número', revisar_nome:'Revisar nome'};
+        return labels[bucket || 'carteira'] || bucket;
+    }
+    function selectedContactListLabel() {
+        if (!contactListId) return '';
+        const found = allContactLists.find(list => String(list.id) === String(contactListId));
+        return found ? found.name : 'Lista selecionada';
+    }
+    function renderContactAlphaBar() {
+        const box = document.getElementById('contact-alpha-bar');
+        if (!box) return;
+        const allActive = !contactInitial ? 'active' : '';
+        const countHtml = key => `<span class="alpha-chip-count">${contactInitialCounts[key] ?? 0}</span>`;
+        box.innerHTML = `<button class="btn alpha-chip all ${allActive}" onclick="setContactInitial('')"><span>Todos</span>${countHtml('all')}</button>` +
+            CONTACT_ALPHA.map(letter => `<button class="btn alpha-chip ${contactInitial === letter ? 'active' : ''}" onclick="setContactInitial('${letter}')"><span>${letter}</span>${countHtml(letter)}</button>`).join('') +
+            `<button class="btn alpha-chip ${contactInitial === '#' ? 'active' : ''}" onclick="setContactInitial('#')"><span>#</span>${countHtml('#')}</button>`;
+    }
+    function updateContactFilterSummary() {
+        const box = document.getElementById('contact-filter-summary');
+        if (!box) return;
+        const tokens = [];
+        if (contactBucket && contactBucket !== 'carteira') {
+            tokens.push(`<span class="filter-token"><span class="material-symbols-outlined">inventory_2</span>${escapeHtml(contactBucketLabel(contactBucket))}<button onclick="setContactBucket('carteira')" title="Voltar para carteira"><span class="material-symbols-outlined">close</span></button></span>`);
+        }
+        if (contactSearch) {
+            tokens.push(`<span class="filter-token"><span class="material-symbols-outlined">search</span>${escapeHtml(contactSearch)}<button onclick="clearContactSearch()" title="Limpar busca"><span class="material-symbols-outlined">close</span></button></span>`);
+        }
+        if (contactListId) {
+            tokens.push(`<span class="filter-token"><span class="material-symbols-outlined">format_list_bulleted</span>${escapeHtml(selectedContactListLabel())}<button onclick="clearContactListFilter()" title="Limpar lista"><span class="material-symbols-outlined">close</span></button></span>`);
+        }
+        if (contactInitial) {
+            tokens.push(`<span class="filter-token"><span class="material-symbols-outlined">sort_by_alpha</span>Inicial ${escapeHtml(contactInitial)}<button onclick="setContactInitial('')" title="Limpar inicial"><span class="material-symbols-outlined">close</span></button></span>`);
+        }
+        if (tokens.length) {
+            box.classList.add('visible');
+            box.innerHTML = `<span class="contact-filter-label">Filtros ativos</span>${tokens.join('')}<button class="btn contacts-action-btn" onclick="clearContactFilters()"><span class="material-symbols-outlined">filter_alt_off</span>Limpar</button>`;
+        } else {
+            box.classList.remove('visible');
+            box.innerHTML = '';
+        }
+        const clearBtn = document.getElementById('contact-search-clear');
+        if (clearBtn) clearBtn.classList.toggle('visible', Boolean(contactSearch));
+    }
+    function refreshContacts() {
+        clearContactSelection();
+        resetContactsList();
+        updateContactFilterSummary();
+        loadContactInitialCounts();
+        loadMoreContacts();
+    }
+    function debounceContactSearch(val) {
+        clearTimeout(contactTimeout);
+        contactSearch = (val || '').trim();
+        updateContactFilterSummary();
+        contactTimeout = setTimeout(() => refreshContacts(), 450);
+    }
+    function clearContactSearch() {
+        contactSearch = '';
+        const input = document.getElementById('search-contact-input');
+        if (input) input.value = '';
+        refreshContacts();
+    }
+    function filterContactsByList(value) { contactListId = value; refreshContacts(); }
+    function clearContactListFilter() {
+        contactListId = '';
+        const select = document.getElementById('contact-list-filter');
+        if (select) select.value = '';
+        refreshContacts();
+    }
+    function setContactBucket(bucket) {
+        contactBucket = bucket || 'carteira';
+        document.querySelectorAll('.bucket-chip').forEach(btn => btn.classList.toggle('active', btn.dataset.bucket === contactBucket));
+        refreshContacts();
+    }
+    function setContactInitial(initial) {
+        contactInitial = initial || '';
+        refreshContacts();
+    }
+    function clearContactFilters() {
+        contactSearch = '';
+        contactListId = '';
+        contactInitial = '';
+        contactBucket = 'carteira';
+        const input = document.getElementById('search-contact-input');
+        const select = document.getElementById('contact-list-filter');
+        if (input) input.value = '';
+        if (select) select.value = '';
+        document.querySelectorAll('.bucket-chip').forEach(btn => btn.classList.toggle('active', btn.dataset.bucket === contactBucket));
+        refreshContacts();
+    }
+    async function loadContactInitialCounts() {
+        try {
+            const res = await fetch(`/api/contacts/initial_counts?search=${encodeURIComponent(contactSearch)}&list_id=${encodeURIComponent(contactListId)}&bucket=${encodeURIComponent(contactBucket)}`);
+            contactInitialCounts = await res.json();
+        } catch(e) {
+            contactInitialCounts = {};
+        }
+        renderContactAlphaBar();
+    }
+    function updateBulkContactBar() {
+        const count = selectedContactPhones.size;
+        const bar = document.getElementById('contact-bulk-bar');
+        const label = document.getElementById('contact-bulk-count');
+        if (bar) bar.classList.toggle('visible', count > 0);
+        if (label) label.innerText = `${count} selecionado${count === 1 ? '' : 's'}`;
+        document.querySelectorAll('.contact-select-checkbox').forEach(input => {
+            input.checked = selectedContactPhones.has(input.value);
+        });
+    }
+    function toggleContactSelection(phone, checked, event = null) {
+        if (event) event.stopPropagation();
+        if (checked) selectedContactPhones.add(phone);
+        else selectedContactPhones.delete(phone);
+        updateBulkContactBar();
+    }
+    function selectVisibleContacts() {
+        document.querySelectorAll('.contact-select-checkbox').forEach(input => {
+            selectedContactPhones.add(input.value);
+            input.checked = true;
+        });
+        updateBulkContactBar();
+    }
+    function clearContactSelection(update = true) {
+        selectedContactPhones.clear();
+        if (update) updateBulkContactBar();
+    }
+    function renderBulkActionFields() {
+        const action = document.getElementById('bulk-contact-action')?.value || '';
+        const box = document.getElementById('bulk-dynamic-fields');
+        if (!box) return;
+        if (action === 'add_list') {
+            box.innerHTML = `<select id="bulk-list-id" class="input-text bulk-control">${allContactLists.map(list => `<option value="${list.id}">${escapeHtml(list.name)}</option>`).join('')}</select>`;
+        } else if (action === 'add_prefix') {
+            box.innerHTML = '<input id="bulk-prefix" class="input-text bulk-control compact" placeholder="Prefixo, ex: Ro">';
+        } else if (action === 'replace_word') {
+            box.innerHTML = '<input id="bulk-find" class="input-text bulk-control compact" placeholder="Trocar"><input id="bulk-replace" class="input-text bulk-control compact" placeholder="Por">';
+        } else if (action === 'sanitize_evolution') {
+            box.innerHTML = '<span class="contact-filter-label">Remove artefatos do nome, sem alterar telefone.</span>';
+        } else {
+            box.innerHTML = '';
+        }
+    }
+    function buildBulkContactPayload(dryRun = false) {
+        const action = document.getElementById('bulk-contact-action')?.value || '';
+        return {
+            phones: Array.from(selectedContactPhones),
+            action,
+            list_id: parseInt(document.getElementById('bulk-list-id')?.value || '0', 10),
+            prefix: document.getElementById('bulk-prefix')?.value || '',
+            find: document.getElementById('bulk-find')?.value || '',
+            replace: document.getElementById('bulk-replace')?.value || '',
+            dry_run: dryRun
+        };
+    }
+    function validateBulkPayload(payload) {
+        if (!selectedContactPhones.size) return 'Selecione ao menos um contato.';
+        if (!payload.action) return 'Escolha uma ação em lote.';
+        if (payload.action === 'replace_word' && !payload.find.trim()) return 'Informe a palavra que será substituída.';
+        if (payload.action === 'add_prefix' && !payload.prefix.trim()) return 'Informe o prefixo.';
+        if (payload.action === 'add_list' && !payload.list_id) return 'Selecione uma lista.';
+        return '';
+    }
+    function bulkActionLabel(action) {
+        return {add_list:'Adicionar à lista', add_prefix:'Adicionar prefixo', replace_word:'Substituir palavra', sanitize_evolution:'Sanitizar Evolution'}[action] || action;
+    }
+    async function applyBulkContactAction() {
+        const payload = buildBulkContactPayload(true);
+        const error = validateBulkPayload(payload);
+        if (error) return notifyToast(error, true);
+        try {
+            const res = await fetch('/api/contacts/bulk_action', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.message || data.error || 'Falha ao gerar prévia');
+            pendingBulkPayload = {...payload, dry_run: false};
+            renderBulkPreview(data, payload);
+        } catch(e) {
+            notifyToast(e.message || 'Falha ao gerar prévia da ação.', true);
+        }
+    }
+    function renderBulkPreview(data, payload) {
+        const modal = document.getElementById('bulkPreviewModal');
+        const summary = document.getElementById('bulk-preview-summary');
+        const list = document.getElementById('bulk-preview-list');
+        if (!modal || !summary || !list) return;
+        summary.innerHTML = `<strong style="color:var(--primary);">${escapeHtml(bulkActionLabel(payload.action))}</strong><br>${data.updated || 0} de ${data.requested || 0} contato(s) serão alterados. ${data.skipped || 0} sem alteração ou fora do escopo.`;
+        list.innerHTML = (data.examples || []).map(item => `<div class="bulk-preview-item">
+            <div class="bulk-preview-meta">${escapeHtml(cleanPhone(item.phone || ''))}</div>
+            <div class="bulk-preview-name">${escapeHtml(item.old_name || '-')} <span style="color:var(--primary);">→</span> ${escapeHtml(item.new_name || item.old_name || '-')}</div>
+        </div>`).join('') || '<div class="bulk-preview-item"><div class="bulk-preview-name">Nenhum exemplo disponível.</div></div>';
+        modal.style.display = 'flex';
+    }
+    async function confirmBulkContactAction() {
+        if (!pendingBulkPayload) return;
+        try {
+            const res = await fetch('/api/contacts/bulk_action', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(pendingBulkPayload)});
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.message || data.error || 'Falha na ação em lote');
+            document.getElementById('bulkPreviewModal').style.display = 'none';
+            pendingBulkPayload = null;
+            notifyToast(`Ação aplicada em ${data.updated || 0} contato(s).`);
+            clearContactSelection();
+            resetContactsList();
+            await loadMoreContacts();
+            await loadContactBuckets();
+            await loadContactLists();
+            await loadContactInitialCounts();
+        } catch(e) {
+            notifyToast(e.message || 'Falha ao aplicar ação em lote.', true);
+        }
+    }
+    function openContactFromCard(phone, rawName, notes, extra, tagsData, listData) {
+        switchMainTab("tab-atendimentos");
+        selectChat(phone, rawName, notes || '', extra || '', "carteira", tagsData || '', listData || '');
+    }
+    function startInlineContactEdit(phone, event = null) {
+        if (event) event.stopPropagation();
+        const card = document.getElementById(`contact-inline-${contactDomId(phone)}`);
+        if (!card) return;
+        editingContact = {
+            phone,
+            name: card.dataset.name || '',
+            notes: card.dataset.notes || '',
+            extra: card.dataset.extra || ''
+        };
+        document.getElementById('contact-edit-phone-label').innerText = cleanPhone(phone);
+        document.getElementById('contact-edit-name').value = editingContact.name;
+        document.getElementById('contact-edit-notes').value = editingContact.notes;
+        document.getElementById('contact-edit-extra').value = editingContact.extra;
+        document.getElementById('contactEditModal').style.display = 'flex';
+        setTimeout(() => document.getElementById('contact-edit-name')?.focus(), 30);
+    }
+    function closeContactEditModal() {
+        editingContact = null;
+        const modal = document.getElementById('contactEditModal');
+        if (modal) modal.style.display = 'none';
+    }
+    async function saveContactEditModal() {
+        if (!editingContact) return;
+        const name = (document.getElementById('contact-edit-name')?.value || '').trim();
+        if (!name) return notifyToast('Informe um nome para salvar o contato.', true);
+        try {
+            const res = await fetch('/api/edit_contact', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({phone: editingContact.phone, name, notes: document.getElementById('contact-edit-notes')?.value || '', extra: document.getElementById('contact-edit-extra')?.value || ''})
+            });
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.error || 'Falha ao salvar contato');
+            notifyToast('Contato atualizado.');
+            closeContactEditModal();
+            resetContactsList();
+            await loadMoreContacts();
+            await loadContactBuckets();
+            await loadContactInitialCounts();
+            buildDashboard();
+        } catch(e) {
+            notifyToast(e.message || 'Falha ao salvar contato.', true);
+        }
+    }
+    async function loadContactBuckets() {
+        try {
+            const res = await fetch('/api/contacts/buckets');
+            const data = await res.json();
+            document.querySelectorAll('[data-count]').forEach(el => {
+                const key = el.dataset.count;
+                el.innerText = data[key] ?? 0;
+            });
+            renderContactReviewGuide(data);
+        } catch(e) {}
+    }
+    function renderContactReviewGuide(data = {}) {
+        const box = document.getElementById('contact-review-grid');
+        if (!box) return;
+        const cards = [
+            {bucket:'revisar_nome', icon:'badge', label:'Revisar nome', count:data.revisar_nome || 0, text:'Prefixos antigos ou nomes vazios'},
+            {bucket:'revisar_numero', icon:'dialpad', label:'Revisar número', count:data.revisar_numero || 0, text:'Telefones fora do padrão WhatsApp'},
+            {bucket:'sem_responsavel', icon:'person_alert', label:'Sem responsável', count:data.sem_responsavel || 0, text:'Contatos que precisam de triagem'},
+            {bucket:'listas', icon:'format_list_bulleted', label:'Em listas', count:data.listas || 0, text:'Contatos já segmentados'},
+            {bucket:'fornecedores', icon:'warehouse', label:'Fornecedores', count:data.fornecedores || 0, text:'Base separada para compras/fornecimento'},
+            {bucket:'carteira', icon:'contacts', label:'Carteira', count:data.carteira || 0, text:'Visão geral da carteira'}
+        ];
+        box.innerHTML = cards.map(card => `<button class="btn review-guide-card" onclick="startAssistedReview('${card.bucket}')">
+            <span class="material-symbols-outlined" style="color:var(--primary);">${card.icon}</span>
+            <strong>${card.count}</strong>
+            <span>${escapeHtml(card.label)}<br>${escapeHtml(card.text)}</span>
+        </button>`).join('');
+    }
+    async function openContactReviewGuide() {
+        await loadContactBuckets();
+        const modal = document.getElementById('contactReviewModal');
+        if (modal) modal.style.display = 'flex';
+    }
+    function openReviewBucket(bucket) {
+        const modal = document.getElementById('contactReviewModal');
+        if (modal) modal.style.display = 'none';
+        setContactBucket(bucket);
+    }
+    async function startAssistedReview(bucket = contactBucket) {
+        assistedReviewBucket = bucket || 'revisar_nome';
+        document.getElementById('contactReviewModal').style.display = 'none';
+        const modal = document.getElementById('assistedReviewModal');
+        const body = document.getElementById('assisted-review-body');
+        if (body) body.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-muted);">Carregando contatos para revisão...</div>';
+        if (modal) modal.style.display = 'flex';
+        try {
+            const res = await fetch(`/api/contacts/load?offset=0&bucket=${encodeURIComponent(assistedReviewBucket)}`);
+            assistedReviewQueue = await res.json();
+            assistedReviewIndex = 0;
+            renderAssistedReview();
+        } catch(e) {
+            if (body) body.innerHTML = '<div style="padding:24px; text-align:center; color:#F15C6D;">Falha ao carregar revisão assistida.</div>';
+        }
+    }
+    function currentAssistedContact() {
+        return assistedReviewQueue[assistedReviewIndex] || null;
+    }
+    function renderAssistedReview() {
+        const body = document.getElementById('assisted-review-body');
+        const title = document.getElementById('assisted-review-title');
+        const progress = document.getElementById('assisted-review-progress');
+        if (title) title.innerText = `Revisão assistida · ${contactBucketLabel(assistedReviewBucket)}`;
+        if (progress) progress.innerText = assistedReviewQueue.length ? `${assistedReviewIndex + 1} de ${assistedReviewQueue.length}` : 'Nenhum contato pendente neste grupo.';
+        if (!body) return;
+        const contact = currentAssistedContact();
+        if (!contact) {
+            body.innerHTML = '<div class="assisted-review-card" style="text-align:center; color:var(--text-muted);">Fila de revisão concluída para os contatos carregados.</div>';
+            loadContactBuckets();
+            resetContactsList();
+            loadMoreContacts();
+            return;
+        }
+        const listOptions = allContactLists.map(list => `<option value="${list.id}">${escapeHtml(list.name)}</option>`).join('');
+        body.innerHTML = `<div class="assisted-review-card">
+            <div class="assisted-review-meta">
+                <span class="contact-mini-pill"><span class="material-symbols-outlined" style="font-size:14px;">call</span>${escapeHtml(cleanPhone(contact.phone))}</span>
+                <span class="contact-mini-pill"><span class="material-symbols-outlined" style="font-size:14px;">person</span>${escapeHtml(contact.assigned_to || 'Sem responsável')}</span>
+                <span class="contact-mini-pill"><span class="material-symbols-outlined" style="font-size:14px;">inventory_2</span>${escapeHtml(contact.stage || 'carteira')}</span>
+            </div>
+            <div class="form-group"><label>Nome</label><input id="assisted-name" class="input-text" value="${escapeHtml(contact.name || '')}"></div>
+            <div class="form-group"><label>Anotações</label><textarea id="assisted-notes" class="input-text" rows="3">${escapeHtml(contact.notes || '')}</textarea></div>
+            <div class="form-group"><label>Info extras</label><textarea id="assisted-extra" class="input-text" rows="3">${escapeHtml(contact.extra_info || '')}</textarea></div>
+            <div class="form-group"><label>Mover para lista</label><select id="assisted-list-id" class="input-text"><option value="">Selecione uma lista</option>${listOptions}</select></div>
+            <div class="assisted-review-actions">
+                <button class="btn btn-primary" onclick="saveAssistedReview(true)"><span class="material-symbols-outlined" style="font-size:18px;">save</span>Salvar e próximo</button>
+                <button class="btn" onclick="moveAssistedToList()"><span class="material-symbols-outlined" style="font-size:18px;">format_list_bulleted</span>Mover para lista</button>
+                <button class="btn" onclick="markAssistedReviewed()"><span class="material-symbols-outlined" style="font-size:18px;">task_alt</span>Marcar revisado</button>
+                <button class="btn" onclick="nextAssistedReview()"><span class="material-symbols-outlined" style="font-size:18px;">skip_next</span>Próximo</button>
+            </div>
+        </div>`;
+    }
+    function nextAssistedReview() {
+        assistedReviewIndex += 1;
+        renderAssistedReview();
+    }
+    async function saveAssistedReview(goNext = false) {
+        const contact = currentAssistedContact();
+        if (!contact) return;
+        const name = document.getElementById('assisted-name')?.value.trim() || '';
+        if (!name) return notifyToast('Informe um nome para salvar.', true);
+        try {
+            const res = await fetch('/api/edit_contact', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone: contact.phone, name, notes: document.getElementById('assisted-notes')?.value || '', extra: document.getElementById('assisted-extra')?.value || ''})});
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.error || 'Falha ao salvar contato');
+            notifyToast('Contato salvo.');
+            if (goNext) nextAssistedReview();
+        } catch(e) {
+            notifyToast(e.message || 'Falha ao salvar contato.', true);
+        }
+    }
+    async function moveAssistedToList() {
+        const contact = currentAssistedContact();
+        const listId = parseInt(document.getElementById('assisted-list-id')?.value || '0', 10);
+        if (!contact || !listId) return notifyToast('Selecione uma lista.', true);
+        try {
+            const res = await fetch('/api/contacts/list_toggle', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone: contact.phone, list_id: listId, action:'add'})});
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.error || data.message || 'Falha ao mover para lista');
+            notifyToast('Contato incluído na lista.');
+            nextAssistedReview();
+        } catch(e) {
+            notifyToast(e.message || 'Falha ao mover contato.', true);
+        }
+    }
+    async function markAssistedReviewed() {
+        const contact = currentAssistedContact();
+        if (!contact) return;
+        try {
+            const res = await fetch('/api/contacts/mark_reviewed', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone: contact.phone})});
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.error || 'Falha ao marcar revisado');
+            notifyToast('Contato marcado como revisado.');
+            loadContactInitialCounts();
+            nextAssistedReview();
+        } catch(e) {
+            notifyToast(e.message || 'Falha ao marcar revisado.', true);
+        }
+    }
+
+    function toggleActiveSearch(forceOpen = null) {
+        const header = document.getElementById('active-search-header');
+        const input = document.getElementById('search-input');
+        if (!header || !input) return;
+        const shouldOpen = forceOpen === null ? !header.classList.contains('search-open') : forceOpen;
+        header.classList.toggle('search-open', shouldOpen);
+        if (shouldOpen) {
+            setTimeout(() => input.focus(), 50);
+        } else {
+            input.value = '';
+            filterList('');
+        }
+    }
+    

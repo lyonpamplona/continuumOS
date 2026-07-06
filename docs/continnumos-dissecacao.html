@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>continnumOS - Dissecacao do Codigo (Guia Didatico)</title>
+<style>
+:root{--bg:#0d0d0f;--bg2:#141417;--bg3:#1a1a1f;--primary:#ff6a00;--primary2:#ffb020;--text:#f2ede6;--mut:#9a9aa0;--mut2:#6a6a70;--border:#2a2a30;--green:#3ddc84;--red:#ff4d4d;--blue:#57b6ff}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.65;font-size:15px}
+code,pre,.mono{font-family:'JetBrains Mono','SF Mono',Consolas,monospace}
+a{color:var(--primary2);text-decoration:none}
+a:hover{text-decoration:underline}
+.layout{display:flex;min-height:100vh}
+/* Sidebar */
+.side{width:290px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);position:sticky;top:0;height:100vh;overflow-y:auto;padding:18px 14px}
+.side h1{font-size:16px;margin:0 0 2px;color:var(--primary)}
+.side .sub{font-size:11px;color:var(--mut2);margin-bottom:14px}
+.side input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font:500 12px 'Space Grotesk';margin-bottom:12px}
+.side nav a{display:block;padding:5px 9px;border-radius:7px;color:var(--mut);font-size:12.5px;margin-bottom:1px}
+.side nav a:hover{background:var(--bg3);color:var(--text);text-decoration:none}
+.side nav a.grp{color:var(--primary2);font-weight:700;margin-top:12px;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.side nav a.sub2{padding-left:20px;font-size:12px;color:var(--mut2)}
+/* Content */
+.main{flex:1;min-width:0;padding:34px 46px 120px;max-width:1080px}
+h2{font-size:26px;margin:52px 0 6px;padding-top:14px;border-top:1px solid var(--border);color:var(--primary)}
+h2:first-of-type{border-top:0;margin-top:0}
+h3{font-size:19px;margin:30px 0 6px;color:var(--primary2)}
+h4{font-size:15px;margin:20px 0 4px;color:var(--text)}
+p{margin:8px 0}
+.lead{font-size:16px;color:var(--mut)}
+ul,ol{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+hr{border:0;border-top:1px solid var(--border);margin:20px 0}
+.tag{display:inline-block;font:700 10px 'JetBrains Mono';padding:2px 8px;border-radius:20px;border:1px solid var(--border);color:var(--primary2);margin-left:6px;vertical-align:middle}
+.pill{display:inline-block;font:600 11px 'JetBrains Mono';padding:1px 7px;border-radius:5px;background:var(--bg3);color:var(--blue);border:1px solid var(--border)}
+.file{color:var(--primary2)}
+/* Code blocks */
+pre.code{background:#08080a;border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.7px;line-height:1.6;margin:12px 0}
+pre.code .c{color:var(--mut2)}      /* comentario */
+pre.code .k{color:#ff8a4c}          /* keyword */
+pre.code .s{color:var(--green)}     /* string */
+pre.code .n{color:var(--primary2)}  /* nome/def */
+pre.code .fn{color:var(--blue)}     /* funcao */
+/* Annotated line-by-line */
+.lines{margin:12px 0;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.lines .ln{display:grid;grid-template-columns:minmax(240px,42%) 1fr;border-top:1px solid var(--border)}
+.lines .ln:first-child{border-top:0}
+.lines .ln>.cd{background:#08080a;padding:9px 12px;font-family:'JetBrains Mono';font-size:12px;color:#d7d2c9;white-space:pre-wrap;word-break:break-word;border-right:1px solid var(--border)}
+.lines .ln>.ex{padding:9px 13px;font-size:13px;color:var(--mut)}
+.lines .ln>.ex b{color:var(--text)}
+@media(max-width:820px){.lines .ln{grid-template-columns:1fr}.lines .ln>.cd{border-right:0}}
+/* Callouts */
+.callout{border:1px solid var(--border);border-left:3px solid var(--primary2);background:var(--bg2);border-radius:9px;padding:11px 14px;margin:14px 0;font-size:13.5px}
+.callout.warn{border-left-color:var(--red)}
+.callout.ok{border-left-color:var(--green)}
+.callout .h{font-weight:700;color:var(--primary2);display:block;margin-bottom:3px;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.callout.warn .h{color:var(--red)}
+.callout.ok .h{color:var(--green)}
+/* Tables */
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13px}
+th,td{border:1px solid var(--border);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--bg2);color:var(--primary2);font-weight:700}
+td .mono{color:var(--blue)}
+/* Diagram */
+.diagram{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin:14px 0;font-family:'JetBrains Mono';font-size:12px;color:var(--mut);white-space:pre;overflow-x:auto;line-height:1.5}
+.diagram b{color:var(--primary2)}
+.badge-row{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:9px 13px;font-size:12px}
+.stat b{display:block;font-size:20px;color:var(--primary)}
+.toc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin:14px 0}
+.toc-cards a{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text)}
+.toc-cards a:hover{border-color:var(--primary);text-decoration:none}
+.toc-cards a .t{font-weight:700;color:var(--primary2);display:block}
+.toc-cards a .d{font-size:12px;color:var(--mut2)}
+details{border:1px solid var(--border);border-radius:9px;margin:10px 0;background:var(--bg2)}
+details>summary{cursor:pointer;padding:10px 14px;font-weight:600;color:var(--primary2)}
+details[open]>summary{border-bottom:1px solid var(--border)}
+details .body{padding:12px 14px}
+.hl{color:var(--primary2)}
+.footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--border);color:var(--mut2);font-size:12px}
+</style>
+</head>
+<body>
+<div class="layout">
+<aside class="side">
+  <h1>continnumOS</h1>
+  <div class="sub">Dissecacao do codigo &middot; guia didatico</div>
+  <input id="q" type="text" placeholder="Filtrar secoes..." oninput="filterNav(this.value)">
+  <nav id="nav">
+    <a class="grp">Fundamentos</a>
+    <a href="#intro">Como ler este guia</a>
+    <a href="#arq">1. Arquitetura geral</a>
+    <a href="#ciclo">2. Ciclo de uma requisicao</a>
+    <a class="grp">Configuracao & seguranca</a>
+    <a href="#config">3. config.py</a>
+    <a href="#auth">4. auth.py</a>
+    <a href="#tenantctx">5. tenant_context.py (RLS)</a>
+    <a href="#tenantcfg">6. tenant_config.py</a>
+    <a href="#perms">7. permissions.py</a>
+    <a class="grp">Nucleo</a>
+    <a href="#database">8. database.py</a>
+    <a href="#evolution">9. evolution_service.py</a>
+    <a href="#main">10. main.py (servidor)</a>
+    <a class="sub2" href="#main-models">10.1 Models & helpers</a>
+    <a class="sub2" href="#main-loops">10.2 Loops de fundo</a>
+    <a class="sub2" href="#main-lifespan">10.3 Lifespan</a>
+    <a class="sub2" href="#main-webhook">10.4 Webhook (pipeline)</a>
+    <a class="sub2" href="#main-rotas">10.5 Mapa de rotas</a>
+    <a class="grp">Fase 10 - IA</a>
+    <a href="#ai">11. ai_engine.py</a>
+    <a href="#flow">12. flow_engine.py</a>
+    <a href="#p10glue">13. Integracao da IA</a>
+    <a class="grp">Fase 11 - Omnichannel</a>
+    <a href="#channels">14. channels.py</a>
+    <a class="grp">Fase 12 - Vendas & CRM</a>
+    <a href="#sales">15. sales_engine.py + CRM</a>
+    <a class="grp">Fase 13 - Equipe</a>
+    <a href="#team">16. team_engine.py + produtividade</a>
+    <a class="grp">Complementos</a>
+    <a href="#extras">17. worker / integrations</a>
+    <a href="#frontend">18. Frontend</a>
+    <a class="sub2" href="#site">18.5 Site institucional</a>
+    <a href="#e2e">19. Fluxos ponta a ponta</a>
+    <a href="#glossario">20. Glossario</a>
+  </nav>
+</aside>
+<main class="main">
+
+<h2 id="intro" style="border:0;margin-top:0">continnumOS &mdash; dissecacao didatica do codigo</h2>
+<p class="lead">Este documento abre o capo do sistema e explica, de forma progressiva e didatica, <b>o que cada arquivo faz</b>, <b>como as funcoes trabalham linha a linha</b> e <b>como as pecas se conectam</b> para formar um CRM/atendimento WhatsApp multi-tenant com IA.</p>
+
+<div class="badge-row">
+  <div class="stat"><b>16</b> modulos Python</div>
+  <div class="stat"><b>~14.5k</b> linhas Python</div>
+  <div class="stat"><b>~290</b> rotas HTTP/WS</div>
+  <div class="stat"><b>~330</b> funcoes</div>
+  <div class="stat"><b>12</b> loops de fundo</div>
+  <div class="stat"><b>Fases 0-13</b> entregues</div>
+</div>
+
+<div class="callout"><span class="h">Como este guia foi montado</span>
+Os modulos menores e centrais (autenticacao, multi-tenancy, motores de IA e de fluxos) sao explicados <b>linha a linha</b>. Os dois arquivos gigantes &mdash; <span class="file">main.py</span> (7.043 linhas) e <span class="file">database.py</span> (5.036 linhas) &mdash; sao dissecados por <b>blocos logicos</b>, com as funcoes-chave anotadas linha a linha e um mapa completo de todas as rotas e funcoes. Assim voce entende cada peca sem precisar rolar 10 mil linhas de uma vez.</div>
+
+<h4>Como ler</h4>
+<ul>
+<li>Blocos com fundo escuro e borda laranja sao <b>codigo real</b> do sistema.</li>
+<li>As tabelas de duas colunas mostram <b>codigo &rarr; explicacao</b> linha a linha.</li>
+<li>Caixas laranja trazem <b>conceitos</b>; caixas vermelhas trazem <b>alertas</b>; caixas verdes trazem <b>boas praticas</b>.</li>
+<li>Use o <b>filtro</b> na barra lateral para achar uma secao rapidamente.</li>
+</ul>
+
+<h2 id="arq">1. Arquitetura geral</h2>
+<p>O continnumOS e uma aplicacao <b>FastAPI</b> (Python assincrono) que serve um painel web e recebe eventos do WhatsApp via <b>Evolution API</b>. Os dados ficam em <b>PostgreSQL</b> (via <span class="mono">asyncpg</span>) com isolamento por tenant usando <b>Row-Level Security</b>. O <b>Redis</b> cuida de tempo real (pub/sub de WebSocket), travas, rate-limit, agendamentos e fila de jobs.</p>
+
+<h3>1.1 Stack (requirements.txt)</h3>
+<table>
+<tr><th>Biblioteca</th><th>Papel no sistema</th></tr>
+<tr><td class="mono">fastapi + uvicorn</td><td>Framework web assincrono e servidor ASGI.</td></tr>
+<tr><td class="mono">asyncpg</td><td>Driver PostgreSQL assincrono (pool de conexoes).</td></tr>
+<tr><td class="mono">redis</td><td>Pub/sub tempo real, travas, rate-limit, filas, agendamentos.</td></tr>
+<tr><td class="mono">jinja2</td><td>Renderizacao dos templates HTML (painel).</td></tr>
+<tr><td class="mono">httpx</td><td>Cliente HTTP assincrono (Evolution API e provedores de IA).</td></tr>
+<tr><td class="mono">bcrypt + pyjwt</td><td>Hash de senha e cookies de sessao assinados (JWT).</td></tr>
+<tr><td class="mono">websockets</td><td>Atualizacoes em tempo real no painel.</td></tr>
+<tr><td class="mono">boto3 / aiofiles</td><td>Armazenamento de midia (S3 ou disco local).</td></tr>
+<tr><td class="mono">loguru</td><td>Logs estruturados.</td></tr>
+</table>
+
+<h3>1.2 Camadas e modulos</h3>
+<div class="diagram">
+  NAVEGADOR (painel: dashboard_admin/vendas + partials JS)  WHATSAPP (Evolution API)
+        |  HTTP/WebSocket                                          |  webhook POST
+        v                                                          v
+  +--------------------------------------------------------------------------+
+  |                         <b>main.py</b>  (FastAPI - ~200 rotas)                    |
+  |  middlewares - lifespan - 10 loops de fundo - pipeline do /webhook       |
+  +----+---------------+-----------+-----------+-----------+------------+-----+
+       |               |           |           |           |            |
+       v               v           v           v           v            v
+   <b>auth.py</b>      <b>database.py</b>  <b>evolution_</b>  <b>ai_engine</b>   <b>flow_engine</b>  tenant_config
+  (login/JWT)   (PostgreSQL   service.py    .py (IA)     .py (fluxos)  permissions
+                asyncpg+RLS) (WhatsApp)                                 integrations
+       |               |                                                    |
+       +-------> <b>tenant_context.py</b> (contextvar do tenant -> GUC RLS) <------+
+                       |
+                       v
+              PostgreSQL  +  Redis  +  Storage (S3/local)
+</div>
+
+<table>
+<tr><th>Arquivo</th><th>Linhas</th><th>Responsabilidade</th></tr>
+<tr><td class="file">main.py</td><td>7043</td><td>Servidor web: rotas, middlewares, WebSocket, loops de fundo, pipeline do webhook do WhatsApp.</td></tr>
+<tr><td class="file">database.py</td><td>5036</td><td>Toda a persistencia: pool asyncpg, RLS por tenant, ~180 funcoes de leitura/escrita, criacao de tabelas por fase.</td></tr>
+<tr><td class="file">evolution_service.py</td><td>446</td><td>Cliente da Evolution API: enviar/editar/apagar mensagens, midia, status, instancias.</td></tr>
+<tr><td class="file">ai_engine.py</td><td>432</td><td>Fase 10: IA (sentimento, resumo, extracao, sugestao, tom, traducao, RAG) com LLM + fallback offline.</td></tr>
+<tr><td class="file">importar_vcf.py</td><td>431</td><td>Importacao de contatos a partir de arquivos VCF.</td></tr>
+<tr><td class="file">flow_engine.py</td><td>232</td><td>Fase 10: motor de fluxos no-code (maquina de estados pura).</td></tr>
+<tr><td class="file">channels.py</td><td>350</td><td>Fase 11: adaptadores omnichannel (WhatsApp Cloud, Telegram, Instagram, Messenger, Email, Webchat) com modo stub.</td></tr>
+<tr><td class="file">sales_engine.py</td><td>176</td><td>Fase 12: logica pura de vendas/CRM (carrinho, comissoes, cadencias, forecast ponderado, saude do negocio, metas).</td></tr>
+<tr><td class="file">team_engine.py</td><td>~250</td><td>Fase 13: logica pura de produtividade (SLA, gamificacao, QA, status efetivo por escala, balanceamento).</td></tr>
+<tr><td class="file">config.py</td><td>230</td><td>Leitura e validacao de variaveis de ambiente/segredos.</td></tr>
+<tr><td class="file">tenant_config.py</td><td>156</td><td>Config e marca por tenant, com cache para leitura sincrona.</td></tr>
+<tr><td class="file">auth.py</td><td>142</td><td>Login (bcrypt), cookie JWT, sessao unica, resolucao do usuario.</td></tr>
+<tr><td class="file">permissions.py</td><td>84</td><td>Mapa papel &rarr; permissoes granulares.</td></tr>
+<tr><td class="file">integrations.py</td><td>75</td><td>Catalogo do marketplace de integracoes.</td></tr>
+<tr><td class="file">worker.py</td><td>60</td><td>Processo separado que consome a fila de jobs do Redis.</td></tr>
+<tr><td class="file">tenant_context.py</td><td>39</td><td>Guarda o tenant atual por requisicao (contextvar) para o RLS.</td></tr>
+</table>
+
+<h2 id="ciclo">2. O ciclo de vida de uma requisicao (multi-tenant + RLS)</h2>
+<p>Este e o conceito mais importante do sistema. Cada requisicao web descobre <b>qual empresa (tenant)</b> esta falando e, a partir dai, o banco so devolve dados daquela empresa &mdash; automaticamente. Entender isso e a chave para entender todo o resto.</p>
+
+<div class="diagram">
+1. Chega uma requisicao no <b>main.py</b> (ex.: GET /painel)
+2. A rota depende de <b>get_current_user()</b> (auth.py)
+3. get_current_user chama <b>db.resolve_request_tenant_id(request)</b>
+      -> descobre o tenant pelo dominio/host ou instancia
+4. <b>set_current_tenant(tenant_id)</b> grava o id num <b>contextvar</b> (tenant_context.py)
+5. <b>load_tenant_config(tenant_id)</b> aquece marca/horario no cache (tenant_config.py)
+6. Qualquer query usa o pool asyncpg; ao pegar conexao, o hook
+   <b>_apply_tenant_guc</b> roda  SET app.current_tenant = &lt;id&gt;
+7. O PostgreSQL aplica as policies de <b>Row-Level Security</b>:
+   as tabelas so retornam linhas WHERE tenant_id = app.current_tenant
+8. A rota devolve so os dados do tenant certo, sem filtrar manualmente.
+</div>
+
+<div class="callout"><span class="h">Por que isso e genial</span>
+Em vez de lembrar de escrever <span class="mono">WHERE tenant_id = X</span> em centenas de queries (e arriscar vazar dados entre clientes se esquecer uma), o isolamento e feito <b>uma vez</b> no nivel do banco. O codigo de aplicacao fica limpo e o vazamento entre tenants fica praticamente impossivel.</div>
+
+<h2 id="config">3. <span class="file">config.py</span> &mdash; configuracao e segredos <span class="tag">230 linhas</span></h2>
+<p>Le variaveis de ambiente e <b>falha no boot</b> se um segredo obrigatorio faltar (principio "fail-fast"). Centraliza tudo numa classe <span class="mono">Config</span> exposta como <span class="mono">settings</span>.</p>
+
+<h3>3.1 Leitores de ambiente (linha a linha)</h3>
+<div class="lines">
+<div class="ln"><div class="cd">class ConfigError(RuntimeError): ...</div><div class="ex"><b>Erro proprio</b> para problemas de configuracao &mdash; deixa claro nos logs que a falha e de setup, nao de codigo.</div></div>
+<div class="ln"><div class="cd">def env_bool(name, default=False):</div><div class="ex">Le uma env e interpreta <span class="mono">"1/true/yes/on"</span> como verdadeiro. Usado por dezenas de flags (rate-limit, jobs, metrics...).</div></div>
+<div class="ln"><div class="cd">def env_str(name, default=None, required=False):</div><div class="ex">Le texto. Se <span class="mono">required=True</span> e a env estiver vazia, <b>lanca ConfigError</b> &mdash; o app nem sobe.</div></div>
+<div class="ln"><div class="cd">def env_list(name, default=""):</div><div class="ex">Le uma lista separada por virgula (ex.: <span class="mono">ALLOWED_ORIGINS</span>).</div></div>
+<div class="ln"><div class="cd">def _read_secret_file(path): ...</div><div class="ex">Le um segredo de um <b>arquivo</b> (padrao Docker/Kubernetes "secrets"), em vez de env em texto plano.</div></div>
+<div class="ln"><div class="cd">def env_secret(name, default=None, required=False):</div><div class="ex">Tenta primeiro <span class="mono">NAME_FILE</span> (arquivo de segredo); se nao houver, cai na env comum. Base da "rotacao/gestao de segredos" da Fase 6.</div></div>
+</div>
+
+<h3>3.2 A classe Config (os campos que importam)</h3>
+<table>
+<tr><th>Grupo</th><th>Campos</th><th>Para que serve</th></tr>
+<tr><td>Obrigatorios</td><td class="mono">EVO_API_URL, EVO_API_KEY, DATABASE_URL, REDIS_URL, JWT_SECRET, WEBHOOK_SECRET, ADMIN_PASSWORD</td><td>Sem qualquer um destes o app <b>nao sobe</b> (required=True). Garante que producao nunca rode com segredo faltando.</td></tr>
+<tr><td>Sessao</td><td class="mono">JWT_ALGORITHM, SESSION_TTL_SECONDS, ENFORCE_SINGLE_SESSION, COOKIE_SECURE</td><td>Controlam o cookie de login e a trava de sessao unica.</td></tr>
+<tr><td>Billing</td><td class="mono">PAYMENT_PROVIDER, PAYMENT_WEBHOOK_SECRET, BILLING_ENFORCEMENT_ENABLED, BILLING_GRACE_DAYS</td><td>Integracao de pagamento e suspensao por inadimplencia (Fases 6/8).</td></tr>
+<tr><td>Escala</td><td class="mono">WEB_CONCURRENCY, RUN_BACKGROUND_JOBS, JOB_QUEUE_ENABLED, JOB_QUEUE_KEY</td><td>Permitem rodar varias replicas web + workers dedicados (Fase 7).</td></tr>
+<tr><td>Observabilidade</td><td class="mono">METRICS_ENABLED, METRICS_TOKEN, OTEL_*, SENTRY_DSN</td><td>Prometheus, tracing OpenTelemetry e alertas Sentry (Fase 7).</td></tr>
+<tr><td>Rate limit</td><td class="mono">RATE_LIMIT_ENABLED, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WEBHOOK_MAX</td><td>Protege contra abuso e custo da Evolution (Fase 6).</td></tr>
+<tr><td>SaaS/LGPD</td><td class="mono">SIGNUP_ENABLED, TRIAL_DAYS, BASE_DOMAIN, DATA_RETENTION_DAYS, DPO_CONTACT_EMAIL</td><td>Signup self-service, trial e retencao de dados (Fases 8).</td></tr>
+</table>
+<div class="callout ok"><span class="h">Boa pratica presente</span>
+Os segredos criticos usam <span class="mono">env_secret(..., required=True)</span>: aceitam arquivo de segredo e explodem cedo se faltarem. Isso e exatamente o item "nao deixar segredos so em .env plano" da Fase 6.</div>
+
+<h2 id="auth">4. <span class="file">auth.py</span> &mdash; autenticacao <span class="tag">142 linhas</span></h2>
+<p>Cuida de <b>quem esta logado</b>. Senhas sao verificadas com bcrypt; a sessao vira um cookie JWT assinado; e (opcionalmente) o Redis garante <b>uma sessao ativa por usuario</b>.</p>
+
+<h3>4.1 verify_user &mdash; validar login e senha</h3>
+<pre class="code"><span class="k">async def</span> <span class="fn">verify_user</span>(username, password):
+    users = <span class="k">await</span> db.get_all_system_users()
+    <span class="k">for</span> user <span class="k">in</span> users:
+        <span class="k">if</span> user[<span class="s">'username'</span>].lower() == username.lower() <span class="k">and</span> user[<span class="s">'is_active'</span>]:
+            <span class="k">if</span> bcrypt.checkpw(password.encode(), user[<span class="s">'password'</span>].encode()):
+                <span class="k">return</span> user
+    <span class="k">return</span> <span class="k">None</span></pre>
+<div class="lines">
+<div class="ln"><div class="cd">users = await db.get_all_system_users()</div><div class="ex">Busca os usuarios <b>do tenant atual</b> (o RLS ja restringe). Chamada dentro do contexto de tenant resolvido antes.</div></div>
+<div class="ln"><div class="cd">if ... and user['is_active']:</div><div class="ex">So aceita usuario <b>ativo</b>. Comparacao de nome e case-insensitive.</div></div>
+<div class="ln"><div class="cd">bcrypt.checkpw(...)</div><div class="ex">Compara a senha digitada com o <b>hash bcrypt</b> salvo. Nunca guarda senha em texto puro.</div></div>
+</div>
+
+<h3>4.2 O cookie de sessao (JWT)</h3>
+<div class="lines">
+<div class="ln"><div class="cd">create_access_token(data)</div><div class="ex">Monta o JWT com <span class="mono">exp</span> = agora + <span class="mono">SESSION_TTL_SECONDS</span> e assina com <span class="mono">JWT_SECRET</span>. Vira o cookie <span class="mono">session_token</span>.</div></div>
+<div class="ln"><div class="cd">register_login_session(username, role)</div><div class="ex">Se <span class="mono">ENFORCE_SINGLE_SESSION</span> estiver ligado (e nao for admin), grava um <span class="mono">jti</span> no Redis com <span class="mono">nx=True</span>: se ja existir sessao, recusa o novo login.</div></div>
+<div class="ln"><div class="cd">validate_login_session(...)</div><div class="ex">A cada requisicao, confere se o <span class="mono">jti</span> do cookie bate com o do Redis; se nao, a sessao foi "roubada"/expirada em outro lugar.</div></div>
+<div class="ln"><div class="cd">clear_login_session / clear_session_from_request</div><div class="ex">Logout: apaga a trava do Redis (so quando a sessao unica esta ativa).</div></div>
+</div>
+
+<h3>4.3 get_current_user &mdash; o portao de entrada de quase toda rota</h3>
+<p>Quase toda rota declara <span class="mono">user: dict = Depends(get_current_user)</span>. Alem de autenticar, esta funcao <b>ativa o tenant</b> da requisicao. E o ponto onde autenticacao e multi-tenancy se encontram.</p>
+<div class="lines">
+<div class="ln"><div class="cd">tenant_id = await db.resolve_request_tenant_id(request)</div><div class="ex"><b>Descobre o tenant</b> pelo host/dominio ou instancia da requisicao.</div></div>
+<div class="ln"><div class="cd">set_current_tenant(tenant_id)</div><div class="ex">Grava no <b>contextvar</b> &mdash; a partir daqui, toda query fica isolada nesse tenant (RLS).</div></div>
+<div class="ln"><div class="cd">await load_tenant_config(tenant_id)</div><div class="ex">Aquece o cache de marca/horario para leitura sincrona nos handlers.</div></div>
+<div class="ln"><div class="cd">if await db.get_tenant_status(tenant_id) != "active": return None</div><div class="ex">Bloqueia tenants <b>suspensos</b> (inadimplencia) &mdash; ninguem entra no painel.</div></div>
+<div class="ln"><div class="cd">token = request.cookies.get("session_token")</div><div class="ex">Pega o cookie de sessao; sem ele, retorna None (nao logado).</div></div>
+<div class="ln"><div class="cd">payload = jwt.decode(token, SECRET_KEY, ...)</div><div class="ex">Valida a assinatura e a expiracao do JWT. Excecoes especificas tratam token <b>expirado</b> e <b>invalido</b>.</div></div>
+<div class="ln"><div class="cd">for user in users: if match and is_active: validate_login_session(...); return user</div><div class="ex">Confirma que o usuario do token existe, esta ativo e que a sessao unica confere. So entao devolve o usuario.</div></div>
+</div>
+<div class="callout warn"><span class="h">Ponto sensivel</span>
+Se <span class="mono">get_current_user</span> retornar <span class="mono">None</span>, as rotas respondem 401/redirect. Como ela tambem resolve o tenant, um bug aqui afeta <b>tudo</b>. Por isso ela e curta, defensiva e cheia de try/except.</div>
+
+<h2 id="tenantctx">5. <span class="file">tenant_context.py</span> &mdash; o coracao do RLS <span class="tag">39 linhas</span></h2>
+<p>Arquivo minusculo, importancia enorme. Ele guarda "qual tenant estou atendendo agora" de um jeito que funciona com codigo assincrono (varias requisicoes ao mesmo tempo, sem se misturarem).</p>
+<div class="lines">
+<div class="ln"><div class="cd">import contextvars</div><div class="ex">Usa <b>context variables</b>: cada task assincrona (cada requisicao) enxerga o seu proprio valor, sem vazar para as outras. E como uma "variavel global segura por requisicao".</div></div>
+<div class="ln"><div class="cd">DEFAULT_TENANT_ID = 1</div><div class="ex">Tenant padrao = continnumOS. Os dados legados (antes do multi-tenant) foram migrados para o tenant 1.</div></div>
+<div class="ln"><div class="cd">_current_tenant_id = ContextVar("...", default=DEFAULT_TENANT_ID)</div><div class="ex">A variavel de contexto em si. Comeca no tenant padrao ate alguem definir outro.</div></div>
+<div class="ln"><div class="cd">def set_current_tenant(tenant_id): ... return _current_tenant_id.set(tid)</div><div class="ex">Define o tenant da requisicao atual. Converte para int com seguranca (cai no padrao se vier lixo). Retorna um <b>token</b> para reverter depois.</div></div>
+<div class="ln"><div class="cd">def get_current_tenant() -&gt; int</div><div class="ex">Lido em <b>dezenas</b> de funcoes do database.py para saber qual tenant filtrar. E o "quem sou eu agora".</div></div>
+<div class="ln"><div class="cd">def reset_current_tenant(token)</div><div class="ex">Restaura o valor anterior (ignora tokens invalidos). Usado para nao "sujar" o contexto entre tarefas.</div></div>
+</div>
+<div class="callout"><span class="h">Como conecta com o banco</span>
+O valor guardado aqui e lido pelo hook <span class="mono">_apply_tenant_guc</span> do <span class="file">database.py</span> toda vez que uma conexao e retirada do pool: ele executa <span class="mono">SET app.current_tenant = &lt;id&gt;</span>. As policies de RLS do PostgreSQL comparam <span class="mono">tenant_id</span> com esse valor. Ou seja: <b>este arquivo de 39 linhas comanda o isolamento de todo o banco.</b></div>
+
+<h2 id="tenantcfg">6. <span class="file">tenant_config.py</span> &mdash; config e marca por tenant <span class="tag">156 linhas</span></h2>
+<p>Cada tenant pode ter nome, cor, logo, telefone do admin, horario comercial e textos do bot diferentes. Este modulo resolve isso a partir da coluna JSONB <span class="mono">tenants.settings</span>, com <b>cache em memoria</b> para permitir leitura <b>sincrona</b> rapida (importante porque funcoes como <span class="mono">is_business_hours()</span> sao chamadas em muitos lugares e nao podem virar async).</p>
+<div class="lines">
+<div class="ln"><div class="cd">_default_config()</div><div class="ex">Os padroes (compativeis com o comportamento antigo hardcoded): nome continnumOS, cor #FF6600, horario 8h-18h com almoco 12h-13h, mapa papel&rarr;instancia, mensagem de bom dia.</div></div>
+<div class="ln"><div class="cd">_merge(base, override)</div><div class="ex">Faz um merge que tambem funde dicionarios de segundo nivel (ex.: <span class="mono">business_hours</span>), para o tenant sobrescrever so o que quiser.</div></div>
+<div class="ln"><div class="cd">get_cached_config(tenant_id)</div><div class="ex">Leitura <b>sincrona</b> do cache; se ainda nao aquecido, devolve os padroes. Nunca bloqueia.</div></div>
+<div class="ln"><div class="cd">async load_tenant_config(tenant_id, force=False)</div><div class="ex">Le do banco (<span class="mono">get_tenant_record</span>), mescla com os padroes e <b>cacheia por 30s</b>. Chamada no boot, no login e no webhook para "esquentar" o cache.</div></div>
+<div class="ln"><div class="cd">invalidate(tenant_id)</div><div class="ex">Limpa o cache quando o admin muda a config (para refletir na hora).</div></div>
+<div class="ln"><div class="cd">is_business_hours(now, tenant_id)</div><div class="ex">Converte a hora atual (fuso -03:00) em minutos e compara com a janela do tenant. Base das automacoes de "fora do horario".</div></div>
+</div>
+<p>Helpers sincronos que leem do cache: <span class="mono">role_session_map()</span>, <span class="mono">departamentos()</span>, <span class="mono">admin_phone()</span>, <span class="mono">brand()</span>, <span class="mono">business_hours()</span>, <span class="mono">morning_followup_message()</span>. O <span class="file">main.py</span> importa este modulo como <span class="mono">tc</span>.</p>
+
+<h2 id="perms">7. <span class="file">permissions.py</span> &mdash; papeis e permissoes <span class="tag">84 linhas</span></h2>
+<p>Centraliza "quem pode fazer o que", evitando espalhar <span class="mono">if role == 'admin'</span> pelo codigo. Modelo <b>aditivo</b>: os papeis antigos continuam funcionando.</p>
+<div class="lines">
+<div class="ln"><div class="cd">PERM_VIEW_CHATS = "chats:view" ... PERM_TAKEOVER = "chats:takeover"</div><div class="ex">Constantes de permissao. Use-as nos endpoints em vez de strings soltas &mdash; evita erros de digitacao.</div></div>
+<div class="ln"><div class="cd">ROLE_PERMISSIONS = &#123; "admin": &#123;"*"&#125;, "manager": &#123;...&#125;, "vendas_1": _AGENT, ... &#125;</div><div class="ex">O mapa papel&rarr;conjunto de permissoes. <span class="mono">admin</span> tem o curinga <span class="mono">*</span> (tudo). Vendedores herdam o conjunto <span class="mono">_AGENT</span> (ver/enviar/assumir).</div></div>
+<div class="ln"><div class="cd">permissions_for(role)</div><div class="ex">Retorna o conjunto do papel; papel desconhecido cai no padrao <span class="mono">_AGENT</span>; curinga vira "todas".</div></div>
+<div class="ln"><div class="cd">has_permission(role, permission) / user_has_permission(user, permission)</div><div class="ex">Checagem booleana. Admin sempre True. E a forma recomendada de proteger acoes finas.</div></div>
+<div class="ln"><div class="cd">list_roles()</div><div class="ex">Lista papeis + permissoes para telas de admin (rota <span class="mono">/api/roles</span>).</div></div>
+</div>
+
+<h2 id="database">8. <span class="file">database.py</span> &mdash; a camada de dados <span class="tag">3900 linhas &middot; ~180 funcoes</span></h2>
+<p>E o "banco falando Python". Nenhuma outra parte do sistema escreve SQL cru; tudo passa por funcoes daqui. Vamos entender primeiro <b>o mecanismo</b> (pool + RLS) e depois <b>os grupos de funcoes</b>.</p>
+
+<h3>8.1 O pool asyncpg e o hook de RLS</h3>
+<div class="lines">
+<div class="ln"><div class="cd">async def _apply_tenant_guc(conn):</div><div class="ex"><b>O elo do RLS.</b> Roda toda vez que uma conexao e adquirida do pool. Executa <span class="mono">SELECT set_config('app.current_tenant', &lt;tenant&gt;, false)</span> lendo <span class="mono">get_current_tenant()</span>.</div></div>
+<div class="ln"><div class="cd">init_db()</div><div class="ex">Cria o pool (<span class="mono">asyncpg.create_pool</span>) registrando <span class="mono">_apply_tenant_guc</span> no <span class="mono">setup</span>; roda migracao/criacao de tabelas; garante o admin. Chamado no lifespan e no worker.</div></div>
+<div class="ln"><div class="cd">resolve_request_tenant_id(request)</div><div class="ex">Descobre o tenant pelo <b>host</b> (dominio proprio do cliente) e/ou cabecalhos; usado por <span class="mono">get_current_user</span>.</div></div>
+<div class="ln"><div class="cd">_migrate_multitenant(db)</div><div class="ex">Migracao historica que adicionou <span class="mono">tenant_id</span> e as policies de RLS as tabelas legadas (Fase 1).</div></div>
+<div class="ln"><div class="cd">health_check() / close_db()</div><div class="ex">Ping do banco (usado em <span class="mono">/health</span>) e fechamento gracioso do pool.</div></div>
+</div>
+<div class="callout"><span class="h">Dois tipos de tabela</span>
+<b>Tabelas com RLS</b> (users, messages, system_users, tags, bot_settings...) sao filtradas automaticamente pelo GUC. As <b>tabelas novas das Fases 9/10</b> (flows, kb, ai_settings, routing...) sao "globais": carregam <span class="mono">tenant_id</span> e sao filtradas <b>manualmente</b> com <span class="mono">get_current_tenant()</span> em cada query. As duas abordagens convivem.</div>
+
+<h3>8.2 Grupos de funcoes (mapa)</h3>
+<table>
+<tr><th>Grupo</th><th>Exemplos de funcoes</th><th>Para que serve</th></tr>
+<tr><td>Tenants & planos</td><td class="mono">get_tenant_record, create_tenant, set_tenant_status, get_tenant_limits, check_tenant_limit</td><td>CRUD de tenants, planos, limites e status (ativo/suspenso).</td></tr>
+<tr><td>Billing</td><td class="mono">create_invoice, mark_invoice_paid, mark_overdue_invoices, reactivate_tenant_if_paid</td><td>Faturas, inadimplencia e reativacao automatica (Fases 6/8).</td></tr>
+<tr><td>Contatos/usuarios</td><td class="mono">get_user, create_user, update_user_stage, get_clients, upsert_synced_contact</td><td>O "cliente do WhatsApp" (tabela users) e sua jornada (stage).</td></tr>
+<tr><td>Mensagens</td><td class="mono">save_message, get_messages, claim_webhook_message, update_message_ack</td><td>Historico de conversa; <span class="mono">claim_webhook_message</span> evita processar a mesma msg 2x.</td></tr>
+<tr><td>Equipe</td><td class="mono">get_all_system_users, get_sales_users, get_seller_status, finish_attendance</td><td>Usuarios do sistema (atendentes), status online e fim de atendimento.</td></tr>
+<tr><td>Metricas</td><td class="mono">get_global_metrics, get_monthly_team_report, get_user_performance_report</td><td>Relatorios e desempenho por vendedor/periodo.</td></tr>
+<tr><td>Chat interno</td><td class="mono">save_internal_message, react_internal_message, pin_internal_message</td><td>Chat entre a equipe dentro do painel.</td></tr>
+<tr><td>Status/broadcast</td><td class="mono">save_status_post, add_status_view, get_status_viewers</td><td>"Status" (stories) enviados para listas de contatos.</td></tr>
+<tr><td>Agenda</td><td class="mono">add_calendar_event, get_due_calendar_events, reschedule_calendar_event</td><td>Compromissos e lembretes.</td></tr>
+<tr><td>Quick wins</td><td class="mono">create_quickwins_tables, add_scheduled_message, record_csat_score, add_conversation_note</td><td>Snippets, assinatura, agendamento de msg, filtros salvos, CSAT, notas.</td></tr>
+<tr><td>Fase 10 (IA)</td><td class="mono">create_phase10_tables, get_ai_settings, list_flows, save_flow_state, next_round_robin, get_kb_chunks, save_conversation_ai</td><td>Config de IA, fluxos, estado por contato, roteamento, base de conhecimento e cache de IA.</td></tr>
+</table>
+
+<h3>8.3 Exemplo anotado: create_user</h3>
+<div class="lines">
+<div class="ln"><div class="cd">create_user(phone, session_id="vendas", name=None, assigned_to=None, stage="menu_wait")</div><div class="ex">Cria o contato quando ele fala pela 1a vez. Comeca no estagio <span class="mono">menu_wait</span> (aguardando escolher o menu). O <span class="mono">session_id</span> indica o setor/instancia.</div></div>
+<div class="ln"><div class="cd">update_user_stage(phone, stage, assigned_to=None)</div><div class="ex">Move o contato pela jornada: <span class="mono">menu_wait &rarr; pendente_assumir &rarr; em_atendimento &rarr; carteira</span>. O <span class="mono">assigned_to</span> e o atendente dono.</div></div>
+<div class="ln"><div class="cd">save_message(phone, sender, text, msg_type, waha_id, ack, session_id)</div><div class="ex">Grava cada mensagem (recebida ou enviada). <span class="mono">waha_id</span> e o id na Evolution; <span class="mono">ack</span> e o status de entrega/leitura.</div></div>
+</div>
+
+<h2 id="evolution">9. <span class="file">evolution_service.py</span> &mdash; a ponte com o WhatsApp <span class="tag">446 linhas</span></h2>
+<p>Encapsula todas as chamadas HTTP a <b>Evolution API</b> (o gateway nao-oficial de WhatsApp). O <span class="file">main.py</span> importa como <span class="mono">evo</span> e nunca fala HTTP direto com o WhatsApp &mdash; sempre via este modulo.</p>
+<div class="lines">
+<div class="ln"><div class="cd">normalize_number(chat_id)</div><div class="ex">Padroniza o numero/JID (ex.: adiciona sufixo do WhatsApp) para as chamadas.</div></div>
+<div class="ln"><div class="cd">evolution_result(ok, response, error)</div><div class="ex">Padroniza o retorno de toda funcao: um dict com <span class="mono">ok</span>, corpo e erro &mdash; o chamador sempre sabe se deu certo.</div></div>
+<div class="ln"><div class="cd">async send_message(chat_id, text, session="vendas", quoted_id=None)</div><div class="ex">Envia texto. Opcionalmente cita outra mensagem (<span class="mono">quoted_id</span>). Usada por todo o envio manual e automatico.</div></div>
+<div class="ln"><div class="cd">send_media / send_reaction / edit_message / delete_message_for_everyone</div><div class="ex">Midia (base64), reacoes emoji, edicao e exclusao para todos &mdash; espelham as acoes do WhatsApp.</div></div>
+<div class="ln"><div class="cd">download_media(payload, session_id)</div><div class="ex">Baixa a midia que chegou num webhook e a entrega ao storage (S3/local).</div></div>
+<div class="ln"><div class="cd">get_connection_state / create_instance / ensure_instance / logout_instance</div><div class="ex">Gerenciam a "instancia" (conexao de um numero). <span class="mono">ensure_instance</span> cria se nao existir &mdash; base do onboarding de WhatsApp.</div></div>
+<div class="ln"><div class="cd">send_status(session, status_type, content, jid_list, ...)</div><div class="ex">Publica um "status" (story) para uma lista de contatos.</div></div>
+<div class="ln"><div class="cd">fetch_contacts / fetch_history</div><div class="ex">Importa contatos e historico de conversa direto do WhatsApp.</div></div>
+</div>
+<div class="callout"><span class="h">Como conecta</span>
+Quando um atendente clica "enviar" no painel, a rota <span class="mono">/api/chat/send</span> chama <span class="mono">evo.send_message(...)</span> e depois <span class="mono">db.save_message(...)</span>. Quando o cliente responde, o WhatsApp chama <span class="mono">/webhook</span>, que usa <span class="mono">evo.download_media</span> (se for midia) e grava com <span class="mono">db.save_message</span>. Este modulo e a fronteira entre "nosso sistema" e "o WhatsApp".</div>
+
+<h2 id="main">10. <span class="file">main.py</span> &mdash; o servidor <span class="tag">6114 linhas &middot; ~200 rotas</span></h2>
+<p>E o maestro. Ele monta o app FastAPI, aplica middlewares, sobe os loops de fundo, expoe todas as rotas do painel/API e &mdash; o mais importante &mdash; roda o <b>pipeline do webhook</b> que transforma cada mensagem recebida do WhatsApp em acao. Vamos por blocos.</p>
+
+<h3 id="main-models">10.1 Modelos (Pydantic) e helpers</h3>
+<p>No topo o arquivo define os <b>modelos de entrada</b> (validam o corpo dos POSTs) e funcoes utilitarias reaproveitadas em muitas rotas.</p>
+<div class="lines">
+<div class="ln"><div class="cd">class ApiPayload(BaseModel): model_config = ConfigDict(extra="forbid")</div><div class="ex">Base dos modelos: <b>proibe campos extras</b>. Se o cliente mandar algo fora do contrato, a API rejeita &mdash; seguranca e clareza.</div></div>
+<div class="ln"><div class="cd">class SendMessagePayload(ApiPayload): phone: str; text: str; ...</div><div class="ex">Exemplo de modelo: valida telefone e texto antes da rota rodar. Ha dezenas desses (envio, tags, agenda, IA, fluxos...).</div></div>
+<div class="ln"><div class="cd">is_business_hours() (l.1182)</div><div class="ex">Decide se estamos no horario comercial do tenant (usa <span class="mono">tc.is_business_hours</span>). Governa respostas automaticas fora do expediente.</div></div>
+<div class="ln"><div class="cd">detect_bot_loop_risk() (l.1363)</div><div class="ex"><b>Anti-loop:</b> evita o bot responder a si mesmo/entrar em ping-pong infinito, checando frequencia e origem das mensagens.</div></div>
+<div class="ln"><div class="cd">can_send_automated_reply() (l.1422)</div><div class="ex">Porteiro das automacoes: so deixa enviar resposta automatica se horario, estagio e anti-loop permitirem.</div></div>
+<div class="ln"><div class="cd">send_automated_message() (l.1521)</div><div class="ex">Envia uma mensagem automatica (via <span class="mono">evo</span>) e a registra (via <span class="mono">db</span>), aplicando as travas acima.</div></div>
+<div class="ln"><div class="cd">expand_message_variables() (l.5305)</div><div class="ex">Troca variaveis tipo <span class="mono">nome/saudacao</span> no texto. Curiosidade: monta a marca de variavel com <span class="mono">ob = ("&#123;"+"&#123;")</span> para evitar um bug de gravacao com chaves duplas.</div></div>
+<div class="ln"><div class="cd">finalize_outgoing_text() (l.5329)</div><div class="ex">Ultimo tratamento antes de enviar (assinatura, ajustes finais do texto).</div></div>
+</div>
+
+<h3 id="main-loops">10.2 Os 12 loops de fundo</h3>
+<p>Sao tarefas assincronas que rodam "para sempre" em paralelo ao servidor (iniciadas no lifespan, so quando <span class="mono">RUN_BACKGROUND_JOBS</span> esta ligado &mdash; assim varias replicas nao duplicam trabalho).</p>
+<table>
+<tr><th>Loop</th><th>O que faz</th></tr>
+<tr><td class="mono">media_cleanup_loop</td><td>Apaga arquivos de midia antigos do storage para liberar espaco.</td></tr>
+<tr><td class="mono">sla_monitor_loop</td><td>Vigia conversas paradas e sinaliza estouro de SLA (tempo de resposta).</td></tr>
+<tr><td class="mono">morning_followup_loop</td><td>Dispara a mensagem de "bom dia"/follow-up no inicio do expediente.</td></tr>
+<tr><td class="mono">calendar_reminder_loop</td><td>Envia lembretes de compromissos que estao vencendo.</td></tr>
+<tr><td class="mono">seller_status_schedule_loop</td><td>Ajusta o status (online/ausente) dos vendedores conforme a agenda.</td></tr>
+<tr><td class="mono">system_monitor_loop</td><td>Coleta saude do sistema (conexoes, filas) para as metricas.</td></tr>
+<tr><td class="mono">billing_enforcement_loop</td><td>Marca faturas vencidas e <b>suspende tenants inadimplentes</b> (Fase 6).</td></tr>
+<tr><td class="mono">data_retention_loop</td><td>Apaga dados alem do periodo de retencao (LGPD, Fase 8).</td></tr>
+<tr><td class="mono">scheduled_messages_loop</td><td>Envia as mensagens que foram agendadas para uma data/hora.</td></tr>
+<tr><td class="mono">(reminders/quickwins)</td><td>Processa lembretes e itens dos quick wins pendentes.</td></tr>
+<tr><td class="mono">cadence_loop</td><td>Fase 12: percorre inscricoes de cadencia e dispara o passo de follow-up vencido.</td></tr>
+<tr><td class="mono">team_sla_loop</td><td>Fase 13: recalcula o SLA dos tickets abertos e sinaliza risco/violacao em tempo real.</td></tr>
+</table>
+
+<h3 id="main-lifespan">10.3 Lifespan &mdash; o que acontece ao ligar o servidor (l.1797)</h3>
+<div class="lines">
+<div class="ln"><div class="cd">await db.init_db()</div><div class="ex">Cria o pool com o hook de RLS, roda migracoes e garante o admin. Sem isso nada funciona.</div></div>
+<div class="ln"><div class="cd">await tc.load_tenant_config(DEFAULT_TENANT_ID)</div><div class="ex">Aquece o cache de marca/horario do tenant padrao.</div></div>
+<div class="ln"><div class="cd">await db.create_quickwins_tables()</div><div class="ex">Garante as tabelas dos quick wins (idempotente).</div></div>
+<div class="ln"><div class="cd">await db.create_phase10_tables()</div><div class="ex">Garante as tabelas da Fase 10 (IA/fluxos/KB/roteamento).</div></div>
+<div class="ln"><div class="cd">await db.create_phase11_tables()</div><div class="ex">Fase 11: canais, conversas unificadas, segmentos e campanhas.</div></div>
+<div class="ln"><div class="cd">await db.create_phase12_tables()</div><div class="ex">Fase 12: pipelines, deals, produtos, carrinhos, pedidos, cadencias, metas e comissoes.</div></div>
+<div class="ln"><div class="cd">await db.create_phase13_tables()</div><div class="ex">Fase 13: filas, tickets, QA, gamificacao, escalas e presenca.</div></div>
+<div class="ln"><div class="cd">if RUN_BACKGROUND_JOBS: asyncio.create_task(loop...)</div><div class="ex">Sobe os 12 loops de fundo. Numa arquitetura com workers dedicados, so o processo certo os executa.</div></div>
+<div class="ln"><div class="cd">yield  # app roda aqui</div><div class="ex">Ponto em que o servidor atende requisicoes. Ao desligar, o codigo apos o yield fecha pool/conexoes graciosamente.</div></div>
+</div>
+
+<h3 id="main-webhook">10.4 O pipeline do webhook &mdash; o coracao do atendimento</h3>
+<p>Toda mensagem do cliente entra por aqui. E a sequencia mais importante do sistema inteiro.</p>
+<pre class="code"><span class="n">@app</span>.post(<span class="s">"/webhook"</span>)                      <span class="c"># l.4382</span>
+<span class="k">async def</span> <span class="fn">webhook</span>(request: Request):
+    data = <span class="k">await</span> request.json()
+    <span class="c"># valida o segredo, resolve tenant, e delega:</span>
+    <span class="k">return await</span> <span class="fn">process_webhook</span>(data)   <span class="c"># l.4416</span></pre>
+<p>Dentro de <span class="mono">process_webhook</span> (dissecado em passos logicos):</p>
+<div class="lines">
+<div class="ln"><div class="cd">1. valida WEBHOOK_SECRET + rate-limit do webhook</div><div class="ex">Rejeita chamadas nao assinadas e limita volume (protege custo/abuso &mdash; Fase 6).</div></div>
+<div class="ln"><div class="cd">2. resolve tenant + set_current_tenant(...)</div><div class="ex">Identifica de qual cliente e a instancia e ativa o RLS para o resto do processamento.</div></div>
+<div class="ln"><div class="cd">3. extrai evento/mensagem do payload da Evolution</div><div class="ex">Normaliza o formato (texto, midia, reacao, ack de entrega/leitura...).</div></div>
+<div class="ln"><div class="cd">4. db.claim_webhook_message(waha_id)</div><div class="ex"><b>Idempotencia:</b> se essa mensagem ja foi processada, para aqui &mdash; evita duplicar em reenvios/retries.</div></div>
+<div class="ln"><div class="cd">5. se for midia -> evo.download_media(...)</div><div class="ex">Baixa e guarda no storage; salva a referencia.</div></div>
+<div class="ln"><div class="cd">6. get_user()/create_user() + save_message()</div><div class="ex">Garante o contato e grava a mensagem recebida no historico.</div></div>
+<div class="ln"><div class="cd">7. detect_bot_loop_risk() / can_send_automated_reply()</div><div class="ex">Decide se pode responder automaticamente (anti-loop + horario + estagio).</div></div>
+<div class="ln"><div class="cd">8. apply_ai_pipeline(...)  &lt;- Fase 10</div><div class="ex">Roda IA sobre a mensagem (sentimento, score, sugestao) e guarda o resultado. Detalhado na secao 13.</div></div>
+<div class="ln"><div class="cd">9. run_active_flow(...)  &lt;- Fase 10</div><div class="ex">Se houver um fluxo no-code ativo para esse contato, avanca a maquina de estados e executa as acoes (enviar msg, aplicar tag, transferir).</div></div>
+<div class="ln"><div class="cd">10. logica de menu/atendimento (se nao em fluxo)</div><div class="ex">Trata escolha de setor, fila "pendente assumir", encaminhamento ao atendente, etc.</div></div>
+<div class="ln"><div class="cd">11. broadcast WebSocket p/ o painel</div><div class="ex">Empurra a nova mensagem em tempo real para a tela dos atendentes (via Redis pub/sub).</div></div>
+</div>
+<div class="callout ok"><span class="h">Ordem importa</span>
+A IA (passo 8) roda <b>depois</b> das travas anti-loop (passo 7), e o fluxo (passo 9) roda <b>antes</b> da logica de menu antiga &mdash; e so para sessoes que nao sejam financeiro/engenharia e cujo estagio nao seja <span class="mono">em_atendimento</span>/<span class="mono">carteira</span>. Assim a automacao nova convive com o atendimento humano sem atropelar.</div>
+
+<h3 id="main-rotas">10.5 Mapa das rotas (por area)</h3>
+<p>Sao cerca de 290. Agrupadas por finalidade:</p>
+<table>
+<tr><th>Area</th><th>Rotas (exemplos)</th></tr>
+<tr><td>Paginas do painel</td><td class="mono">/, /login, /painel, /admin, /dashboard-vendas</td></tr>
+<tr><td>Sessao</td><td class="mono">POST /login, /logout, /api/session</td></tr>
+<tr><td>Chat/mensagens</td><td class="mono">/api/chat/send, /api/chat/media, /api/messages/&lt;phone&gt;, /api/chat/react, /api/chat/edit, /api/chat/delete</td></tr>
+<tr><td>Contatos/carteira</td><td class="mono">/api/clients, /api/user/&lt;phone&gt;, /api/assume, /api/finish, /api/transfer</td></tr>
+<tr><td>Tags/notas/CSAT</td><td class="mono">/api/tags, /api/notes, /api/csat</td></tr>
+<tr><td>Agenda</td><td class="mono">/api/calendar, /api/calendar/&lt;id&gt;</td></tr>
+<tr><td>Equipe/status</td><td class="mono">/api/team, /api/seller-status, /api/internal-chat</td></tr>
+<tr><td>Relatorios</td><td class="mono">/api/metrics, /api/reports/monthly, /api/reports/user</td></tr>
+<tr><td>Admin/tenant</td><td class="mono">/api/tenant/settings, /api/roles, /api/instances, /api/users</td></tr>
+<tr><td>Billing</td><td class="mono">/api/billing/*, POST /payment/webhook</td></tr>
+<tr><td>Signup/onboarding</td><td class="mono">/signup, /api/onboarding/*</td></tr>
+<tr><td>Integracoes/API publica</td><td class="mono">/api/integrations, /api/public/*, /api/webhooks-out</td></tr>
+<tr><td>Saude/metricas</td><td class="mono">/health, /metrics</td></tr>
+<tr><td>Webhook WhatsApp</td><td class="mono">POST /webhook</td></tr>
+<tr><td>WebSocket</td><td class="mono">/ws (tempo real do painel)</td></tr>
+<tr><td>Fase 10 - IA</td><td class="mono">/api/ai/* (l.5850-5951), /api/kb/* (l.5953-5985), /api/flows/* (l.5987-6070), /api/routing/* (l.6072-6110)</td></tr>
+<tr><td>Fase 11 - Omnichannel</td><td class="mono">/api/channels/*, /api/inbox/*, /api/segments/*, /api/campaigns/*</td></tr>
+<tr><td>Fase 12 - Vendas & CRM</td><td class="mono">/api/pipelines, /api/deals/*, /api/products/*, /api/cart/*, /api/orders, /pay/&lt;token&gt;, /api/cadences/*, /api/goals, /api/commissions/*, /api/contact360/&lt;phone&gt;</td></tr>
+<tr><td>Fase 13 - Equipe</td><td class="mono">/api/queues/*, /api/tickets/*, /api/supervision, /api/qa/*, /api/gamification/*, /api/presence/*, /api/shifts/*</td></tr>
+</table>
+<div class="callout"><span class="h">Padrao de uma rota</span>
+Quase toda rota segue: <span class="mono">Depends(get_current_user)</span> (autentica + ativa tenant) &rarr; valida o payload Pydantic &rarr; opcional <span class="mono">user_has_permission(...)</span> &rarr; chama funcoes do <span class="file">database.py</span>/<span class="file">evolution_service.py</span> &rarr; devolve JSON. O isolamento por tenant e automatico gracas ao passo 1.</div>
+
+<h2 id="ai">11. <span class="file">ai_engine.py</span> &mdash; o motor de IA <span class="tag">432 linhas &middot; Fase 10</span></h2>
+<p>Concentra toda a "inteligencia". A ideia central: <b>tentar um LLM real</b> (OpenAI/compativel) e, se nao houver chave ou a chamada falhar, <b>cair num fallback heuristico offline</b> que ainda entrega algo util. Assim o sistema funciona mesmo sem internet/credenciais.</p>
+
+<h3>11.1 _chat &mdash; a chamada base ao LLM</h3>
+<div class="lines">
+<div class="ln"><div class="cd">async def _chat(messages, temperature=0.3, max_tokens=400):</div><div class="ex">Funcao privada que todas as outras usam. Recebe a conversa no formato <span class="mono">[&#123;role, content&#125;]</span>.</div></div>
+<div class="ln"><div class="cd">settings = await db.get_ai_settings()</div><div class="ex">Le a config de IA <b>do tenant</b> (provedor, modelo, chave, on/off). Cada cliente tem a sua.</div></div>
+<div class="ln"><div class="cd">if not enabled or not api_key: return None</div><div class="ex">Sem IA ligada ou sem chave &rarr; retorna None e o chamador usa o fallback. <b>Nunca quebra.</b></div></div>
+<div class="ln"><div class="cd">async with httpx.AsyncClient(...) as c: r = await c.post(url, json=..., headers=...)</div><div class="ex">POST assincrono ao endpoint compativel com OpenAI (<span class="mono">/chat/completions</span>), com timeout.</div></div>
+<div class="ln"><div class="cd">return data["choices"][0]["message"]["content"]</div><div class="ex">Extrai o texto da resposta. Qualquer excecao e capturada e vira None (fallback).</div></div>
+</div>
+
+<h3>11.2 As capacidades (cada uma com LLM + fallback)</h3>
+<table>
+<tr><th>Funcao</th><th>O que faz</th><th>Fallback offline</th></tr>
+<tr><td class="mono">analyze_sentiment(text)</td><td>Classifica em positivo/neutro/negativo + intensidade.</td><td>Lexico de palavras positivas/negativas em PT.</td></tr>
+<tr><td class="mono">detect_language(text)</td><td>Detecta o idioma da mensagem.</td><td>Heuristica por caracteres/palavras comuns.</td></tr>
+<tr><td class="mono">translate(text, target)</td><td>Traduz para o idioma alvo.</td><td>Devolve o texto original marcado (sem quebrar a UI).</td></tr>
+<tr><td class="mono">summarize(messages)</td><td>Resume uma conversa longa.</td><td>Junta as primeiras/ultimas falas como resumo simples.</td></tr>
+<tr><td class="mono">extract_data(text)</td><td>Extrai nome, email, telefone, valores, etc.</td><td>Expressoes regulares (regex) para email/telefone/numeros.</td></tr>
+<tr><td class="mono">suggest_reply(context)</td><td>Sugere uma resposta ao atendente.</td><td>Modelos de resposta conforme intencao detectada.</td></tr>
+<tr><td class="mono">correct_tone(text, tone)</td><td>Reescreve o texto num tom (formal, amigavel...).</td><td>Ajustes simples de saudacao/pontuacao.</td></tr>
+<tr><td class="mono">provider_health()</td><td>Testa se o provedor de IA responde.</td><td>Retorna "offline" de forma limpa.</td></tr>
+</table>
+
+<h3>11.3 RAG &mdash; responder a partir da base de conhecimento</h3>
+<p>RAG ("geracao aumentada por recuperacao") deixa a IA responder <b>com base nos documentos do cliente</b>, nao no conhecimento generico do modelo.</p>
+<div class="lines">
+<div class="ln"><div class="cd">chunk_text(text, size=...)</div><div class="ex">Quebra um documento grande em <b>pedacos</b> (chunks) manejaveis, salvos em <span class="mono">kb_chunks</span>.</div></div>
+<div class="ln"><div class="cd">rank_chunks(query, chunks)</div><div class="ex">Ordena os pedacos por relevancia a pergunta usando <b>TF-IDF</b> (frequencia de termos) &mdash; sem depender de embeddings externos.</div></div>
+<div class="ln"><div class="cd">async answer_from_kb(query)</div><div class="ex">Pega os chunks do tenant (<span class="mono">db.get_kb_chunks</span>), rankeia, monta um prompt com os melhores e chama <span class="mono">_chat</span>. Sem LLM, devolve os trechos mais relevantes como resposta.</div></div>
+</div>
+<div class="callout ok"><span class="h">Por que TF-IDF em vez de embeddings</span>
+O ambiente nao tem <span class="mono">numpy/openai/sklearn</span> garantidos. TF-IDF puro em Python funciona offline, e leve e ja resolve bem busca em bases pequenas/medias &mdash; decisao pragmatica coerente com "funcoes que funcionam de verdade".</div>
+
+<h2 id="flow">12. <span class="file">flow_engine.py</span> &mdash; o motor de fluxos no-code <span class="tag">232 linhas &middot; Fase 10</span></h2>
+<p>Uma <b>maquina de estados pura</b>: dado o fluxo (desenhado pelo admin), o estado atual do contato e a mensagem que ele mandou, decide o proximo no e quais acoes executar. "Pura" = nao acessa banco nem rede; so calcula. Isso a torna testavel e previsivel.</p>
+
+<h3>12.1 Funcoes auxiliares</h3>
+<div class="lines">
+<div class="ln"><div class="cd">_norm(s)</div><div class="ex">Normaliza texto (minusculas, sem acento/espaco extra) para comparar opcoes com tolerancia.</div></div>
+<div class="ln"><div class="cd">render_vars(text, ctx)</div><div class="ex">Substitui variaveis no texto do no com dados do contato. Monta a marca com <span class="mono">"&#123;"+str(k)+"&#125;"</span> (evita o bug de chaves).</div></div>
+<div class="ln"><div class="cd">_match_option(text, options)</div><div class="ex">Casa a resposta do cliente com uma opcao do menu (por numero ou por texto aproximado).</div></div>
+<div class="ln"><div class="cd">_check_condition(cond, ctx)</div><div class="ex">Avalia condicoes de ramificacao (ex.: <span class="mono">valor &gt; 100</span>, tag presente) para nos do tipo "condition".</div></div>
+<div class="ln"><div class="cd">new_state(flow)</div><div class="ex">Cria o estado inicial apontando para o no <span class="mono">start</span> do fluxo.</div></div>
+</div>
+
+<h3>12.2 run() &mdash; o passo do fluxo</h3>
+<pre class="code"><span class="k">def</span> <span class="fn">run</span>(flow, state, text, ctx):
+    actions = []
+    steps = 0
+    node = flow[<span class="s">"nodes"</span>][state[<span class="s">"current"</span>]]
+    <span class="k">while</span> steps &lt; MAX_STEPS:        <span class="c"># MAX_STEPS = 25 (anti-loop)</span>
+        steps += 1
+        kind = node[<span class="s">"type"</span>]
+        <span class="k">if</span> kind == <span class="s">"message"</span>: actions.append((<span class="s">"send"</span>, render_vars(node[<span class="s">"text"</span>], ctx)))
+        <span class="k">elif</span> kind == <span class="s">"question"</span>: ... <span class="c"># envia e espera resposta (para o loop)</span>
+        <span class="k">elif</span> kind == <span class="s">"condition"</span>: node = branch(...)
+        <span class="k">elif</span> kind == <span class="s">"action"</span>: actions.append((node[<span class="s">"action"</span>], node.get(<span class="s">"value"</span>)))
+        <span class="k">elif</span> kind == <span class="s">"end"</span>: state[<span class="s">"done"</span>] = <span class="k">True</span>; <span class="k">break</span>
+    <span class="k">return</span> state, actions</pre>
+<div class="lines">
+<div class="ln"><div class="cd">while steps &lt; MAX_STEPS</div><div class="ex"><b>Trava anti-loop:</b> no maximo 25 nos por passo. Fluxo mal desenhado nunca trava o processo.</div></div>
+<div class="ln"><div class="cd">kind == "message" -> actions.append(("send", ...))</div><div class="ex">Nos de mensagem <b>nao</b> enviam direto: geram uma <b>acao</b> "send". Quem envia de fato e o <span class="file">main.py</span> (mantendo o motor puro).</div></div>
+<div class="ln"><div class="cd">kind == "question" -> para o loop</div><div class="ex">Ao chegar numa pergunta, envia e <b>interrompe</b>, salvando o estado para retomar quando o cliente responder.</div></div>
+<div class="ln"><div class="cd">kind == "condition" -> branch(...)</div><div class="ex">Escolhe o proximo no conforme <span class="mono">_check_condition</span>. Permite arvores de decisao.</div></div>
+<div class="ln"><div class="cd">kind == "action" -> (acao, valor)</div><div class="ex">Gera acoes como aplicar tag, transferir para setor, marcar lead &mdash; executadas pelo main.py.</div></div>
+<div class="ln"><div class="cd">return state, actions</div><div class="ex">Devolve o <b>novo estado</b> (para salvar) e a <b>lista de acoes</b> (para executar). Contrato simples e testavel.</div></div>
+</div>
+<div class="lines">
+<div class="ln"><div class="cd">validate_flow(flow)</div><div class="ex">Confere antes de salvar: existe no <span class="mono">start</span>? Todos os destinos existem? Sem isso o admin poderia salvar um fluxo quebrado.</div></div>
+</div>
+<div class="callout ok"><span class="h">Separacao de responsabilidades</span>
+O motor <b>decide</b> (puro), o main.py <b>executa</b> (efeitos colaterais: enviar via <span class="mono">evo</span>, gravar via <span class="mono">db</span>). Esse desenho e o que permitiu o <b>autoteste passar sem banco</b> na validacao da Fase 10.</div>
+
+<h2 id="p10glue">13. Como a IA e os fluxos se conectam ao atendimento</h2>
+<p>Os motores das secoes 11 e 12 sao "cerebros" isolados. Quem os liga ao WhatsApp sao os <b>helpers da Fase 10 dentro do main.py</b>, chamados no pipeline do webhook.</p>
+<div class="lines">
+<div class="ln"><div class="cd">score_lead(...) (l.5704)</div><div class="ex">Calcula uma pontuacao do lead (interesse/qualificacao) para priorizar.</div></div>
+<div class="ln"><div class="cd">apply_ai_pipeline(...) (l.5728)</div><div class="ex">Orquestra a IA sobre a mensagem recebida: sentimento + score + (opcional) sugestao, e salva via <span class="mono">db.save_conversation_ai</span>. Chamado no passo 8 do webhook.</div></div>
+<div class="ln"><div class="cd">_online_candidates(...) (l.5754)</div><div class="ex">Lista atendentes online e elegiveis para receber um novo atendimento.</div></div>
+<div class="ln"><div class="cd">auto_assign(...) (l.5792)</div><div class="ex">Distribui o contato entre os candidatos usando <b>rodizio</b> (<span class="mono">db.next_round_robin</span>) e regras de <span class="mono">routing_rules</span>.</div></div>
+<div class="ln"><div class="cd">run_active_flow(...) (l.5809)</div><div class="ex">Carrega o fluxo ativo e o estado do contato, chama <span class="mono">flow_engine.run(...)</span> e <b>executa as acoes</b> retornadas (enviar, tag, transferir), salvando o novo estado. Passo 9 do webhook.</div></div>
+</div>
+<p>As rotas <span class="mono">/api/ai/*</span>, <span class="mono">/api/kb/*</span>, <span class="mono">/api/flows/*</span> e <span class="mono">/api/routing/*</span> (l.5850-6110) expoem tudo isso ao painel: configurar IA, subir documentos na base, desenhar/testar fluxos e definir regras de roteamento.</p>
+
+<h2 id="channels">14. <span class="file">channels.py</span> &mdash; omnichannel <span class="tag">350 linhas &middot; Fase 11</span></h2>
+<p>A Fase 11 tira o sistema do "so WhatsApp" e o transforma em uma <b>caixa unificada multicanal</b>. O <span class="file">channels.py</span> e a camada de adaptadores: fala a lingua de cada canal, mas devolve tudo em um formato interno unico.</p>
+<h3>14.1 Adaptadores suportados</h3>
+<table>
+<tr><th>Canal</th><th>Como envia / recebe</th></tr>
+<tr><td>WhatsApp Cloud</td><td>API oficial da Meta (Graph). Verificacao de webhook por challenge.</td></tr>
+<tr><td>Telegram</td><td>Bot API (sendMessage / updates).</td></tr>
+<tr><td>Instagram & Messenger</td><td>Graph API de mensagens da Meta.</td></tr>
+<tr><td>Email</td><td>Envio SMTP / recebimento normalizado.</td></tr>
+<tr><td>Webchat</td><td>Widget do proprio site, via WebSocket/HTTP.</td></tr>
+</table>
+<h3>14.2 As funcoes-chave</h3>
+<div class="lines">
+<div class="ln"><div class="cd">send(channel, creds, to, payload)</div><div class="ex">Ponto unico de envio: escolhe o adaptador certo e traduz para a API do canal. Sem credenciais, entra em <b>modo stub</b> (registra o envio sem chamar rede) &mdash; util para testes.</div></div>
+<div class="ln"><div class="cd">parse_inbound(channel, body)</div><div class="ex">Normaliza o payload recebido de qualquer canal para um formato interno (remetente, texto, midia, ids).</div></div>
+<div class="ln"><div class="cd">render_template(template, vars)</div><div class="ex">Preenche variaveis em mensagens e campanhas.</div></div>
+<div class="ln"><div class="cd">verify_meta_challenge(params)</div><div class="ex">Responde ao handshake de verificacao de webhook da Meta.</div></div>
+</div>
+<h3>14.3 O que a Fase 11 adicionou ao banco e ao painel</h3>
+<div class="lines">
+<div class="ln"><div class="cd">database.py :: create_phase11_tables()</div><div class="ex">Canais conectados, conversas unificadas, segmentos e campanhas &mdash; tabelas globais com filtro por tenant.</div></div>
+<div class="ln"><div class="cd">partials/omnichannel_js.html</div><div class="ex">A <b>caixa unificada</b>: botao flutuante "CAIXA UNIFICADA", polling de novas mensagens e badge de nao lidas, agregando todos os canais.</div></div>
+<div class="ln"><div class="cd">partials/campaigns_js.html</div><div class="ex">Console admin com abas <b>Canais | Campanhas | Segmentos</b> para configurar conexoes e disparos.</div></div>
+</div>
+
+<h2 id="sales">15. <span class="file">sales_engine.py</span> &mdash; vendas & CRM avancado <span class="tag">176 linhas &middot; Fase 12</span></h2>
+<p>A Fase 12 acrescenta um <b>CRM de vendas completo</b>: funil (pipeline), catalogo, carrinho com link de pagamento, cadencias de follow-up, metas e comissoes. Como nas fases de IA, a <b>logica pura</b> vive em um modulo isolado e testavel.</p>
+<h3>15.1 O motor puro (sales_engine.py)</h3>
+<div class="lines">
+<div class="ln"><div class="cd">cart_totals(items, discount, discount_type)</div><div class="ex">Soma o carrinho aplicando desconto por <b>valor</b> ou <b>percentual</b>; devolve subtotal, desconto, total e contagem.</div></div>
+<div class="ln"><div class="cd">commission_for(amount, rules, owner_rate)</div><div class="ex">Calcula a comissao por <b>faixas de valor</b> (ou taxa fixa do vendedor).</div></div>
+<div class="ln"><div class="cd">next_cadence_step(steps, idx, last_run, now)</div><div class="ex">Decide qual passo da cadencia esta vencido e se a sequencia terminou.</div></div>
+<div class="ln"><div class="cd">deal_health(deal, now)</div><div class="ex">Mede ha quanto tempo o negocio esta parado e devolve um sinal: <span class="mono">ok / atencao / risco</span>.</div></div>
+<div class="ln"><div class="cd">weighted_forecast(deals)</div><div class="ex">Previsao ponderada pela probabilidade de cada estagio do funil.</div></div>
+<div class="ln"><div class="cd">goal_progress(target, achieved)</div><div class="ex">Progresso de uma meta (ratio, %, status batida/no caminho/abaixo).</div></div>
+</div>
+<h3>15.2 Banco, rotas e link de pagamento</h3>
+<div class="lines">
+<div class="ln"><div class="cd">database.py :: create_phase12_tables()</div><div class="ex">11 tabelas: pipelines, deals, deal_events, products, carts, cart_items, orders, cadences, enrollments, sales_goals, commission_rules.</div></div>
+<div class="ln"><div class="cd">GET /pay/&lt;token&gt; + POST /pay/&lt;token&gt;/confirm</div><div class="ex"><b>Pagina publica de pagamento</b> (tema Console). Ao confirmar, marca o pedido como pago, reativa o contexto do tenant e avisa o contato automaticamente.</div></div>
+<div class="ln"><div class="cd">cadence_loop() (background)</div><div class="ex">Percorre inscricoes ativas de cadencia, dispara o passo vencido e avanca a sequencia.</div></div>
+<div class="ln"><div class="cd">/api/contact360/&lt;phone&gt;</div><div class="ex"><b>Historico 360</b>: junta cadastro, negocios, pedidos e lead score do contato.</div></div>
+</div>
+<h3>15.3 O painel</h3>
+<p>O partial <span class="mono">partials/sales_js.html</span> traz o console "VENDAS / CRM" com 6 abas: <b>Pipeline</b> (Kanban por estagio com forecast e sinal de aging), <b>Catalogo</b>, <b>Carrinho</b> (monta pedido e gera o link de pagamento), <b>Metas</b>, <b>Cadencias</b> e <b>Comissoes</b>.</p>
+
+<h2 id="team">16. <span class="file">team_engine.py</span> &mdash; produtividade da equipe <span class="tag">~250 linhas &middot; Fase 13</span></h2>
+<p>A Fase 13 cuida de quem atende: <b>SLA e filas, supervisao em tempo real, QA, gamificacao e escalas/presenca</b>. Mais uma vez, a matematica fica num motor puro.</p>
+<h3>16.1 O motor puro (team_engine.py)</h3>
+<div class="lines">
+<div class="ln"><div class="cd">sla_state(created, target_min, done, now)</div><div class="ex">Estado de um marco de SLA: <span class="mono">ok / risco / violado / cumprido</span>, com tempo restante. Risco a partir de 75% do prazo.</div></div>
+<div class="ln"><div class="cd">gamification_level(points)</div><div class="ex">Converte pontos em nivel (Bronze -&gt; Diamante) com progresso ate o proximo.</div></div>
+<div class="ln"><div class="cd">award_badges(metrics)</div><div class="ex">Concede conquistas quando metricas batem alvos (resolvidas, vendas, CSAT, media de QA...).</div></div>
+<div class="ln"><div class="cd">qa_score(criteria, answers)</div><div class="ex">Nota ponderada 0&ndash;100 de um formulario de avaliacao.</div></div>
+<div class="ln"><div class="cd">effective_status(manual, shifts, heartbeat, now)</div><div class="ex">Status <b>efetivo</b> do atendente cruzando status manual, <b>escala</b> e <b>heartbeat</b> (sem sinal recente = offline).</div></div>
+<div class="ln"><div class="cd">pick_agent(agents)</div><div class="ex">Escolhe o atendente online com menor carga (balanceamento).</div></div>
+</div>
+<h3>16.2 Banco, rotas e loop de SLA</h3>
+<div class="lines">
+<div class="ln"><div class="cd">database.py :: create_phase13_tables()</div><div class="ex">9 tabelas: queues, tickets, qa_scorecards, qa_reviews, gamification_events, gamification_rules, agent_shifts, agent_presence. Integra com o <span class="mono">seller_status</span> ja existente.</div></div>
+<div class="ln"><div class="cd">GET /api/supervision</div><div class="ex">Fotografia em tempo real: abertos, em risco, SLA violado, profundidade por fila e presenca efetiva.</div></div>
+<div class="ln"><div class="cd">team_sla_loop() (background)</div><div class="ex">A cada 45s recalcula o estado de SLA dos tickets abertos, persiste mudancas e emite <span class="mono">supervision_update</span> por tenant.</div></div>
+<div class="ln"><div class="cd">/api/presence/heartbeat</div><div class="ex">O painel bate presenca periodicamente; o status efetivo considera a escala do atendente.</div></div>
+</div>
+<h3>16.3 O painel</h3>
+<p>O partial <span class="mono">partials/team_js.html</span> traz o console "EQUIPE" com abas <b>Supervisao</b> (auto-refresh), <b>Filas</b>, <b>Tickets</b>, <b>QA</b>, <b>Gamificacao</b> (ranking com medalhas) e <b>Escalas</b>, alem de um <b>widget de presenca</b> com heartbeat automatico para todos os atendentes.</p>
+
+<h2 id="extras">17. Complementos: <span class="file">worker.py</span> e <span class="file">integrations.py</span></h2>
+<div class="lines">
+<div class="ln"><div class="cd">worker.py :: main()</div><div class="ex">Processo <b>separado</b> do web. Faz <span class="mono">db.init_db()</span> e fica consumindo a fila de jobs do Redis (<span class="mono">JOB_QUEUE_KEY</span>), processando tarefas pesadas (midia, webhooks) fora do caminho da requisicao &mdash; escala da Fase 7.</div></div>
+<div class="ln"><div class="cd">integrations.py :: CATALOG / list_integrations()</div><div class="ex">Catalogo do <b>marketplace</b> (Fase 9): metadados das integracoes disponiveis, consumido por <span class="mono">/api/integrations</span>.</div></div>
+</div>
+
+<h2 id="frontend">18. Frontend &mdash; templates e JavaScript</h2>
+<p>O painel e renderizado com Jinja2 e turbinado por JavaScript modular. Para nao ter arquivos gigantes, o JS foi quebrado em <b>partials</b> incluidos nos dashboards.</p>
+<h4>Estrutura de templates</h4>
+<ul>
+<li><span class="file">base.html</span> &mdash; layout, tema Console, CSS compartilhado.</li>
+<li><span class="file">login.html</span> &mdash; tela de login.</li>
+<li><span class="file">dashboard_admin.html</span> e <span class="file">dashboard_vendas.html</span> &mdash; os dois paineis principais.</li>
+<li><span class="file">partials/</span> &mdash; blocos de JS incluidos via <span class="mono">&#123;% include %&#125;</span>: <span class="mono">admin_js_01..04</span>, <span class="mono">vendas_js_01..04</span>, <span class="mono">quickwins_js</span>, <span class="mono">ai_copilot_js</span>, <span class="mono">ai_admin_js</span>, <span class="mono">omnichannel_js</span>, <span class="mono">campaigns_js</span>, <span class="mono">sales_js</span>, <span class="mono">team_js</span>.</li>
+</ul>
+<h4>Os partials da Fase 10</h4>
+<div class="lines">
+<div class="ln"><div class="cd">partials/ai_copilot_js.html</div><div class="ex">O <b>copiloto</b> (botao flutuante nos dois dashboards): sugerir resposta, ajustar tom, resumir, extrair dados, traduzir e perguntar a base (KB). Mostra selo de sentimento e score do lead. Fala com <span class="mono">/api/ai/*</span>.</div></div>
+<div class="ln"><div class="cd">partials/ai_admin_js.html</div><div class="ex">O <b>console de admin</b> (so no painel admin): configurar IA, gerir a base de conhecimento e o <b>construtor de fluxos no-code por formulario</b> com simulador, alem de roteamento e skills. Fala com <span class="mono">/api/flows/*</span> e <span class="mono">/api/routing/*</span>.</div></div>
+</div>
+<h4>Os partials das Fases 11-13</h4>
+<div class="lines">
+<div class="ln"><div class="cd">partials/omnichannel_js.html + campaigns_js.html</div><div class="ex">Fase 11: caixa unificada multicanal e console de canais/campanhas/segmentos.</div></div>
+<div class="ln"><div class="cd">partials/sales_js.html</div><div class="ex">Fase 12: console de vendas/CRM (Pipeline Kanban, catalogo, carrinho+checkout, metas, cadencias, comissoes).</div></div>
+<div class="ln"><div class="cd">partials/team_js.html</div><div class="ex">Fase 13: console de produtividade (supervisao, filas/SLA, tickets, QA, gamificacao, escalas) + widget de presenca.</div></div>
+</div>
+<h4>Tempo real</h4>
+<p>O painel abre um WebSocket (<span class="mono">/ws</span>). Quando o webhook grava uma nova mensagem, o servidor publica no Redis e empurra para os navegadores conectados &mdash; a conversa aparece na hora, sem recarregar.</p>
+
+<h3 id="site">18.5 O site institucional (<span class="file">site/</span>)</h3>
+<p>Alem do painel (o app), o projeto traz um <b>site publico estatico</b> em <span class="file">site/</span> &mdash; a vitrine comercial e a documentacao do produto. E HTML puro, sem build, servido de forma independente do FastAPI.</p>
+<table>
+<tr><th>Arquivo</th><th>Papel</th></tr>
+<tr><td class="mono">site/index.html</td><td>Landing page comercial: hero, recursos (10 cards), como funciona (4 passos), planos, depoimentos, FAQ e CTA.</td></tr>
+<tr><td class="mono">site/docs.html</td><td>Documentacao/guia de uso com barra lateral: comecar, conceitos, deploy, login, WhatsApp, paineis, contatos, agenda, billing, LGPD, API e white-label.</td></tr>
+<tr><td class="mono">site/assets/site.css</td><td>Tema <b>Blueprint Console</b>: grid de fundo, biseis (clip-path), JetBrains Mono + Space Grotesk, laranja #ff6a00. Folha unica compartilhada pelas duas paginas.</td></tr>
+</table>
+<div class="lines">
+<div class="ln"><div class="cd">index.html</div><div class="ex">Uma pagina so, em secoes ancoradas (<span class="mono">#recursos #como #planos #depoimentos #faq</span>). Os icones sao um <b>sprite SVG inline</b> &mdash; nenhuma imagem externa. Mostra um mock animado do console e os 3 planos (Starter / Pro / White-label).</div></div>
+<div class="ln"><div class="cd">docs.html</div><div class="ex">Layout de documentacao com <span class="mono">aside.side</span> fixa + conteudo, no mesmo visual. Serve de referencia publica: inclui exemplo de chamada da API e aponta para <span class="mono">docs/API_PUBLICA.md</span> e <span class="mono">WHITELABEL.md</span>.</div></div>
+<div class="ln"><div class="cd">assets/site.css</div><div class="ex">Define <span class="mono">.nav .hero .cards .plans .quotes .faq</span> e os biseis <span class="mono">.bevel</span>/<span class="mono">.bevel-sm</span>. Totalmente responsivo (breakpoint 860px).</div></div>
+</div>
+<div class="callout"><span class="h">App x Site &mdash; nao confundir</span>
+O frontend do <b>painel</b> vive em <span class="mono">templates/</span> + <span class="mono">partials/</span> (dinamico, via Jinja e WebSocket). O <span class="file">site/</span> e <b>estatico</b> e voltado a marketing/onboarding: ele aponta para o painel e para a documentacao, mas nao depende do FastAPI para funcionar.</div>
+
+<h2 id="e2e">19. Fluxos ponta a ponta (juntando tudo)</h2>
+<h3>19.1 Login</h3>
+<div class="diagram">POST /login -> verify_user (bcrypt) -> create_access_token (JWT)
+   -> register_login_session (Redis, se sessao unica) -> Set-Cookie session_token
+   -> redireciona ao painel (admin ou vendas conforme o papel)</div>
+<h3>19.2 Atendente envia uma mensagem</h3>
+<div class="diagram">painel -> POST /api/chat/send (Depends get_current_user: autentica + ativa tenant)
+   -> evo.send_message(...) (Evolution) -> db.save_message(...) (RLS grava no tenant certo)
+   -> broadcast WebSocket -> aparece na tela</div>
+<h3>19.3 Cliente responde (com IA + fluxo)</h3>
+<div class="diagram">WhatsApp -> POST /webhook -> valida segredo + rate-limit -> resolve/ativa tenant
+   -> claim_webhook_message (idempotencia) -> [midia? download] -> save_message
+   -> anti-loop/horario OK? -> apply_ai_pipeline (sentimento/score) 
+   -> run_active_flow (flow_engine.run -> acoes: send/tag/transfer)
+   -> ou logica de menu/fila -> broadcast WebSocket</div>
+<h3>19.4 Admin cria um fluxo no-code</h3>
+<div class="diagram">ai_admin_js (formulario) -> POST /api/flows (valida com flow_engine.validate_flow)
+   -> db salva o fluxo (tenant_id) -> simulador chama flow_engine.run em memoria
+   -> ativado: o proximo cliente entra por run_active_flow no webhook</div>
+<h3>19.5 Inadimplencia suspende o tenant</h3>
+<div class="diagram">billing_enforcement_loop -> mark_overdue_invoices -> passa grace period?
+   -> set_tenant_status('suspended') -> get_current_user bloqueia login
+   -> pagamento chega em /payment/webhook -> mark_invoice_paid -> reactivate_tenant_if_paid</div>
+
+<h2 id="glossario">20. Glossario</h2>
+<table>
+<tr><th>Termo</th><th>Significado no contexto do continnumOS</th></tr>
+<tr><td><b>Tenant</b></td><td>Uma empresa cliente do SaaS. Todo dado pertence a um tenant.</td></tr>
+<tr><td><b>RLS</b></td><td>Row-Level Security do PostgreSQL: o banco so mostra linhas do tenant ativo.</td></tr>
+<tr><td><b>GUC / app.current_tenant</b></td><td>Variavel de sessao do Postgres que carrega o tenant atual; as policies de RLS a usam.</td></tr>
+<tr><td><b>contextvar</b></td><td>Variavel isolada por tarefa async; guarda o tenant da requisicao sem misturar requisicoes.</td></tr>
+<tr><td><b>Evolution API</b></td><td>Gateway que conecta o sistema ao WhatsApp (enviar/receber).</td></tr>
+<tr><td><b>Instancia</b></td><td>Uma conexao de um numero de WhatsApp na Evolution.</td></tr>
+<tr><td><b>Stage</b></td><td>Estagio do contato na jornada (menu_wait, pendente_assumir, em_atendimento, carteira).</td></tr>
+<tr><td><b>Webhook</b></td><td>Chamada que a Evolution faz ao sistema quando algo acontece no WhatsApp.</td></tr>
+<tr><td><b>Idempotencia</b></td><td>Processar a mesma mensagem 2x nao causa efeito duplicado (via claim_webhook_message).</td></tr>
+<tr><td><b>LLM</b></td><td>Modelo de linguagem (a IA de verdade); usado quando ha chave configurada.</td></tr>
+<tr><td><b>Fallback</b></td><td>Plano B heuristico offline quando a IA nao esta disponivel.</td></tr>
+<tr><td><b>RAG</b></td><td>Responder com base nos documentos do cliente (base de conhecimento) e nao no conhecimento generico.</td></tr>
+<tr><td><b>TF-IDF</b></td><td>Tecnica leve para achar os trechos mais relevantes a uma pergunta, sem IA externa.</td></tr>
+<tr><td><b>Maquina de estados</b></td><td>O motor de fluxos: dado estado + entrada, decide proximo estado e acoes.</td></tr>
+<tr><td><b>Round-robin</b></td><td>Distribuicao de atendimentos em rodizio justo entre os atendentes.</td></tr>
+<tr><td><b>SLA</b></td><td>Prazo maximo de 1a resposta/resolucao; o sistema sinaliza risco e violacao.</td></tr>
+<tr><td><b>Pipeline / Funil</b></td><td>Sequencia de estagios de uma venda (lead -&gt; ganho/perdido) com probabilidade por estagio.</td></tr>
+<tr><td><b>Cadencia</b></td><td>Sequencia automatica de follow-ups disparada ao longo do tempo.</td></tr>
+<tr><td><b>Omnichannel</b></td><td>Atender varios canais (WhatsApp, Telegram, Instagram, email, webchat) numa caixa unica.</td></tr>
+<tr><td><b>Heartbeat</b></td><td>Sinal periodico do painel que indica que o atendente esta presente/online.</td></tr>
+</table>
+
+<div class="footer">
+  <b>continnumOS</b> &mdash; documento gerado por dissecacao do codigo (Fases 0-13). Cobertura: 16 modulos Python, frontend e fluxos de ponta a ponta.<br>
+  Metodo: modulos centrais anotados linha a linha; <span class="file">main.py</span> e <span class="file">database.py</span> por blocos logicos + funcoes-chave + mapa completo de rotas e funcoes.
+</div>
+
+</main>
+</div>
+<script>
+function filterNav(v){
+  v=(v||'').toLowerCase().trim();
+  document.querySelectorAll('#nav a').forEach(function(a){
+    if(a.classList.contains('grp')){a.style.display='';return;}
+    var t=a.textContent.toLowerCase();
+    a.style.display=(!v||t.indexOf(v)>=0)?'':'none';
+  });
+}
+// scrollspy: destaca a secao ativa na barra lateral
+var links=[].slice.call(document.querySelectorAll('#nav a[href^="#"]'));
+var map={};
+links.forEach(function(a){var id=a.getAttribute('href').slice(1);map[id]=a;});
+function spy(){
+  var y=window.scrollY+120,cur=null;
+  Object.keys(map).forEach(function(id){
+    var el=document.getElementById(id);
+    if(el&&el.offsetTop<=y)cur=id;
+  });
+  links.forEach(function(a){a.style.background='';a.style.color='';});
+  if(cur&&map[cur]){map[cur].style.background='var(--bg3)';map[cur].style.color='var(--primary2)';}
+}
+window.addEventListener('scroll',spy);spy();
+</script>
+</body>
+</html>

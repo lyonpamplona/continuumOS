@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    # Fase 6: Postgres + Redis reais para rodar os testes de integração
+    # (isolamento RLS multi-tenant) e cobrir fluxos ponta a ponta.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: continnumos
+          POSTGRES_PASSWORD: continnumos
+          POSTGRES_DB: continnumos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U continnumos"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Segredos/010conexões de teste (consumidos por config.py e conftest.py).
+      DATABASE_URL: postgresql://continnumos:continnumos@localhost:5432/continnumos_test
+      REDIS_URL: redis://localhost:6379/0
+      EVO_API_URL: http://localhost:9999
+      EVO_API_KEY: test-evo-key
+      JWT_SECRET: test-jwt-secret
+      WEBHOOK_SECRET: test-webhook-secret
+      ADMIN_PASSWORD: test-admin-pass
+      PAYMENT_WEBHOOK_SECRET: test-payment-secret
+      # Liga os testes de integração (RLS) e desliga migração no boot (Alembic).
+      RUN_DB_TESTS: "1"
+      RUN_DB_MIGRATIONS_ON_BOOT: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Compile check (py_compile)
+        run: python -m compileall -q .
+
+      - name: Alembic migrations (upgrade head)
+        run: alembic upgrade head
+
+      - name: Run tests with coverage
+        run: pytest -q --cov=. --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t continnumos:ci .

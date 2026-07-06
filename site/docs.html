@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>continnumOS — Documentação &amp; guia de uso</title>
+<meta name="description" content="Documentação completa do continnumOS: começar, conectar WhatsApp, painéis de vendas e administração, contatos, agenda, billing, LGPD e API.">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5ZM19 19H6"/></symbol>
+</defs></svg>
+
+<header class="nav"><div class="wrap">
+  <a class="brand" href="index.html"><span class="mark">C</span> continnumOS</a>
+  <nav>
+    <a href="index.html#recursos">Recursos</a>
+    <a href="index.html#planos">Planos</a>
+    <a href="docs.html">Documentação</a>
+  </nav>
+  <a class="btn pri bevel-sm cta" href="index.html#planos">Começar agora</a>
+</div></header>
+
+<div class="wrap">
+<div class="docs">
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <h5>Introdução</h5>
+    <a href="#comecar">Começar</a>
+    <a href="#conceitos">Conceitos-chave</a>
+    <a href="#deploy">Instalação / Deploy</a>
+    <h5>Operação</h5>
+    <a href="#login">Acesso e login</a>
+    <a href="#whatsapp">Conectar WhatsApp</a>
+    <a href="#vendas">Painel de Vendas</a>
+    <a href="#admin">Painel Admin</a>
+    <a href="#contatos">Contatos &amp; listas</a>
+    <a href="#agenda">Agenda</a>
+    <a href="#interno">Chat interno</a>
+    <h5>Gestão</h5>
+    <a href="#tenants">Tenants &amp; usuários</a>
+    <a href="#billing">Billing &amp; planos</a>
+    <a href="#lgpd">LGPD &amp; auditoria</a>
+    <h5>Avançado</h5>
+    <a href="#api">API &amp; webhooks</a>
+    <a href="#whitelabel">White-label</a>
+    <a href="#faq">Solução de problemas</a>
+  </aside>
+
+  <!-- CONTENT -->
+  <main class="doc-main">
+    <span class="mono-tag">// Documentação</span>
+    <h1>Guia de uso do continnumOS</h1>
+    <p>Tudo o que você precisa para instalar, configurar e operar o continnumOS — do primeiro deploy ao atendimento em produção. Use o menu à esquerda para navegar.</p>
+
+    <h2 id="comecar">Começar</h2>
+    <p>O continnumOS é um CRM de atendimento via WhatsApp <strong>multi-tenant</strong>: uma única instalação atende vários clientes (tenants), cada um com dados totalmente isolados. O fluxo típico de colocação no ar:</p>
+    <ol class="step-list">
+      <li><strong>Provisione um tenant</strong> para o cliente (plano, limite de instâncias e usuários).</li>
+      <li><strong>Crie os usuários</strong> (administrador e atendentes de vendas).</li>
+      <li><strong>Conecte a instância do WhatsApp</strong> via QR Code.</li>
+      <li><strong>Importe contatos</strong> e comece a atender.</li>
+    </ol>
+    <div class="callout"><b>Pré-requisitos:</b> Docker + docker-compose, um banco PostgreSQL, uma instância da Evolution API acessível e um domínio (opcional para white-label).</div>
+
+    <h2 id="conceitos">Conceitos-chave</h2>
+    <table>
+      <tr><th>Termo</th><th>O que é</th></tr>
+      <tr><td>Tenant</td><td>Um cliente da sua revenda. Todos os dados (contatos, mensagens, vendas) pertencem a um tenant e ficam isolados por RLS.</td></tr>
+      <tr><td>Instância</td><td>Uma conexão de WhatsApp (número) vinculada a um tenant, gerenciada pela Evolution API.</td></tr>
+      <tr><td>Papel (role)</td><td>Define o painel e as permissões do usuário: administrador ou vendas.</td></tr>
+      <tr><td>Super-admin</td><td>Quem opera a revenda: cria tenants, define planos e acompanha billing.</td></tr>
+    </table>
+
+    <h2 id="deploy">Instalação / Deploy</h2>
+    <p>O projeto acompanha <code>Dockerfile</code> e <code>docker-compose.yaml</code>. Configure as variáveis a partir do <code>.env.example</code> e suba os serviços:</p>
+    <pre><code>cp .env.example .env
+# edite .env com banco, JWT_SECRET, URL da Evolution API, etc.
+docker compose up -d --build
+
+# aplique as migrations versionadas (Alembic)
+docker compose exec app alembic upgrade head</code></pre>
+    <div class="callout warn"><b>Produção:</b> nunca deixe segredos apenas em <code>.env</code> plano. Use um secret manager e rotacione o <code>JWT_SECRET</code> periodicamente.</div>
+    <p style="margin-top:14px">Guia visual completo, passo a passo: <a href="deploy.html" style="color:var(--pri)">continnumOS &mdash; Guia de instalacao &amp; deploy</a>.</p>
+
+    <h2 id="login">Acesso e login</h2>
+    <p>Cada usuário acessa em <code>/login</code> com usuário e senha. Após autenticar, o sistema direciona automaticamente para o painel correspondente ao seu papel (Vendas ou Admin). O console é um PWA: pode ser instalado no celular e funciona com tela offline quando sem conexão.</p>
+
+    <h2 id="whatsapp">Conectar WhatsApp</h2>
+    <p>A conexão é feita pela Evolution API. Para vincular um número ao tenant:</p>
+    <ol class="step-list">
+      <li>No painel Admin, abra <strong>Configurações → Instância / Evolution</strong>.</li>
+      <li>Clique em <strong>Gerar QR Code</strong>.</li>
+      <li>No celular, abra o WhatsApp → <strong>Aparelhos conectados</strong> → <strong>Conectar um aparelho</strong> e escaneie.</li>
+      <li>Aguarde o status mudar para <strong>conectado</strong>; as mensagens passam a chegar em tempo real.</li>
+    </ol>
+    <div class="callout"><b>Dica:</b> mantenha o celular com bateria e internet. Se a sessão cair, o indicador de status em tempo real avisa e basta reconectar.</div>
+
+    <h2 id="vendas">Painel de Vendas</h2>
+    <p>É a estação de trabalho do atendente. Principais áreas:</p>
+    <ul>
+      <li><strong>Caixa de atendimentos:</strong> lista de conversas com filtros (abertas, minhas, aguardando) e busca.</li>
+      <li><strong>Conversa:</strong> histórico completo, envio de texto/mídia, respostas rápidas, encaminhamento, reações e edição.</li>
+      <li><strong>Registrar venda:</strong> finalize o atendimento marcando venda/não-venda — alimenta as metas do dia.</li>
+      <li><strong>Contatos e agenda:</strong> acesso rápido aos dados do cliente e agendamento de follow-up.</li>
+    </ul>
+
+    <h2 id="admin">Painel Admin</h2>
+    <p>Visão de gestão do tenant. Abas principais:</p>
+    <table>
+      <tr><th>Aba</th><th>Função</th></tr>
+      <tr><td>Visão geral</td><td>KPIs do dia, gráfico de desempenho e termômetro de metas da equipe.</td></tr>
+      <tr><td>Auditoria</td><td>Acompanhamento de atendimentos e mensagens por atendente.</td></tr>
+      <tr><td>Logs</td><td>Trilha de ações do sistema com filtros por período.</td></tr>
+      <tr><td>Agenda</td><td>Visão consolidada de compromissos.</td></tr>
+      <tr><td>Equipe/Interno</td><td>Gestão de usuários e chat interno.</td></tr>
+      <tr><td>Ferramentas</td><td>Limpeza de mídia, importação e utilitários.</td></tr>
+      <tr><td>Configurações</td><td>Instância, notificações, tema e preferências.</td></tr>
+    </table>
+
+    <h2 id="contatos">Contatos &amp; listas</h2>
+    <p>Gerencie a base de clientes com tags, notas e listas segmentadas. É possível importar contatos em massa a partir de arquivos <code>.vcf</code>. Cada contato mostra o histórico de conversas e vendas vinculadas.</p>
+
+    <h2 id="agenda">Agenda</h2>
+    <p>Crie compromissos e lembretes vinculados a um contato. A visão mensal destaca os dias com eventos e o sistema emite alertas dos compromissos do dia.</p>
+
+    <h2 id="interno">Chat interno</h2>
+    <p>Comunicação entre a equipe sem sair do console: canais gerais e conversas diretas, com contador de não lidas e notificações. Útil para escalar um atendimento ou alinhar o time em tempo real.</p>
+
+    <h2 id="tenants">Tenants &amp; usuários</h2>
+    <p>Como super-admin da revenda você provisiona cada cliente:</p>
+    <ol class="step-list">
+      <li>Crie o tenant e escolha o plano (define limite de instâncias e usuários).</li>
+      <li>Cadastre o administrador do cliente.</li>
+      <li>O administrador cria os demais usuários (vendas) dentro do próprio tenant.</li>
+    </ol>
+    <div class="callout"><b>Isolamento:</b> graças ao Row-Level Security, consultas são sempre filtradas pelo tenant do usuário autenticado. Nenhum cliente enxerga dados de outro.</div>
+
+    <h2 id="billing">Billing &amp; planos</h2>
+    <p>O módulo de faturamento controla o ciclo de cobrança de cada tenant:</p>
+    <ul>
+      <li>Emissão de faturas por tenant e acompanhamento de status (paga, em aberto, vencida).</li>
+      <li>Integração com gateway de pagamento e webhook que marca a fatura como paga e reativa o tenant automaticamente.</li>
+      <li>Suspensão automática por inadimplência (<code>past_due → suspended</code>).</li>
+      <li>Portal de billing para o cliente final consultar faturas.</li>
+    </ul>
+
+    <h2 id="lgpd">LGPD &amp; auditoria</h2>
+    <p>Recursos de conformidade incluídos:</p>
+    <ul>
+      <li>Trilhas de auditoria de ações sensíveis.</li>
+      <li>Exportação e exclusão de dados por titular.</li>
+      <li>Política de retenção configurável.</li>
+      <li>DPA (Acordo de Tratamento de Dados) pronto para assinatura com o cliente.</li>
+    </ul>
+
+    <h2 id="api">API &amp; webhooks</h2>
+    <p>O continnumOS expõe uma API pública autenticada por token e webhooks de saída para integrar com o seu stack. Exemplo de chamada autenticada:</p>
+    <pre><code>curl -H "Authorization: Bearer SEU_TOKEN" \
+     https://SEU-DOMINIO/api/v1/contatos</code></pre>
+    <p>Webhooks de saída notificam eventos (nova mensagem, venda registrada, fatura paga) para uma URL do seu sistema. Consulte a referência completa em <code>docs/API_PUBLICA.md</code>.</p>
+
+    <h2 id="whitelabel">White-label</h2>
+    <p>O sistema nasce sem referências fixas de marca. No plano White-label você define nome, cores e domínio próprio por cliente, entregando uma experiência 100% com a sua identidade. Detalhes operacionais em <code>WHITELABEL.md</code>.</p>
+
+    <h2 id="faq">Solução de problemas</h2>
+    <details class="acc"><summary>As mensagens pararam de chegar</summary><div class="ans">Verifique o indicador de status em tempo real no topo do painel. Se estiver desconectado, gere um novo QR Code em Configurações → Instância e reconecte o aparelho.</div></details>
+    <details class="acc"><summary>Um usuário não vê determinada aba</summary><div class="ans">As abas dependem do papel e das permissões. Ajuste as permissões do usuário no painel Admin → Equipe.</div></details>
+    <details class="acc"><summary>Tenant aparece como suspenso</summary><div class="ans">Provavelmente há fatura vencida. Assim que o pagamento é confirmado pelo webhook, o tenant é reativado automaticamente. Verifique em Billing.</div></details>
+
+    <div class="cta-band bevel" style="margin-top:52px">
+      <h2>Precisa de ajuda para começar?</h2>
+      <p>Volte para a página inicial e escolha um plano, ou fale com o time de vendas.</p>
+      <a class="btn pri bevel-sm" href="index.html#planos">Ver planos <svg><use href="#i-arrow"/></svg></a>
+    </div>
+  </main>
+</div>
+</div>
+
+<footer><div class="wrap">
+  <div class="base" style="border-top:0;padding-top:0"><span>© 2026 continnumOS. Todos os direitos reservados.</span><a href="index.html" style="color:var(--pri)">Voltar ao site</a></div>
+</div></footer>
+</body>
+</html>

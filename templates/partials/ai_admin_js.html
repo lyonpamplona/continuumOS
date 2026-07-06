@@ -1,0 +1,360 @@
+/* ===================================================================
+   Fase 10 - Console de IA & Automacao (admin) - JS puro.
+   Abas: Config IA | Base de conhecimento | Fluxos (no-code) | Roteamento.
+=================================================================== */
+(function () {
+  if (window.__aiAdminLoaded) return; window.__aiAdminLoaded = true;
+
+  async function api(method, url, body) {
+    var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opt.body = JSON.stringify(body);
+    try {
+      var r = await fetch(url, opt); var t = await r.text(); var d = null;
+      try { d = t ? JSON.parse(t) : null; } catch (e) { d = t; }
+      return { ok: r.ok, status: r.status, data: d };
+    } catch (e) { return { ok: false, status: 0, data: null }; }
+  }
+  function toast(m, bad) {
+    var n = document.createElement('div'); n.textContent = m;
+    n.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:100001;padding:10px 16px;border-radius:8px;font:600 13px Space Grotesk,system-ui;color:#0a0a0a;background:' + (bad ? '#ffb020' : '#ff6a00');
+    document.body.appendChild(n); setTimeout(function () { n.remove(); }, 2800);
+  }
+  function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+
+  var css = document.createElement('style');
+  css.textContent = [
+    '.aia-fab{position:fixed;right:22px;top:14px;z-index:9998;height:40px;padding:0 14px;border-radius:10px;border:1px solid #2a2a30;background:#141417;color:#ff6a00;cursor:pointer;font:700 12px Space Grotesk;display:flex;align-items:center;gap:7px}',
+    '.aia-fab:hover{border-color:#ff6a00}',
+    '.aia-ov{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center}',
+    '.aia-ov.open{display:flex}',
+    '.aia-modal{width:min(920px,95vw);height:min(86vh,900px);background:#0d0d0f;border:1px solid #2a2a30;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;font-family:Space Grotesk,system-ui;color:#f2ede6}',
+    '.aia-top{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid #2a2a30;background:#141417}',
+    '.aia-top b{font-size:14px;margin-right:auto}',
+    '.aia-tab{padding:7px 12px;border:0;border-radius:8px;background:transparent;color:#9a9aa0;font:600 12px Space Grotesk;cursor:pointer}',
+    '.aia-tab.on{background:#ff6a00;color:#0a0a0a}',
+    '.aia-x{background:transparent;border:0;color:#f2ede6;font:700 16px Space Grotesk;cursor:pointer;padding:4px 8px}',
+    '.aia-body{padding:16px;overflow:auto;flex:1}',
+    '.aia-sec{display:none}.aia-sec.on{display:block}',
+    '.aia-lbl{font:600 11px Space Grotesk;color:#9a9aa0;margin:10px 0 4px;text-transform:uppercase;letter-spacing:.04em}',
+    '.aia-in,.aia-ta,.aia-sel{width:100%;box-sizing:border-box;background:#141417;border:1px solid #2a2a30;border-radius:8px;color:#f2ede6;padding:8px 10px;font:500 13px Space Grotesk;margin-bottom:8px}',
+    '.aia-ta{min-height:70px;font-family:JetBrains Mono,monospace;resize:vertical}',
+    '.aia-btn{padding:9px 14px;border:0;border-radius:8px;background:#ff6a00;color:#0a0a0a;font:700 12px Space Grotesk;cursor:pointer;margin:2px 4px 2px 0}',
+    '.aia-btn.ghost{background:transparent;border:1px solid #2a2a30;color:#f2ede6}',
+    '.aia-btn.mini{padding:4px 8px;font-size:11px}',
+    '.aia-card{border:1px solid #2a2a30;border-radius:10px;padding:10px;margin-bottom:8px;background:#141417}',
+    '.aia-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}',
+    '.aia-col{flex:1;min-width:120px}',
+    '.aia-out{background:#141417;border:1px solid #2a2a30;border-radius:8px;padding:10px;font-size:12.5px;white-space:pre-wrap;margin-top:8px}',
+    '.aia-pill{display:inline-block;font:700 10px JetBrains Mono;padding:2px 7px;border-radius:20px;border:1px solid #2a2a30;color:#ffb020;margin-left:6px}',
+    '.aia-mut{font-size:11px;color:#6a6a70;margin-top:4px}',
+    '.aia-sim b{color:#ffb020}.aia-sim .c{color:#3ddc84}'
+  ].join('');
+  document.head.appendChild(css);
+
+  var fab = el('button', 'aia-fab', '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg><span>IA & Automacao</span>');
+  var ov = el('div', 'aia-ov');
+  var modal = el('div', 'aia-modal');
+  var tabs = [['cfg', 'Config IA'], ['kb', 'Conhecimento'], ['flows', 'Fluxos'], ['route', 'Roteamento']];
+  var top = el('div', 'aia-top'); top.appendChild(el('b', null, 'Console de IA &amp; Automacao'));
+  var body = el('div', 'aia-body');
+  tabs.forEach(function (t, i) {
+    var b = el('button', 'aia-tab' + (i === 0 ? ' on' : ''), t[1]); b.dataset.k = t[0];
+    b.onclick = function () { pick(t[0]); }; top.appendChild(b);
+    var s = el('div', 'aia-sec' + (i === 0 ? ' on' : '')); s.id = 'aia-' + t[0]; body.appendChild(s);
+  });
+  var xb = el('button', 'aia-x', '&times;'); xb.onclick = function () { ov.classList.remove('open'); }; top.appendChild(xb);
+  modal.appendChild(top); modal.appendChild(body); ov.appendChild(modal);
+  document.body.appendChild(fab); document.body.appendChild(ov);
+  fab.onclick = function () { ov.classList.add('open'); pick('cfg'); };
+  ov.onclick = function (e) { if (e.target === ov) ov.classList.remove('open'); };
+
+  function pick(k) {
+    top.querySelectorAll('.aia-tab').forEach(function (b) { b.classList.toggle('on', b.dataset.k === k); });
+    body.querySelectorAll('.aia-sec').forEach(function (s) { s.classList.toggle('on', s.id === 'aia-' + k); });
+    if (k === 'cfg') renderCfg(); else if (k === 'kb') renderKb(); else if (k === 'flows') renderFlows(); else if (k === 'route') renderRoute();
+  }
+
+  /* -------- Config IA -------- */
+  async function renderCfg() {
+    var s = document.getElementById('aia-cfg');
+    var r = await api('GET', '/api/ai/settings'); var c = r.data || {};
+    s.innerHTML =
+      '<div class="aia-mut">Configure um provedor compativel com a API OpenAI (OpenAI, Groq, OpenRouter, Azure, LM local...). Sem provedor, o sistema usa heuristica offline.</div>' +
+      '<div class="aia-lbl">Status</div>' +
+      '<label class="aia-row"><input type="checkbox" id="c-en" ' + (c.enabled ? 'checked' : '') + '> &nbsp;IA ativada</label>' +
+      '<div class="aia-lbl">Provedor</div><input class="aia-in" id="c-prov" value="' + esc(c.provider || 'openai') + '">' +
+      '<div class="aia-lbl">API base URL</div><input class="aia-in" id="c-base" value="' + esc(c.api_base || 'https://api.openai.com/v1') + '">' +
+      '<div class="aia-lbl">Modelo</div><input class="aia-in" id="c-model" value="' + esc(c.model || 'gpt-4o-mini') + '">' +
+      '<div class="aia-lbl">API key ' + (c.api_key_set ? '<span class="aia-pill">configurada</span>' : '') + '</div>' +
+      '<input class="aia-in" id="c-key" type="password" placeholder="' + (c.api_key_set ? 'deixe em branco para manter' : 'cole sua chave') + '">' +
+      '<button class="aia-btn" id="c-save">Salvar</button>' +
+      '<button class="aia-btn ghost" id="c-test">Testar conexao</button><div id="c-out"></div>';
+    s.querySelector('#c-save').onclick = async function () {
+      var w = await api('POST', '/api/ai/settings', {
+        enabled: s.querySelector('#c-en').checked, provider: s.querySelector('#c-prov').value,
+        api_base: s.querySelector('#c-base').value, model: s.querySelector('#c-model').value,
+        api_key: s.querySelector('#c-key').value
+      });
+      if (w.ok) { toast('Configuracao salva.'); renderCfg(); } else toast('Erro ao salvar.', true);
+    };
+    s.querySelector('#c-test').onclick = async function () {
+      var o = s.querySelector('#c-out'); o.innerHTML = '<div class="aia-out">Testando...</div>';
+      var w = await api('POST', '/api/ai/test');
+      var d = w.data || {};
+      o.innerHTML = '<div class="aia-out">' + (d.ok ? 'OK' : 'OFFLINE') + ' - ' + esc(d.detail || '') + '</div>';
+    };
+  }
+
+  /* -------- Base de conhecimento -------- */
+  async function renderKb() {
+    var s = document.getElementById('aia-kb');
+    s.innerHTML = '<div class="aia-lbl">Novo documento</div>' +
+      '<input class="aia-in" id="k-title" placeholder="Titulo (ex: Politica de trocas)">' +
+      '<textarea class="aia-ta" id="k-content" placeholder="Cole aqui o conteudo (FAQ, politicas, catalogo...)"></textarea>' +
+      '<button class="aia-btn" id="k-add">Adicionar e indexar</button>' +
+      '<div class="aia-lbl">Documentos indexados</div><div id="k-list">Carregando...</div>';
+    s.querySelector('#k-add').onclick = async function () {
+      var t = s.querySelector('#k-title').value.trim(), c = s.querySelector('#k-content').value.trim();
+      if (!c) { toast('Cole o conteudo.', true); return; }
+      var w = await api('POST', '/api/kb/docs', { title: t, content: c });
+      if (w.ok) { toast('Indexado (' + (w.data.chunks || 0) + ' trechos).'); renderKb(); } else toast('Erro.', true);
+    };
+    var r = await api('GET', '/api/kb/docs'); var list = s.querySelector('#k-list');
+    var arr = (r.data && r.data.length) ? r.data : [];
+    if (!arr.length) { list.innerHTML = '<div class="aia-mut">Nenhum documento ainda.</div>'; return; }
+    list.innerHTML = arr.map(function (d) {
+      return '<div class="aia-card aia-row"><div class="aia-col"><b>' + esc(d.title || '(sem titulo)') + '</b>' +
+        '<div class="aia-mut">' + (d.size || 0) + ' caracteres - ' + esc(d.source || '') + '</div></div>' +
+        '<button class="aia-btn mini ghost" data-del="' + d.id + '">Excluir</button></div>';
+    }).join('');
+    list.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = async function () {
+      if (await api('DELETE', '/api/kb/docs/' + b.getAttribute('data-del'))) { toast('Excluido.'); renderKb(); }
+    }; });
+  }
+
+  /* -------- Fluxos no-code -------- */
+  var NODE_TYPES = ['message', 'menu', 'condition', 'collect', 'business_hours', 'set_tag', 'handoff', 'end'];
+  var flowState = { id: null, name: '', def: { start: '', nodes: {} }, order: [] };
+
+  async function renderFlows() {
+    var s = document.getElementById('aia-flows');
+    var r = await api('GET', '/api/flows'); var arr = (r.data && r.data.length) ? r.data : [];
+    var listHtml = arr.map(function (f) {
+      return '<div class="aia-card aia-row"><div class="aia-col"><b>' + esc(f.name) + '</b>' +
+        (f.active ? '<span class="aia-pill">ativo</span>' : '') +
+        '<div class="aia-mut">' + Object.keys((f.definition || {}).nodes || {}).length + ' nos</div></div>' +
+        '<button class="aia-btn mini" data-edit="' + f.id + '">Editar</button>' +
+        '<button class="aia-btn mini ghost" data-act="' + f.id + '">Ativar</button>' +
+        '<button class="aia-btn mini ghost" data-del="' + f.id + '">Excluir</button></div>';
+    }).join('') || '<div class="aia-mut">Nenhum fluxo. Crie o primeiro.</div>';
+    s.innerHTML = '<button class="aia-btn" id="f-new">+ Novo fluxo</button>' +
+      '<div class="aia-lbl">Fluxos</div><div id="f-list">' + listHtml + '</div>' +
+      '<div id="f-editor"></div>';
+    s.querySelector('#f-new').onclick = function () {
+      flowState = { id: null, name: 'Novo fluxo', def: { start: '', nodes: {} }, order: [] };
+      addNode('message'); flowState.def.start = flowState.order[0]; renderEditor();
+    };
+    s.querySelectorAll('[data-edit]').forEach(function (b) { b.onclick = async function () {
+      var w = await api('GET', '/api/flows/' + b.getAttribute('data-edit')); var f = w.data;
+      flowState = { id: f.id, name: f.name, def: f.definition || { start: '', nodes: {} }, order: Object.keys((f.definition || {}).nodes || {}) };
+      renderEditor();
+    }; });
+    s.querySelectorAll('[data-act]').forEach(function (b) { b.onclick = async function () {
+      var w = await api('POST', '/api/flows/' + b.getAttribute('data-act') + '/activate');
+      if (w.ok) { toast('Fluxo ativado.'); renderFlows(); } else toast((w.data && (w.data.details || []).join('; ')) || 'Fluxo invalido.', true);
+    }; });
+    s.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = async function () {
+      if (await api('DELETE', '/api/flows/' + b.getAttribute('data-del'))) { toast('Excluido.'); renderFlows(); }
+    }; });
+  }
+
+  function addNode(type) {
+    var n = 1; while (flowState.def.nodes['n' + n]) n++;
+    var id = 'n' + n;
+    var tpl = { type: type, next: '' };
+    if (type === 'message') tpl.text = 'Ola!';
+    if (type === 'menu') { tpl.text = '1) Vendas\n2) Suporte'; tpl.options = [{ match: ['1', 'vendas'], next: '' }, { match: ['2', 'suporte'], next: '' }]; tpl.fallback = id; tpl.max_retries = 2; tpl.on_fail = ''; }
+    if (type === 'condition') { tpl = { type: type, var: '', op: 'contains', value: '', then: '', else: '' }; }
+    if (type === 'collect') { tpl.text = 'Qual seu nome?'; tpl.var = 'nome'; }
+    if (type === 'business_hours') { tpl = { type: type, open: '', closed: '' }; }
+    if (type === 'set_tag') { tpl.tag = 'lead'; }
+    if (type === 'handoff') { tpl = { type: type, target: 'vendas', skill: '', text: 'Transferindo...' }; }
+    if (type === 'end') { tpl = { type: type }; }
+    flowState.def.nodes[id] = tpl; flowState.order.push(id);
+    return id;
+  }
+
+  function nodeSelect(val, onchange) {
+    var opts = '<option value="">(fim)</option>' + flowState.order.map(function (id) {
+      return '<option value="' + id + '"' + (id === val ? ' selected' : '') + '>' + id + ' (' + flowState.def.nodes[id].type + ')</option>';
+    }).join('');
+    var sel = el('select', 'aia-sel'); sel.innerHTML = opts; sel.onchange = function () { onchange(sel.value); };
+    sel.style.marginBottom = '4px'; return sel;
+  }
+
+  function renderEditor() {
+    var wrap = document.getElementById('f-editor'); wrap.innerHTML = '';
+    var head = el('div', 'aia-card');
+    head.appendChild(el('div', 'aia-lbl', 'Nome do fluxo'));
+    var nameIn = el('input', 'aia-in'); nameIn.value = flowState.name; nameIn.oninput = function () { flowState.name = nameIn.value; };
+    head.appendChild(nameIn);
+    head.appendChild(el('div', 'aia-lbl', 'No inicial'));
+    head.appendChild(nodeSelect(flowState.def.start, function (v) { flowState.def.start = v; }));
+    wrap.appendChild(head);
+
+    flowState.order.forEach(function (id) {
+      var node = flowState.def.nodes[id]; var card = el('div', 'aia-card');
+      var hdr = el('div', 'aia-row');
+      hdr.appendChild(el('b', 'aia-col', id + ' &nbsp;<span class="aia-pill">' + node.type + '</span>'));
+      var del = el('button', 'aia-btn mini ghost', 'remover'); del.onclick = function () {
+        delete flowState.def.nodes[id]; flowState.order = flowState.order.filter(function (x) { return x !== id; });
+        if (flowState.def.start === id) flowState.def.start = flowState.order[0] || ''; renderEditor();
+      };
+      hdr.appendChild(del); card.appendChild(hdr);
+      buildNodeFields(card, id, node);
+      wrap.appendChild(card);
+    });
+
+    var addRow = el('div', 'aia-row');
+    var typeSel = el('select', 'aia-sel'); typeSel.style.maxWidth = '180px';
+    typeSel.innerHTML = NODE_TYPES.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
+    var addBtn = el('button', 'aia-btn', '+ No'); addBtn.onclick = function () { addNode(typeSel.value); renderEditor(); };
+    addRow.appendChild(typeSel); addRow.appendChild(addBtn); wrap.appendChild(addRow);
+
+    var actions = el('div', 'aia-row'); actions.style.marginTop = '10px';
+    var save = el('button', 'aia-btn', 'Salvar fluxo'); save.onclick = saveFlow;
+    var sim = el('button', 'aia-btn ghost', 'Simular'); sim.onclick = simulate;
+    actions.appendChild(save); actions.appendChild(sim); wrap.appendChild(actions);
+    wrap.appendChild(el('div', null, '<div class="aia-lbl">Simulador</div><input class="aia-in" id="sim-msgs" placeholder="mensagens do cliente separadas por | (ex: |1|Joao)"><div id="sim-out"></div>'));
+  }
+
+  function buildNodeFields(card, id, node) {
+    function textField(label, key, area) {
+      card.appendChild(el('div', 'aia-lbl', label));
+      var inp = el(area ? 'textarea' : 'input', area ? 'aia-ta' : 'aia-in'); inp.value = node[key] || '';
+      inp.oninput = function () { node[key] = inp.value; }; card.appendChild(inp);
+    }
+    function nextField(label, key) {
+      card.appendChild(el('div', 'aia-lbl', label));
+      card.appendChild(nodeSelect(node[key] || '', function (v) { node[key] = v; }));
+    }
+    if (node.type === 'message') { textField('Mensagem (use {var})', 'text', true); nextField('Proximo', 'next'); }
+    else if (node.type === 'collect') { textField('Pergunta', 'text', true); textField('Salvar em variavel', 'var'); nextField('Proximo', 'next'); }
+    else if (node.type === 'set_tag') { textField('Tag a aplicar', 'tag'); nextField('Proximo', 'next'); }
+    else if (node.type === 'menu') {
+      textField('Texto do menu', 'text', true);
+      card.appendChild(el('div', 'aia-lbl', 'Opcoes'));
+      (node.options || []).forEach(function (opt, oi) {
+        var row = el('div', 'aia-row');
+        var m = el('input', 'aia-in'); m.style.flex = '1'; m.value = (opt.match || []).join(', ');
+        m.placeholder = 'gatilhos (ex: 1, vendas)'; m.oninput = function () { opt.match = m.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean); };
+        row.appendChild(m);
+        row.appendChild(nodeSelect(opt.next || '', function (v) { opt.next = v; }));
+        var rm = el('button', 'aia-btn mini ghost', 'x'); rm.onclick = function () { node.options.splice(oi, 1); renderEditor(); };
+        row.appendChild(rm); card.appendChild(row);
+      });
+      var addOpt = el('button', 'aia-btn mini ghost', '+ opcao'); addOpt.onclick = function () { node.options = node.options || []; node.options.push({ match: [], next: '' }); renderEditor(); };
+      card.appendChild(addOpt);
+      nextField('Fallback (nao entendeu)', 'fallback'); nextField('Apos falhar', 'on_fail');
+      textField('Max. tentativas', 'max_retries');
+    }
+    else if (node.type === 'condition') {
+      textField('Variavel', 'var');
+      card.appendChild(el('div', 'aia-lbl', 'Operador'));
+      var opSel = el('select', 'aia-sel'); ['contains', 'equals', 'not_empty', 'is_empty', 'regex'].forEach(function (o) { opSel.innerHTML += '<option value="' + o + '"' + (node.op === o ? ' selected' : '') + '>' + o + '</option>'; });
+      opSel.onchange = function () { node.op = opSel.value; }; card.appendChild(opSel);
+      textField('Valor', 'value'); nextField('Se verdadeiro', 'then'); nextField('Se falso', 'else');
+    }
+    else if (node.type === 'business_hours') { nextField('Se dentro do horario', 'open'); nextField('Se fora do horario', 'closed'); }
+    else if (node.type === 'handoff') { textField('Mensagem antes de transferir', 'text', true); textField('Destino (vendas/financeiro/role)', 'target'); textField('Skill (opcional)', 'skill'); }
+    else if (node.type === 'end') { card.appendChild(el('div', 'aia-mut', 'Encerra o fluxo.')); }
+  }
+
+  async function saveFlow() {
+    if (node_maxretries_fix()) {}
+    var payload = { name: flowState.name, definition: flowState.def };
+    var w;
+    if (flowState.id) w = await api('PUT', '/api/flows/' + flowState.id, payload);
+    else w = await api('POST', '/api/flows', payload);
+    if (w.ok) {
+      if (!flowState.id && w.data && w.data.id) flowState.id = w.data.id;
+      var warn = (w.data && w.data.warnings) || [];
+      toast(warn.length ? ('Salvo com avisos: ' + warn.join('; ')) : 'Fluxo salvo.', warn.length > 0);
+      renderFlows();
+    } else toast('Erro ao salvar.', true);
+  }
+  function node_maxretries_fix() {
+    flowState.order.forEach(function (id) {
+      var n = flowState.def.nodes[id];
+      if (n.type === 'menu' && typeof n.max_retries === 'string') n.max_retries = parseInt(n.max_retries, 10) || 2;
+    });
+    return true;
+  }
+
+  async function simulate() {
+    node_maxretries_fix();
+    var raw = document.getElementById('sim-msgs').value;
+    var msgs = raw.split('|');
+    var w = await api('POST', '/api/flows/simulate', { definition: flowState.def, messages: msgs });
+    var out = document.getElementById('sim-out'); var d = w.data || {};
+    if (d.errors && d.errors.length) { out.innerHTML = '<div class="aia-out">Erros: ' + esc(d.errors.join('; ')) + '</div>'; return; }
+    var html = (d.transcript || []).map(function (t) {
+      if (t.from === 'cliente') return '<div class="c">Cliente: ' + esc(t.text) + '</div>';
+      if (t.type === 'handoff') return '<div><b>[transferir -> ' + esc(t.target) + ']</b></div>';
+      if (t.type === 'tag') return '<div><b>[tag]</b></div>';
+      if (t.type === 'end') return '<div><b>[fim]</b></div>';
+      return '<div><b>Bot:</b> ' + esc(t.text) + '</div>';
+    }).join('');
+    out.innerHTML = '<div class="aia-out aia-sim">' + html + '</div>';
+  }
+
+  /* -------- Roteamento -------- */
+  async function renderRoute() {
+    var s = document.getElementById('aia-route');
+    s.innerHTML = '<div class="aia-lbl">Nova regra de roteamento</div>' +
+      '<div class="aia-row"><input class="aia-in aia-col" id="r-name" placeholder="Nome">' +
+      '<input class="aia-in" id="r-prio" style="max-width:90px" type="number" value="100" placeholder="prioridade"></div>' +
+      '<div class="aia-row"><input class="aia-in aia-col" id="r-target" placeholder="Destino (vendas / vendas_1 / financeiro)">' +
+      '<input class="aia-in aia-col" id="r-skill" placeholder="Skill (opcional)"></div>' +
+      '<select class="aia-sel" id="r-strat"><option value="round_robin">Rodizio (round-robin)</option><option value="load">Por carga</option><option value="random">Aleatorio</option></select>' +
+      '<button class="aia-btn" id="r-add">Adicionar regra</button>' +
+      '<div class="aia-lbl">Regras</div><div id="r-list">Carregando...</div>' +
+      '<div class="aia-lbl" style="margin-top:16px">Skills / regioes por atendente</div><div id="r-skills">Carregando...</div>';
+    s.querySelector('#r-add').onclick = async function () {
+      var w = await api('POST', '/api/routing/rules', {
+        name: s.querySelector('#r-name').value, priority: parseInt(s.querySelector('#r-prio').value, 10) || 100,
+        target: s.querySelector('#r-target').value, skill: s.querySelector('#r-skill').value,
+        strategy: s.querySelector('#r-strat').value, conditions: []
+      });
+      if (w.ok) { toast('Regra criada.'); renderRoute(); } else toast('Erro.', true);
+    };
+    var r = await api('GET', '/api/routing/rules'); var arr = (r.data && r.data.length) ? r.data : [];
+    s.querySelector('#r-list').innerHTML = arr.length ? arr.map(function (x) {
+      return '<div class="aia-card aia-row"><div class="aia-col"><b>' + esc(x.name || '(sem nome)') + '</b>' +
+        '<div class="aia-mut">prio ' + x.priority + ' -> ' + esc(x.target) + (x.skill ? (' / ' + esc(x.skill)) : '') + ' [' + esc(x.strategy) + ']</div></div>' +
+        '<button class="aia-btn mini ghost" data-dr="' + x.id + '">x</button></div>';
+    }).join('') : '<div class="aia-mut">Sem regras (usa rodizio padrao de vendas).</div>';
+    s.querySelectorAll('[data-dr]').forEach(function (b) { b.onclick = async function () {
+      if (await api('DELETE', '/api/routing/rules/' + b.getAttribute('data-dr'))) { toast('Removida.'); renderRoute(); }
+    }; });
+    var su = await api('GET', '/api/routing/skills'); var smap = su.data || {};
+    var us = await api('GET', '/api/system_users').catch(function () { return { data: [] }; });
+    var users = (us.data && us.data.length) ? us.data : Object.keys(smap).map(function (u) { return { username: u, name: u }; });
+    var box = s.querySelector('#r-skills');
+    box.innerHTML = users.filter(function (u) { return (u.role || '') !== 'admin'; }).map(function (u) {
+      var cur = smap[u.username] || { skills: [], regions: [] };
+      return '<div class="aia-card"><b>' + esc(u.name || u.username) + '</b>' +
+        '<div class="aia-lbl">Skills (virgula)</div><input class="aia-in sk" data-u="' + esc(u.username) + '" value="' + esc((cur.skills || []).join(', ')) + '">' +
+        '<div class="aia-lbl">Regioes (virgula)</div><input class="aia-in rg" data-u="' + esc(u.username) + '" value="' + esc((cur.regions || []).join(', ')) + '">' +
+        '<button class="aia-btn mini" data-su="' + esc(u.username) + '">Salvar</button></div>';
+    }).join('') || '<div class="aia-mut">Nenhum atendente.</div>';
+    box.querySelectorAll('[data-su]').forEach(function (b) { b.onclick = async function () {
+      var u = b.getAttribute('data-su');
+      var sk = box.querySelector('.sk[data-u="' + u + '"]').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+      var rg = box.querySelector('.rg[data-u="' + u + '"]').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+      var w = await api('POST', '/api/routing/skills', { username: u, skills: sk, regions: rg });
+      if (w.ok) toast('Skills salvas.'); else toast('Erro.', true);
+    }; });
+  }
+})();

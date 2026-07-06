@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>continnumOS - Guia de organizacao profissional no GitHub</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+:root{
+  --bg:#0d0d0f; --bg2:#141417; --bg3:#1c1c21; --border:#2a2a30;
+  --text:#f2ede6; --mut:#9a9aa0; --mut2:#6b6b72;
+  --primary:#ff6a00; --primary2:#ffb020;
+  --ok:#3ddc84; --bad:#ff4d4d; --blue:#2aabee;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  --sans:'Space Grotesk',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.62}
+.wrap{display:flex;min-height:100vh}
+.aside{width:300px;flex-shrink:0;position:sticky;top:0;height:100vh;overflow:auto;background:var(--bg2);border-right:1px solid var(--border);padding:20px 14px}
+.aside h1{font-size:19px;margin:0;letter-spacing:.5px}
+.aside h1 span{color:var(--primary)}
+.aside .sub{color:var(--mut);font-size:12px;margin:2px 0 14px}
+#q{width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;margin-bottom:10px}
+nav a{display:block;color:var(--mut);text-decoration:none;padding:5px 9px;border-radius:7px;font-size:13px}
+nav a:hover{color:var(--text);background:var(--bg3)}
+nav a.grp{color:var(--primary2);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-top:12px}
+.main{flex:1;min-width:0;padding:34px 46px 90px;max-width:1000px}
+h2{font-size:22px;border-bottom:1px solid var(--border);padding-bottom:7px;margin:44px 0 15px;scroll-margin-top:20px}
+h3{font-size:16px;color:var(--primary2);margin:24px 0 8px}
+h4{font-size:14px;margin:16px 0 6px}
+p{margin:9px 0}
+.lead{font-size:16px;color:#e8e2d8}
+b{color:#fff}
+code,.mono{font-family:var(--mono);font-size:.9em}
+.file{font-family:var(--mono);color:var(--primary2);font-size:.9em}
+.mono{background:var(--bg3);padding:1px 5px;border-radius:5px;color:#ffd9b0}
+pre.code{background:#08080a;border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:9px;padding:14px 16px;overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.6;color:#d8d2c8}
+pre.code .c{color:#6b6b72}
+pre.code .k{color:#ff6a00}
+pre.code .s{color:#3ddc84}
+pre.code .v{color:#ffb020}
+.tag{display:inline-block;background:var(--bg3);color:var(--primary2);font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;vertical-align:middle;margin-left:6px}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--primary2);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td.mono{font-family:var(--mono);font-size:12px}
+.callout{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:9px;padding:12px 15px;margin:14px 0}
+.callout.ok{border-left-color:var(--ok)}
+.callout.bad{border-left-color:var(--bad)}
+.callout.blue{border-left-color:var(--blue)}
+.callout .h{display:block;font-weight:700;margin-bottom:3px;color:#fff}
+.callout.ok .h{color:var(--ok)}
+.callout.bad .h{color:var(--bad)}
+.callout.blue .h{color:var(--blue)}
+.diagram{background:#08080a;border:1px dashed var(--border);border-radius:9px;padding:16px;font-family:var(--mono);font-size:12px;white-space:pre;overflow:auto;color:#cfc9bf;line-height:1.5}
+.diagram b{color:var(--primary2)}
+.step{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px 14px 54px;position:relative;margin:12px 0}
+.step .n{position:absolute;left:14px;top:14px;width:28px;height:28px;border-radius:8px;background:var(--primary);color:#0a0a0a;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px}
+.step h4{margin:2px 0 6px}
+.badge-row{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--mut)}
+.stat b{color:var(--primary2);font-size:18px;display:block}
+ul,ol{margin:9px 0;padding-left:22px}
+li{margin:4px 0}
+.footer{margin-top:50px;padding-top:16px;border-top:1px solid var(--border);color:var(--mut2);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<aside class="aside">
+  <h1><span>continnum</span>OS</h1>
+  <div class="sub">GitHub - organizacao profissional</div>
+  <input id="q" type="text" placeholder="Filtrar secoes..." oninput="filterNav(this.value)">
+  <nav id="nav">
+    <a class="grp">Preparar</a>
+    <a href="#intro">Como usar este guia</a>
+    <a href="#higiene">1. Higiene antes de subir</a>
+    <a href="#push">2. Criar repo & primeiro push</a>
+    <a class="grp">Personalizar a pagina</a>
+    <a href="#about">3. About (descricao & topics)</a>
+    <a href="#readme">4. README & badges</a>
+    <a href="#preview">5. Social preview (SVG)</a>
+    <a href="#health">6. Arquivos de comunidade</a>
+    <a class="grp">Nivel profissional</a>
+    <a href="#branch">7. Protecao de branch & CI</a>
+    <a href="#releases">8. Releases, tags & CHANGELOG</a>
+    <a href="#pages">9. GitHub Pages (site/)</a>
+    <a href="#org">10. Organizacao & vitrine</a>
+    <a class="grp">Fechar</a>
+    <a href="#checklist">11. Checklist final</a>
+    <a href="#ia">12. Nota sobre IA</a>
+  </nav>
+</aside>
+<main class="main">
+
+<h2 id="intro" style="border:0;margin-top:0">continnumOS &mdash; deixando o reposit&oacute;rio com cara de projeto profissional</h2>
+<p class="lead">Este guia mostra, passo a passo, como publicar o continnumOS no GitHub de forma organizada e profissional: descri&ccedil;&atilde;o, topics, README com SVG e badges, imagem de social preview, arquivos de comunidade, prote&ccedil;&atilde;o de branch, releases e a publica&ccedil;&atilde;o do site via GitHub Pages.</p>
+<div class="badge-row">
+  <div class="stat"><b>README</b> pronto</div>
+  <div class="stat"><b>SVG</b> banner + preview</div>
+  <div class="stat"><b>Pages</b> para o site/</div>
+  <div class="stat"><b>~20 min</b></div>
+</div>
+<div class="callout ok"><span class="h">O que ja vem pronto no projeto</span>
+O reposit&oacute;rio ja inclui <span class="file">README.md</span> (com banner SVG e badges), <span class="file">CONTRIBUTING.md</span>, <span class="file">SECURITY.md</span>, <span class="file">LICENSE</span>, <span class="file">.github/assets/banner.svg</span> e o workflow de CI em <span class="file">.github/workflows/ci.yml</span>. Este guia cobre o que se configura <b>na interface do GitHub</b>.</div>
+
+<h2 id="higiene">1. Higiene antes de subir</h2>
+<div class="callout bad"><span class="h">Nunca suba segredos</span>
+Confirme que o <span class="file">.env</span> real <b>nao</b> vai para o Git. O <span class="file">.gitignore</span> ja ignora <span class="mono">.env</span>, <span class="mono">__pycache__/</span>, <span class="mono">*.pyc</span>, logs e arquivos <span class="mono">.vcf</span>. Suba apenas o <span class="file">.env.example</span>.</div>
+<pre class="code"><span class="c"># confira o que seria commitado (o .env NAO deve aparecer)</span>
+<span class="k">git</span> status
+<span class="k">git</span> check-ignore .env      <span class="c"># deve imprimir: .env</span>
+
+<span class="c"># se um segredo ja foi commitado antes, rotacione-o e remova do historico</span>
+<span class="k">git</span> rm --cached .env</pre>
+
+<h2 id="push">2. Criar o reposit&oacute;rio & primeiro push</h2>
+<div class="step"><div class="n">1</div><h4>Criar no GitHub</h4>
+Crie um repo (ex.: <span class="mono">continnumos</span>). Deixe-o <b>privado</b> se o c&oacute;digo for propriet&aacute;rio (recomendado).</div>
+<div class="step"><div class="n">2</div><h4>Enviar o c&oacute;digo</h4>
+<pre class="code"><span class="k">git</span> init
+<span class="k">git</span> add .
+<span class="k">git</span> commit -m "chore: primeiro commit do continnumOS"
+<span class="k">git</span> branch -M main
+<span class="k">git</span> remote add origin https://github.com/OWNER/REPO.git
+<span class="k">git</span> push -u origin main</pre>
+Troque <span class="mono">OWNER/REPO</span> pelo seu usu&aacute;rio/organiza&ccedil;&atilde;o e nome do repo.</div>
+
+<h2 id="about">3. About &mdash; descri&ccedil;&atilde;o, site e topics</h2>
+<p>No canto superior direito da p&aacute;gina do repo, clique na engrenagem <b>About</b> e preencha:</p>
+<table>
+<tr><th>Campo</th><th>Sugest&atilde;o</th></tr>
+<tr><td>Description</td><td>CRM multi-tenant de atendimento via WhatsApp para revenda white-label (FastAPI + Postgres + Redis).</td></tr>
+<tr><td>Website</td><td>URL do seu site/painel (ex.: <span class="mono">https://painel.seudominio.com</span>) ou o GitHub Pages do <span class="mono">site/</span>.</td></tr>
+<tr><td>Topics</td><td class="mono">crm, whatsapp, multi-tenant, saas, fastapi, postgresql, redis, docker, white-label, omnichannel</td></tr>
+</table>
+<div class="callout"><span class="h">Por que topics importam</span>
+Os <b>topics</b> melhoram a descoberta e deixam a p&aacute;gina com apar&ecirc;ncia madura. Marque tamb&eacute;m "Releases" e "Packages" para exibi-los na barra lateral quando existirem.</div>
+
+<h2 id="readme">4. README que aparece na home & badges</h2>
+<p>O <span class="file">README.md</span> j&aacute; renderiza automaticamente na home do repo, com o banner SVG no topo. Os <b>badges</b> usam o <span class="mono">shields.io</span>. O badge de CI precisa apontar para o seu repo:</p>
+<pre class="code"><span class="c"># adicione no topo do README (troque OWNER/REPO)</span>
+![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)</pre>
+<div class="callout blue"><span class="h">Dica de leitura</span>
+Um bom README responde em 30 segundos: <b>o que &eacute;</b>, <b>como rodar</b> e <b>onde est&aacute; a documenta&ccedil;&atilde;o</b>. O README inclu&iacute;do j&aacute; segue essa ordem (vis&atilde;o geral &rarr; recursos &rarr; arquitetura &rarr; come&ccedil;ando &rarr; docs).</div>
+
+<h2 id="preview">5. Social preview (a imagem que aparece ao compartilhar)</h2>
+<p>O <b>social preview</b> &eacute; a imagem exibida quando o link do repo &eacute; compartilhado (WhatsApp, X, Slack...). Configure em <b>Settings &rarr; General &rarr; Social preview</b>.</p>
+<div class="step"><div class="n">1</div><h4>Gerar um PNG a partir do banner</h4>
+O GitHub aceita PNG/JPG (1280&times;640 recomendado). Converta o <span class="file">.github/assets/banner.svg</span>:
+<pre class="code"><span class="c"># com ImageMagick ou rsvg-convert</span>
+<span class="k">rsvg-convert</span> -w 1280 -h 640 .github/assets/banner.svg -o social-preview.png</pre></div>
+<div class="step"><div class="n">2</div><h4>Enviar</h4>
+Em <b>Settings &rarr; Social preview</b>, fa&ccedil;a upload do PNG. Pronto &mdash; o repo passa a ter uma vitrine com a sua marca.</div>
+
+<h2 id="health">6. Arquivos de comunidade (community health)</h2>
+<p>O GitHub exibe um checklist em <b>Insights &rarr; Community Standards</b>. O projeto j&aacute; traz a maioria; complete o que faltar:</p>
+<table>
+<tr><th>Arquivo</th><th>Status</th><th>Papel</th></tr>
+<tr><td class="mono">README.md</td><td>incluso</td><td>Porta de entrada.</td></tr>
+<tr><td class="mono">LICENSE</td><td>incluso</td><td>Termos de uso (ajuste o modelo se desejar).</td></tr>
+<tr><td class="mono">CONTRIBUTING.md</td><td>incluso</td><td>Como contribuir.</td></tr>
+<tr><td class="mono">SECURITY.md</td><td>incluso</td><td>Como reportar vulnerabilidades.</td></tr>
+<tr><td class="mono">CODE_OF_CONDUCT.md</td><td>opcional</td><td>C&oacute;digo de conduta (adicione se for p&uacute;blico/colaborativo).</td></tr>
+<tr><td class="mono">.github/ISSUE_TEMPLATE/</td><td>opcional</td><td>Modelos de bug/feature.</td></tr>
+<tr><td class="mono">.github/pull_request_template.md</td><td>opcional</td><td>Checklist de PR.</td></tr>
+</table>
+<h4>Exemplo r&aacute;pido de template de PR</h4>
+<pre class="code"><span class="c"># .github/pull_request_template.md</span>
+## O que muda
+
+## Por que
+
+## Como testei
+- [ ] pytest passando
+- [ ] migration criada (se mudou schema)
+- [ ] sem segredos no diff</pre>
+
+<h2 id="branch">7. Prote&ccedil;&atilde;o de branch & CI</h2>
+<p>Em <b>Settings &rarr; Branches &rarr; Add rule</b>, proteja a <span class="mono">main</span>:</p>
+<ul>
+<li>Exigir <b>Pull Request</b> antes de merge.</li>
+<li>Exigir que os <b>checks de status passem</b> (selecione o job <span class="mono">build-test</span> do CI).</li>
+<li>Exigir branch atualizada e, se poss&iacute;vel, revis&atilde;o de 1 aprovador.</li>
+</ul>
+<div class="callout ok"><span class="h">CI ja configurado</span>
+O workflow <span class="file">.github/workflows/ci.yml</span> sobe PostgreSQL e Redis reais e roda os testes (incluindo isolamento RLS entre tenants) a cada push/PR. Com a prote&ccedil;&atilde;o de branch, nada entra na <span class="mono">main</span> sem o CI verde.</div>
+
+<h2 id="releases">8. Releases, tags & CHANGELOG</h2>
+<p>O projeto j&aacute; mant&eacute;m um <span class="file">CHANGELOG_SAAS.md</span> por fases. Transforme marcos em <b>Releases</b>:</p>
+<pre class="code"><span class="k">git</span> tag -a v1.0.0 -m "Fases 0-13 completas"
+<span class="k">git</span> push origin v1.0.0</pre>
+<p>Depois, em <b>Releases &rarr; Draft a new release</b>, escolha a tag, cole as notas da fase e publique. Isso cria a se&ccedil;&atilde;o "Releases" na home e um hist&oacute;rico vers&atilde;o a vers&atilde;o.</p>
+
+<h2 id="pages">9. Publicar o site com GitHub Pages (pasta <span class="file">site/</span>)</h2>
+<p>O guia de deploy foi publicado dentro do site (<span class="file">site/deploy.html</span>). Voc&ecirc; pode servir a pasta <span class="file">site/</span> gratuitamente pelo GitHub Pages.</p>
+<div class="step"><div class="n">1</div><h4>Ativar</h4>
+Em <b>Settings &rarr; Pages</b>, em "Build and deployment", escolha <b>Deploy from a branch</b>, selecione <span class="mono">main</span> e a pasta <span class="mono">/site</span> (ou <span class="mono">/root</span> se mover os arquivos). Salve.</div>
+<div class="step"><div class="n">2</div><h4>Acessar</h4>
+Em instantes o site fica em <span class="mono">https://OWNER.github.io/REPO/</span>. A landing (<span class="mono">index.html</span>), a documenta&ccedil;&atilde;o (<span class="mono">docs.html</span>) e o <b>guia de deploy</b> (<span class="mono">deploy.html</span>) ficam p&uacute;blicos.</div>
+<div class="callout bad"><span class="h">Mantenha a dissecacao interna</span>
+A <b>dissecacao did&aacute;tica do c&oacute;digo</b> fica em <span class="file">docs/</span> (interna ao repo) e <b>nao</b> no <span class="file">site/</span>. Assim ela nao &eacute; publicada pelo Pages &mdash; ela exp&otilde;e a arquitetura interna e deve permanecer restrita.</div>
+
+<h2 id="org">10. Organiza&ccedil;&atilde;o & vitrine do perfil</h2>
+<ul>
+<li><b>Pins:</b> fixe o reposit&oacute;rio no seu perfil/organiza&ccedil;&atilde;o ("Customize your pins").</li>
+<li><b>Labels:</b> padronize labels (<span class="mono">bug</span>, <span class="mono">feature</span>, <span class="mono">docs</span>, <span class="mono">good first issue</span>).</li>
+<li><b>Milestones/Projects:</b> use o roadmap por fases como marcos ou um quadro de projeto.</li>
+<li><b>Perfil README:</b> um repo <span class="mono">OWNER/OWNER</span> com README aparece no topo do seu perfil &mdash; &oacute;timo para apresentar o continnumOS.</li>
+</ul>
+
+<h2 id="checklist">11. Checklist final</h2>
+<table>
+<tr><th>#</th><th>Item</th></tr>
+<tr><td>1</td><td><span class="mono">.env</span> fora do Git; s&oacute; o <span class="mono">.env.example</span> versionado.</td></tr>
+<tr><td>2</td><td>About preenchido (descri&ccedil;&atilde;o, website, topics).</td></tr>
+<tr><td>3</td><td>README renderizando com banner e badges (CI apontando para OWNER/REPO).</td></tr>
+<tr><td>4</td><td>Social preview (PNG do banner) enviado.</td></tr>
+<tr><td>5</td><td>LICENSE, CONTRIBUTING, SECURITY presentes (Community Standards ok).</td></tr>
+<tr><td>6</td><td>Prote&ccedil;&atilde;o da <span class="mono">main</span> exigindo CI verde.</td></tr>
+<tr><td>7</td><td>Primeira release/tag publicada.</td></tr>
+<tr><td>8</td><td>GitHub Pages servindo o <span class="mono">site/</span> (deploy p&uacute;blico; dissecacao interna).</td></tr>
+<tr><td>9</td><td>Reposit&oacute;rio fixado e labels padronizadas.</td></tr>
+</table>
+
+<h2 id="ia">12. Nota sobre desenvolvimento com IA</h2>
+<p>O README e o <span class="file">CONTRIBUTING.md</span> j&aacute; declaram que o projeto foi <b>desenvolvido com aux&iacute;lio de intelig&ecirc;ncia artificial</b>, com decis&otilde;es finais, valida&ccedil;&atilde;o e responsabilidade humanas. Manter essa transpar&ecirc;ncia &eacute; uma boa pr&aacute;tica e passa credibilidade.</p>
+
+<div class="footer">
+  <b>continnumOS</b> &mdash; guia de organiza&ccedil;&atilde;o profissional no GitHub. Complementa o <span class="file">README.md</span> e os arquivos de comunidade j&aacute; inclu&iacute;dos no reposit&oacute;rio.
+</div>
+
+</main>
+</div>
+<script>
+function filterNav(v){
+  v=(v||'').toLowerCase().trim();
+  document.querySelectorAll('#nav a').forEach(function(a){
+    if(a.classList.contains('grp')){a.style.display='';return;}
+    var t=a.textContent.toLowerCase();
+    a.style.display=(!v||t.indexOf(v)>=0)?'':'none';
+  });
+}
+var links=[].slice.call(document.querySelectorAll('#nav a[href^="#"]'));
+var map={};
+links.forEach(function(a){var id=a.getAttribute('href').slice(1);map[id]=a;});
+function spy(){
+  var y=window.scrollY+120,cur=null;
+  Object.keys(map).forEach(function(id){
+    var el=document.getElementById(id);
+    if(el&&el.offsetTop<=y)cur=id;
+  });
+  links.forEach(function(a){a.style.background='';a.style.color='';});
+  if(cur&&map[cur]){map[cur].style.background='var(--bg3)';map[cur].style.color='var(--primary2)';}
+}
+window.addEventListener('scroll',spy);spy();
+</script>
+</body>
+</html>

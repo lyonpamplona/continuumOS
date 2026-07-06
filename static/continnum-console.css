@@ -1,0 +1,290 @@
+/* ==========================================================================
+   continnumOS — "Blueprint Console" Theme (reskin)
+   Camada de tema aplicada SOBRE os dashboards existentes.
+   NAO altera DOM nem JS: apenas redefine tokens e superficies visuais.
+   Carregada por ULTIMO no <head>, portanto vence a cascata por ordem de fonte.
+   Estetica: painel tecnico industrial, cantos biselados, grid blueprint,
+   superficies solidas escuras, acento laranja, tipografia monoespacada.
+   ========================================================================== */
+
+:root {
+  --bg-base: #070707;
+  --bg-1: #0d0d0f;
+  --bg-2: #141417;
+  --bg-3: #1c1c20;
+  --primary: #ff6a00;
+  --primary-2: #ffb020;
+  --primary-hover: #ff8324;
+  --wa-green: #00a884;
+  --text-main: #f2ede6;
+  --text-muted: #9a9188;
+  --danger: #ff4d5e;
+  --warning: #ffce4a;
+  --blue: #4aa8ff;
+  --ok: #33d17a;
+
+  --surface: #0d0d0f;
+  --surface-hover: #17171b;
+  --border: #2a2a30;
+  --border-2: #3a3a42;
+
+  --grid: rgba(255, 106, 0, .05);
+  --glow: rgba(255, 106, 0, .35);
+  --glass-blur: none;
+  --glass-shadow: 0 8px 28px rgba(0, 0, 0, .45);
+  --radius-lg: 4px;
+  --radius-md: 3px;
+  --radius-sm: 2px;
+  --bevel: 12px;
+}
+
+/* Fundo com grid blueprint + vinheta (identidade do prototipo) */
+body {
+  background-color: var(--bg-base) !important;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px) !important;
+  background-size: 34px 34px !important;
+  background-attachment: fixed !important;
+  color: var(--text-main) !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+}
+
+/* Barras de rolagem angulares */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+::selection { background: var(--primary); color: #0a0705; }
+
+/* --------------------------------------------------------------------------
+   Superficies principais (solidas, sem blur)
+   -------------------------------------------------------------------------- */
+.panel,
+.workspace > .panel,
+.sidebar,
+.top-bar,
+.topbar,
+.app-header,
+.header-bar,
+.bottom-nav,
+.nav-drawer,
+.side-nav {
+  background: var(--surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: var(--border) !important;
+  border-radius: 0 !important;
+}
+
+/* Painel biselado com marcas de canto (via clip-path + realce) */
+.panel {
+  position: relative;
+  clip-path: polygon(0 var(--bevel), var(--bevel) 0, 100% 0, 100% calc(100% - var(--bevel)), calc(100% - var(--bevel)) 100%, 0 100%) !important;
+}
+
+/* Cartoes / blocos / metricas */
+.stat-card,
+.mini-metric,
+.ops-badge,
+.card,
+.contact-card,
+.block,
+.accordion-item,
+.notice-body,
+.info-section,
+.settings-fold,
+.breakdown-item,
+.agenda-card,
+.tool-card {
+  background: var(--bg-2) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.stat-card {
+  clip-path: polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%) !important;
+}
+.stat-card:hover,
+.contact-card:hover,
+.accordion-item:hover { border-color: var(--primary) !important; }
+
+.stat-val, .stat-num, .mini-metric strong { color: var(--primary) !important; }
+
+/* --------------------------------------------------------------------------
+   Navegacao
+   -------------------------------------------------------------------------- */
+.nav-item {
+  border-radius: var(--radius-sm) !important;
+  transition: .2s cubic-bezier(.2,.7,.2,1);
+  position: relative;
+}
+.nav-item:hover { color: var(--primary) !important; background: rgba(255, 106, 0, .08) !important; }
+.nav-item.active {
+  color: var(--primary) !important;
+  background: rgba(255, 106, 0, .10) !important;
+  border-color: rgba(255, 106, 0, .30) !important;
+}
+.nav-item.active::before {
+  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px;
+  background: var(--primary); box-shadow: 0 0 12px var(--glow);
+}
+.nav-badge, .badge {
+  background: var(--primary) !important;
+  color: #0a0705 !important;
+  border-radius: 999px !important;
+  font-weight: 800;
+}
+
+.realtime-status,
+.profile-trigger {
+  background: var(--bg-2) !important;
+  border-color: var(--border) !important;
+  border-radius: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.profile-trigger:hover { border-color: var(--primary) !important; }
+
+.avatar {
+  background: var(--primary) !important;
+  color: #0a0705 !important;
+  border: 0 !important;
+  clip-path: polygon(0 5px, 5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%) !important;
+  font-weight: 800 !important;
+}
+
+/* --------------------------------------------------------------------------
+   Botoes (biselados)
+   -------------------------------------------------------------------------- */
+.btn {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border-2) !important;
+  color: var(--text-main) !important;
+  border-radius: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  clip-path: polygon(0 7px, 7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
+  transition: .2s cubic-bezier(.2,.7,.2,1);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.btn:hover { background: var(--surface-hover) !important; border-color: var(--primary) !important; color: var(--primary) !important; }
+
+.btn-primary,
+.main-tab-btn.active,
+.bucket-chip.active {
+  background: var(--primary) !important;
+  color: #0a0705 !important;
+  border: 1px solid var(--primary) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 6px 18px rgba(255, 106, 0, .22);
+}
+.btn-primary:hover { background: var(--primary-hover) !important; color: #0a0705 !important; }
+
+.btn-danger {
+  background: rgba(255, 77, 94, .10) !important;
+  color: var(--danger) !important;
+  border: 1px solid rgba(255, 77, 94, .38) !important;
+}
+.btn-danger:hover { background: rgba(255, 77, 94, .18) !important; }
+
+.act-icon,
+.contacts-action-btn,
+.menu-toggle,
+.btn-back-mobile {
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--border) !important;
+  transition: .2s cubic-bezier(.2,.7,.2,1);
+}
+.act-icon:hover,
+.contacts-action-btn:hover { color: var(--primary) !important; border-color: var(--primary) !important; }
+
+/* Chips / tokens / pills (angulares) */
+.bucket-chip,
+.filter-token,
+.tag-pill,
+.contact-mini-pill,
+.agenda-status-pill,
+.main-tab-btn,
+.log-period-btn {
+  border-radius: 0 !important;
+  border: 1px solid var(--border) !important;
+  background: var(--bg-2) !important;
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+  transition: .2s cubic-bezier(.2,.7,.2,1);
+}
+.bucket-chip:hover, .filter-token:hover, .main-tab-btn:hover { color: var(--primary) !important; }
+
+/* --------------------------------------------------------------------------
+   Campos de formulario (quadrados, foco laranja)
+   -------------------------------------------------------------------------- */
+.input-text,
+.contact-search-field,
+input[type="text"], input[type="password"], input[type="search"],
+input[type="number"], input[type="time"], input[type="date"],
+textarea, select {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  color: var(--text-main) !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+.input-text:focus,
+.contact-search-field:focus-within,
+input:focus, textarea:focus, select:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(255, 106, 0, .14) !important;
+  outline: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Modais (biselados, solidos)
+   -------------------------------------------------------------------------- */
+.modal { backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.modal-content {
+  background: var(--bg-1) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--border-2) !important;
+  border-radius: 0 !important;
+  clip-path: polygon(0 14px, 14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%) !important;
+  box-shadow: var(--glass-shadow) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Chat (bolhas com recorte assimetrico)
+   -------------------------------------------------------------------------- */
+.msg-bubble {
+  border-radius: 0 !important;
+  border: 1px solid var(--border);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.msg-bubble.sent, .msg-bubble.out, .msg-bubble-out, .msg-me {
+  background: color-mix(in srgb, var(--primary) 16%, var(--bg-2)) !important;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border)) !important;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px) !important;
+}
+.msg-bubble.received, .msg-bubble.in, .msg-bubble-in, .msg-them {
+  background: var(--bg-2) !important;
+  clip-path: polygon(0 8px, 8px 0, 100% 0, 100% 100%, 8px 100%, 0 calc(100% - 8px)) !important;
+}
+
+/* Titulos de bloco / secao */
+.block-title,
+.log-title,
+.card-title,
+.overview-section-title,
+.accordion-title,
+.section-title { color: var(--primary) !important; letter-spacing: .02em; }
+
+/* Painel header */
+.panel-header {
+  background: var(--bg-1) !important;
+  border-color: var(--border) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

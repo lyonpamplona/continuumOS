@@ -1,0 +1,325 @@
+<script>
+/* ===================================================================
+   Fase 13 - Produtividade da equipe (JS puro).
+   Heartbeat de presenca (todos) + console: Supervisao | Filas | Tickets |
+   QA | Gamificacao | Escalas.
+=================================================================== */
+(function () {
+  if (window.__teamLoaded) return; window.__teamLoaded = true;
+
+  var WD = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
+
+  async function api(method, url, body) {
+    var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opt.body = JSON.stringify(body);
+    try {
+      var r = await fetch(url, opt); var t = await r.text(); var d = null;
+      try { d = t ? JSON.parse(t) : null; } catch (e) { d = t; }
+      return { ok: r.ok, status: r.status, data: d };
+    } catch (e) { return { ok: false, status: 0, data: null }; }
+  }
+  function toast(m, bad) {
+    var n = document.createElement('div'); n.textContent = m;
+    n.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:100001;padding:10px 16px;border-radius:8px;font:600 13px Space Grotesk,system-ui;color:#0a0a0a;background:' + (bad ? '#ffb020' : '#ff6a00');
+    document.body.appendChild(n); setTimeout(function () { n.remove(); }, 2800);
+  }
+  function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function slaColor(s) { return s === 'violado' ? '#ff4d4d' : (s === 'risco' ? '#ffb020' : (s === 'cumprido' ? '#3ddc84' : '#9a9aa0')); }
+  function fmtMin(sec) { if (sec == null) return '-'; var m = Math.round(sec / 60); return (m < 0 ? '-' : '') + Math.abs(m) + 'm'; }
+
+  // ---------------- presenca (heartbeat p/ todos) ----------------
+  var myStatus = 'online';
+  async function beat() { try { await api('POST', '/api/presence/heartbeat', { status: myStatus }); } catch (e) {} }
+  beat(); setInterval(beat, 60000);
+
+  var css = document.createElement('style');
+  css.textContent = [
+    '.tm-pres{position:fixed;right:22px;top:198px;z-index:9994;height:40px;padding:0 10px;border-radius:10px;border:1px solid #2a2a30;background:#141417;color:#f2ede6;font:600 12px Space Grotesk;display:flex;align-items:center;gap:6px}',
+    '.tm-pdot{width:9px;height:9px;border-radius:50%;background:#3ddc84}',
+    '.tm-psel{background:transparent;border:0;color:#f2ede6;font:600 12px Space Grotesk;cursor:pointer;outline:none}',
+    '.tm-fab{position:fixed;right:22px;top:244px;z-index:9994;height:40px;padding:0 14px;border-radius:10px;border:1px solid #2a2a30;background:#141417;color:#2aabee;cursor:pointer;font:700 12px Space Grotesk}',
+    '.tm-fab:hover{border-color:#2aabee}',
+    '.tm-ov{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center}',
+    '.tm-ov.open{display:flex}',
+    '.tm-modal{width:min(1140px,97vw);height:min(90vh,980px);background:#0d0d0f;border:1px solid #2a2a30;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;font-family:Space Grotesk,system-ui;color:#f2ede6}',
+    '.tm-top{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid #2a2a30;background:#141417;flex-wrap:wrap}',
+    '.tm-top b{font-size:14px;margin-right:auto}',
+    '.tm-tab{padding:7px 12px;border:0;border-radius:8px;background:transparent;color:#9a9aa0;font:600 12px Space Grotesk;cursor:pointer}',
+    '.tm-tab.on{background:#2aabee;color:#04121b}',
+    '.tm-x{background:transparent;border:0;color:#f2ede6;font:700 16px Space Grotesk;cursor:pointer;padding:4px 8px}',
+    '.tm-body{padding:14px;overflow:auto;flex:1}',
+    '.tm-sec{display:none}.tm-sec.on{display:block}',
+    '.tm-lbl{font:600 11px Space Grotesk;color:#9a9aa0;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.04em}',
+    '.tm-in,.tm-ta,.tm-sel{width:100%;box-sizing:border-box;background:#141417;border:1px solid #2a2a30;border-radius:8px;color:#f2ede6;padding:8px 10px;font:500 13px Space Grotesk;margin-bottom:8px}',
+    '.tm-btn{padding:8px 13px;border:0;border-radius:8px;background:#ff6a00;color:#0a0a0a;font:700 12px Space Grotesk;cursor:pointer;margin:2px 4px 2px 0}',
+    '.tm-btn.ghost{background:transparent;border:1px solid #2a2a30;color:#f2ede6}',
+    '.tm-btn.mini{padding:4px 8px;font-size:11px}',
+    '.tm-card{border:1px solid #2a2a30;border-radius:10px;padding:11px;margin-bottom:8px;background:#141417}',
+    '.tm-row{display:flex;gap:8px;align-items:center}',
+    '.tm-mut{color:#6b6b72;font:500 11px Space Grotesk}',
+    '.tm-kpi{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}',
+    '.tm-kbox{flex:1;min-width:120px;background:#141417;border:1px solid #2a2a30;border-radius:12px;padding:12px}',
+    '.tm-knum{font:700 26px Space Grotesk}.tm-klbl{font:600 11px Space Grotesk;color:#9a9aa0;text-transform:uppercase}',
+    '.tm-badge{font:700 10px JetBrains Mono,monospace;padding:2px 7px;border-radius:6px;border:1px solid #2a2a30}',
+    '.tm-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}',
+    'table.tm-t{width:100%;border-collapse:collapse}.tm-t td,.tm-t th{padding:6px 8px;border-bottom:1px solid #22222a;font:500 12px Space Grotesk;text-align:left}',
+    '.tm-bar{height:8px;border-radius:4px;background:#22222a;overflow:hidden;margin-top:4px}.tm-fill{height:100%;background:#2aabee}',
+    '.tm-medal{font:700 13px Space Grotesk;width:24px;display:inline-block}'
+  ].join('');
+  document.head.appendChild(css);
+
+  var isAdmin = (document.body.getAttribute('data-role') === 'admin') || /painel\/admin/.test(location.pathname) || window.__isAdmin === true;
+
+  // widget de presenca (status selector)
+  var pres = el('div', 'tm-pres');
+  pres.innerHTML = '<span class="tm-pdot" id="tmDot"></span><select class="tm-psel" id="tmStatus">' +
+    '<option value="online">Online</option><option value="ausente">Ausente</option>' +
+    '<option value="pausa">Pausa</option><option value="offline">Offline</option></select>';
+  document.body.appendChild(pres);
+  document.getElementById('tmStatus').onchange = function (e) {
+    myStatus = e.target.value;
+    document.getElementById('tmDot').style.background = myStatus === 'online' ? '#3ddc84' : (myStatus === 'offline' ? '#6b6b72' : '#ffb020');
+    beat();
+  };
+
+  var TABS = [['sup', 'Supervisao'], ['q', 'Filas'], ['tk', 'Tickets'], ['qa', 'QA'], ['gm', 'Gamificacao'], ['sc', 'Escalas']];
+  if (!isAdmin) TABS = [['tk', 'Tickets'], ['gm', 'Gamificacao']];
+  var fab = el('button', 'tm-fab', 'EQUIPE');
+  var ov = el('div', 'tm-ov');
+  var tabsHtml = TABS.map(function (t, i) { return '<button class="tm-tab' + (i === 0 ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>'; }).join('');
+  var secHtml = TABS.map(function (t, i) { return '<div class="tm-sec' + (i === 0 ? ' on' : '') + '" id="tsec_' + t[0] + '"></div>'; }).join('');
+  ov.innerHTML = '<div class="tm-modal"><div class="tm-top"><b>Produtividade da equipe</b>' + tabsHtml + '<button class="tm-x" id="tmClose">x</button></div><div class="tm-body">' + secHtml + '</div></div>';
+  document.body.appendChild(fab); document.body.appendChild(ov);
+
+  var loaders = {};
+  fab.onclick = function () { ov.classList.add('open'); var first = TABS[0][0]; if (loaders[first]) loaders[first](); };
+  document.getElementById('tmClose').onclick = function () { ov.classList.remove('open'); };
+  ov.onclick = function (e) { if (e.target === ov) ov.classList.remove('open'); };
+  Array.prototype.forEach.call(ov.querySelectorAll('.tm-tab'), function (b) {
+    b.onclick = function () {
+      Array.prototype.forEach.call(ov.querySelectorAll('.tm-tab'), function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var t = b.getAttribute('data-t');
+      TABS.forEach(function (tt) { document.getElementById('tsec_' + tt[0]).classList.toggle('on', tt[0] === t); });
+      if (loaders[t]) loaders[t]();
+    };
+  });
+
+  // ---------------- SUPERVISAO ----------------
+  loaders.sup = async function () {
+    var sec = document.getElementById('tsec_sup');
+    sec.innerHTML = '<div class="tm-mut">Carregando...</div>';
+    var r = await api('GET', '/api/supervision');
+    if (!r.ok) { sec.innerHTML = '<div class="tm-mut">Sem acesso.</div>'; return; }
+    var tk = (r.data && r.data.tickets) || {};
+    sec.innerHTML = '';
+    var kpi = el('div', 'tm-kpi');
+    kpi.innerHTML =
+      '<div class="tm-kbox"><div class="tm-knum">' + (tk.open_tickets || 0) + '</div><div class="tm-klbl">Tickets abertos</div></div>' +
+      '<div class="tm-kbox"><div class="tm-knum" style="color:#ffb020">' + (tk.at_risk || 0) + '</div><div class="tm-klbl">Em risco</div></div>' +
+      '<div class="tm-kbox"><div class="tm-knum" style="color:#ff4d4d">' + (tk.breached_first || 0) + '</div><div class="tm-klbl">SLA violado</div></div>';
+    sec.appendChild(kpi);
+    var pc = el('div', 'tm-card'); pc.innerHTML = '<b>Atendentes</b>';
+    var tbl = el('table', 'tm-t'); tbl.innerHTML = '<tr><th>Atendente</th><th>Status</th><th>Efetivo</th><th>Escala</th></tr>';
+    ((r.data && r.data.presence) || []).forEach(function (p) {
+      var tr = el('tr');
+      var col = p.effective === 'online' ? '#3ddc84' : (p.effective === 'offline' || p.effective === 'fora_de_escala' ? '#6b6b72' : '#ffb020');
+      tr.innerHTML = '<td>' + esc(p.agent) + '</td><td>' + esc(p.status) + '</td>' +
+        '<td><span class="tm-badge" style="color:' + col + ';border-color:' + col + '55">' + esc(p.effective) + '</span></td>' +
+        '<td>' + (p.in_shift ? 'dentro' : 'fora') + '</td>';
+      tbl.appendChild(tr);
+    });
+    pc.appendChild(tbl); sec.appendChild(pc);
+    if (ov.classList.contains('open') && document.getElementById('tsec_sup').classList.contains('on')) {
+      clearTimeout(window.__supT); window.__supT = setTimeout(loaders.sup, 15000);
+    }
+  };
+
+  // ---------------- FILAS ----------------
+  loaders.q = async function () {
+    var sec = document.getElementById('tsec_q'); sec.innerHTML = '';
+    var form = el('div', 'tm-card');
+    form.innerHTML = '<b>Nova fila</b><div class="tm-grid">' +
+      '<div><div class="tm-lbl">Nome</div><input class="tm-in" id="qName"></div>' +
+      '<div><div class="tm-lbl">Descricao</div><input class="tm-in" id="qDesc"></div>' +
+      '<div><div class="tm-lbl">SLA 1a resposta (min)</div><input class="tm-in" id="qF" type="number" value="5"></div>' +
+      '<div><div class="tm-lbl">SLA resolucao (min)</div><input class="tm-in" id="qR" type="number" value="60"></div></div>';
+    var save = el('button', 'tm-btn', 'Criar fila');
+    save.onclick = async function () {
+      var body = { name: document.getElementById('qName').value.trim() || 'Fila', description: document.getElementById('qDesc').value.trim(),
+        sla_first: parseInt(document.getElementById('qF').value, 10) || 5, sla_resolution: parseInt(document.getElementById('qR').value, 10) || 60 };
+      var w = await api('POST', '/api/queues', body);
+      if (w.ok) { toast('Fila criada.'); loaders.q(); } else toast((w.data && w.data.error) || 'Erro.', true);
+    };
+    form.appendChild(save); sec.appendChild(form);
+    var r = await api('GET', '/api/queues');
+    ((r.data && r.data.queues) || []).forEach(function (q) {
+      var c = el('div', 'tm-card');
+      c.innerHTML = '<div class="tm-row"><b>' + esc(q.name) + '</b><span class="tm-mut" style="margin-left:auto">1a resp ' + q.sla_first_response_mins + 'm / resol ' + q.sla_resolution_mins + 'm</span></div>' +
+        '<div class="tm-mut">' + esc(q.description || '') + '</div>';
+      var del = el('button', 'tm-btn ghost mini', 'Excluir'); del.style.marginTop = '6px';
+      del.onclick = async function () { await api('DELETE', '/api/queues/' + q.id); loaders.q(); };
+      c.appendChild(del); sec.appendChild(c);
+    });
+  };
+
+  // ---------------- TICKETS ----------------
+  loaders.tk = async function () {
+    var sec = document.getElementById('tsec_tk'); sec.innerHTML = '';
+    var qs = await api('GET', '/api/queues?active_only=true');
+    var queues = (qs.data && qs.data.queues) || [];
+    var qOpts = '<option value="">(sem fila)</option>' + queues.map(function (q) { return '<option value="' + q.id + '">' + esc(q.name) + '</option>'; }).join('');
+    var form = el('div', 'tm-card');
+    form.innerHTML = '<b>Novo ticket</b><div class="tm-grid">' +
+      '<div><div class="tm-lbl">Assunto</div><input class="tm-in" id="tSub"></div>' +
+      '<div><div class="tm-lbl">Telefone</div><input class="tm-in" id="tPhone" value="' + esc(window.currentPhone || '') + '"></div>' +
+      '<div><div class="tm-lbl">Fila</div><select class="tm-sel" id="tQueue">' + qOpts + '</select></div>' +
+      '<div><div class="tm-lbl">Prioridade</div><select class="tm-sel" id="tPrio"><option>normal</option><option>alta</option><option>urgente</option></select></div></div>';
+    var save = el('button', 'tm-btn', 'Abrir ticket');
+    save.onclick = async function () {
+      var body = { subject: document.getElementById('tSub').value.trim(), contact_phone: document.getElementById('tPhone').value.trim(),
+        queue_id: parseInt(document.getElementById('tQueue').value, 10) || null, priority: document.getElementById('tPrio').value };
+      var w = await api('POST', '/api/tickets', body);
+      if (w.ok) { toast('Ticket aberto.'); loaders.tk(); } else toast('Erro.', true);
+    };
+    form.appendChild(save); sec.appendChild(form);
+    var r = await api('GET', '/api/tickets?status=open');
+    var tbl = el('table', 'tm-t'); tbl.innerHTML = '<tr><th>Assunto</th><th>Contato</th><th>Resp.</th><th>1a resp</th><th>Resol.</th><th></th></tr>';
+    ((r.data && r.data.tickets) || []).forEach(function (t) {
+      var f = t.sla_first || {}, rs = t.sla_resolution || {};
+      var tr = el('tr');
+      tr.innerHTML = '<td>' + esc(t.subject || '(sem assunto)') + '</td><td>' + esc(t.contact_name || t.contact_phone || '') + '</td><td>' + esc(t.assignee || '-') + '</td>' +
+        '<td><span class="tm-badge" style="color:' + slaColor(f.state) + '">' + esc(f.state || '-') + '</span></td>' +
+        '<td><span class="tm-badge" style="color:' + slaColor(rs.state) + '">' + fmtMin(rs.remaining_seconds) + '</span></td>';
+      var td = el('td');
+      var fr = el('button', 'tm-btn ghost mini', '1a resp');
+      fr.onclick = async function () { await api('POST', '/api/tickets/' + t.id + '/first-response'); toast('Marcado.'); loaders.tk(); };
+      var res = el('button', 'tm-btn mini', 'Resolver');
+      res.onclick = async function () { await api('POST', '/api/tickets/' + t.id + '/resolve'); toast('Resolvido.'); loaders.tk(); };
+      td.appendChild(fr); td.appendChild(res); tr.appendChild(td); tbl.appendChild(tr);
+    });
+    sec.appendChild(tbl);
+  };
+
+  // ---------------- QA ----------------
+  loaders.qa = async function () {
+    var sec = document.getElementById('tsec_qa'); sec.innerHTML = '';
+    var scs = await api('GET', '/api/qa/scorecards');
+    var cards = (scs.data && scs.data.scorecards) || [];
+    var form = el('div', 'tm-card');
+    form.innerHTML = '<b>Novo formulario de QA</b><div class="tm-lbl">Nome</div><input class="tm-in" id="scName">' +
+      '<div class="tm-mut">Criterios (um por linha: rotulo | peso | max)</div>' +
+      '<textarea class="tm-ta" id="scCrit" style="min-height:80px" placeholder="Cordialidade | 2 | 5\nResolucao | 3 | 5\nTempo | 1 | 5"></textarea>';
+    var save = el('button', 'tm-btn', 'Salvar formulario');
+    save.onclick = async function () {
+      var lines = document.getElementById('scCrit').value.split('\n');
+      var crit = [];
+      lines.forEach(function (ln, i) {
+        var p = ln.split('|'); if (!p[0] || !p[0].trim()) return;
+        crit.push({ id: 'c' + i, label: p[0].trim(), weight: parseFloat(p[1]) || 1, max: parseFloat(p[2]) || 5 });
+      });
+      var w = await api('POST', '/api/qa/scorecards', { name: document.getElementById('scName').value.trim() || 'Avaliacao', criteria: crit });
+      if (w.ok) { toast('Formulario salvo.'); loaders.qa(); } else toast((w.data && w.data.error) || 'Erro.', true);
+    };
+    form.appendChild(save); sec.appendChild(form);
+    // aplicar avaliacao
+    if (cards.length) {
+      var ev = el('div', 'tm-card');
+      var cOpts = cards.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
+      ev.innerHTML = '<b>Avaliar atendente</b><div class="tm-grid">' +
+        '<div><div class="tm-lbl">Formulario</div><select class="tm-sel" id="evCard">' + cOpts + '</select></div>' +
+        '<div><div class="tm-lbl">Atendente</div><input class="tm-in" id="evAgent"></div></div>' +
+        '<div id="evCrit"></div><div class="tm-lbl">Observacoes</div><textarea class="tm-ta" id="evNotes"></textarea>';
+      sec.appendChild(ev);
+      function drawCrit() {
+        var card = cards.filter(function (c) { return String(c.id) === document.getElementById('evCard').value; })[0];
+        var box = document.getElementById('evCrit'); box.innerHTML = '';
+        (card.criteria || []).forEach(function (cr) {
+          box.appendChild(el('div', 'tm-lbl', esc(cr.label) + ' (0-' + cr.max + ', peso ' + cr.weight + ')'));
+          var inp = el('input', 'tm-in'); inp.type = 'number'; inp.min = 0; inp.max = cr.max; inp.value = cr.max; inp.setAttribute('data-cid', cr.id);
+          box.appendChild(inp);
+        });
+      }
+      document.getElementById('evCard').onchange = drawCrit; drawCrit();
+      var send = el('button', 'tm-btn', 'Registrar avaliacao');
+      send.onclick = async function () {
+        var answers = {};
+        Array.prototype.forEach.call(document.querySelectorAll('#evCrit [data-cid]'), function (i) { answers[i.getAttribute('data-cid')] = parseFloat(i.value) || 0; });
+        var w = await api('POST', '/api/qa/reviews', { scorecard_id: parseInt(document.getElementById('evCard').value, 10), agent: document.getElementById('evAgent').value.trim(), answers: answers, notes: document.getElementById('evNotes').value });
+        if (w.ok) { toast('Avaliacao registrada.'); loaders.qa(); } else toast((w.data && w.data.error) || 'Erro.', true);
+      };
+      ev.appendChild(send);
+    }
+    var sum = await api('GET', '/api/qa/summary');
+    var box = el('div', 'tm-card'); box.innerHTML = '<b>Media por atendente</b>';
+    var tbl = el('table', 'tm-t'); tbl.innerHTML = '<tr><th>Atendente</th><th>Nota media</th><th>Avaliacoes</th></tr>';
+    ((sum.data && sum.data.summary) || []).forEach(function (s) {
+      var tr = el('tr'); tr.innerHTML = '<td>' + esc(s.agent) + '</td><td>' + (s.avg_score || 0) + '</td><td>' + (s.reviews || 0) + '</td>'; tbl.appendChild(tr);
+    });
+    box.appendChild(tbl); sec.appendChild(box);
+  };
+
+  // ---------------- GAMIFICACAO ----------------
+  loaders.gm = async function () {
+    var sec = document.getElementById('tsec_gm'); sec.innerHTML = '';
+    var r = await api('GET', '/api/gamification/leaderboard');
+    var board = (r.data && r.data.leaderboard) || [];
+    var box = el('div', 'tm-card'); box.innerHTML = '<b>Ranking</b>';
+    var medals = ['1', '2', '3'];
+    board.forEach(function (row, i) {
+      var lv = row.level || {};
+      var c = el('div'); c.style.cssText = 'padding:8px 0;border-bottom:1px solid #22222a';
+      c.innerHTML = '<div class="tm-row"><span class="tm-medal">' + (i < 3 ? medals[i] : (i + 1)) + '</span><b>' + esc(row.agent || '-') + '</b>' +
+        '<span class="tm-badge" style="margin-left:auto">' + esc(lv.level || '') + '</span>' +
+        '<span class="tm-mut" style="margin-left:8px">' + (row.points || 0) + ' pts</span></div>' +
+        '<div class="tm-bar"><div class="tm-fill" style="width:' + Math.round((lv.progress || 0) * 100) + '%"></div></div>';
+      box.appendChild(c);
+    });
+    if (!board.length) box.appendChild(el('div', 'tm-mut', 'Ainda sem pontos.'));
+    sec.appendChild(box);
+    if (isAdmin) {
+      var g = el('div', 'tm-card');
+      g.innerHTML = '<b>Conceder pontos</b><div class="tm-grid">' +
+        '<div><div class="tm-lbl">Atendente</div><input class="tm-in" id="gwAgent"></div>' +
+        '<div><div class="tm-lbl">Acao</div><select class="tm-sel" id="gwAction"><option value="conversa_resolvida">Conversa resolvida</option><option value="csat_positivo">CSAT positivo</option><option value="venda">Venda</option><option value="primeira_resposta_rapida">Resposta rapida</option></select></div></div>';
+      var aw = el('button', 'tm-btn', 'Conceder');
+      aw.onclick = async function () {
+        var w = await api('POST', '/api/gamification/award', { agent: document.getElementById('gwAgent').value.trim(), action: document.getElementById('gwAction').value });
+        if (w.ok) { toast('Pontos concedidos.'); loaders.gm(); } else toast('Erro.', true);
+      };
+      g.appendChild(aw); sec.appendChild(g);
+    }
+  };
+
+  // ---------------- ESCALAS ----------------
+  loaders.sc = async function () {
+    var sec = document.getElementById('tsec_sc'); sec.innerHTML = '';
+    var form = el('div', 'tm-card');
+    var wdOpts = WD.map(function (d, i) { return '<option value="' + i + '">' + d + '</option>'; }).join('');
+    form.innerHTML = '<b>Nova escala</b><div class="tm-grid">' +
+      '<div><div class="tm-lbl">Atendente</div><input class="tm-in" id="shAgent"></div>' +
+      '<div><div class="tm-lbl">Dia</div><select class="tm-sel" id="shWd">' + wdOpts + '</select></div>' +
+      '<div><div class="tm-lbl">Inicio</div><input class="tm-in" id="shStart" value="09:00"></div>' +
+      '<div><div class="tm-lbl">Fim</div><input class="tm-in" id="shEnd" value="18:00"></div></div>';
+    var save = el('button', 'tm-btn', 'Adicionar');
+    save.onclick = async function () {
+      var body = { agent: document.getElementById('shAgent').value.trim(), weekday: parseInt(document.getElementById('shWd').value, 10),
+        start: document.getElementById('shStart').value.trim(), end: document.getElementById('shEnd').value.trim() };
+      var w = await api('POST', '/api/shifts', body);
+      if (w.ok) { toast('Escala adicionada.'); loaders.sc(); } else toast((w.data && w.data.error) || 'Erro.', true);
+    };
+    form.appendChild(save); sec.appendChild(form);
+    var r = await api('GET', '/api/shifts');
+    var tbl = el('table', 'tm-t'); tbl.innerHTML = '<tr><th>Atendente</th><th>Dia</th><th>Horario</th><th></th></tr>';
+    ((r.data && r.data.shifts) || []).forEach(function (s) {
+      var tr = el('tr');
+      tr.innerHTML = '<td>' + esc(s.agent) + '</td><td>' + (WD[s.weekday] || s.weekday) + '</td><td>' + esc(s.start_time) + ' - ' + esc(s.end_time) + '</td>';
+      var td = el('td'); var del = el('button', 'tm-btn ghost mini', 'x');
+      del.onclick = async function () { await api('DELETE', '/api/shifts/' + s.id); loaders.sc(); };
+      td.appendChild(del); tr.appendChild(td); tbl.appendChild(tr);
+    });
+    sec.appendChild(tbl);
+  };
+})();
+</script>

@@ -1,0 +1,742 @@
+    async function takeoverChat() {
+        if (!ADMIN_CAN_AUDIT) return notifyToast('Você não tem permissão para assumir atendimento pela auditoria.', true);
+        if(!currentAuditPhone) return;
+        const res = await fetch('/api/admin/takeover', {method: 'POST', body: JSON.stringify({phone: currentAuditPhone})});
+        const data = await res.json();
+        if (data.status !== 'ok') return notifyToast(data.message || 'Falha ao assumir atendimento.', true);
+        adminTakenAuditPhones.add(currentAuditPhone);
+        document.getElementById('admin-takeover-box').style.display = 'none';
+        document.getElementById('admin-chat-controls').style.display = 'flex';
+        notifyToast('Atendimento liberado para resposta do admin.', false, 2200);
+    }
+    async function saveAuditContactInfo() {
+        if (!ADMIN_CAN_MANAGE_CONTACTS) return notifyToast('Você não tem permissão para alterar dados do contato.', true);
+        if (!currentAuditPhone) return notifyToast('Selecione um contato na auditoria.', true);
+        const payload = {
+            phone: currentAuditPhone,
+            name: document.getElementById('audit-info-name').value.trim(),
+            notes: document.getElementById('audit-info-notes').value,
+            extra: document.getElementById('audit-info-extra').value
+        };
+        const res = await fetch('/api/edit_contact', {method: 'POST', body: JSON.stringify(payload)});
+        const data = await res.json();
+        if (data.status !== 'ok') return notifyToast(data.message || 'Falha ao salvar dados do contato.', true);
+        document.getElementById('audit-chat-title').innerText = getCleanName(payload.name || currentAuditPhone);
+        notifyToast('Dados do contato salvos.', false, 2200);
+        loadAuditContacts();
+    }
+    async function sendAdminMessage() { 
+        const input = document.getElementById('admin-chat-input'); if(!input.value.trim() || !currentAuditPhone) return; 
+        let payload = {phone: currentAuditPhone, text: input.value.trim()}; if (currentReplyId) payload.quoted_id = currentReplyId;
+        const res = await fetch('/api/chat/send', {method: 'POST', body: JSON.stringify(payload)});
+        const data = await res.json();
+        if (data.status !== 'ok') {
+            Toastify({text: `Falha ao enviar: ${data.message || 'sem confirmação da Evolution'}`, duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+            return;
+        }
+        input.value = ''; cancelAuditReply(); await refreshAuditChat();
+    }
+    function openInternalChat(target, element) { currentInternalTarget = target; clearInternalUnread(target); cancelInternalReply(); document.getElementById('internal-chat-history').innerHTML = '<div style="display:flex; height:100%; align-items:center; justify-content:center; color:var(--text-muted);">Carregando...</div>'; document.querySelectorAll('#int-list-col .contact-card').forEach(el => el.classList.remove('active')); if(element) element.classList.add('active'); document.getElementById('int-chat-title').innerText = target === 'geral' ? 'Mural Geral' : target; loadInternalChat(); internalMobileView('chat'); }
+    function formatInternalMessage(text, lightBubble = false) {
+        if (!text) return "";
+        if (text.startsWith("[IMAGE] ") || text.startsWith("[VIDEO] ") || text.startsWith("[AUDIO] ") || text.startsWith("[PTT] ") || text.startsWith("[DOCUMENT] ")) return formatMessage(text);
+        const mentionColor = lightBubble ? '#05382f' : 'var(--primary)';
+        return escapeHtml(text).replace(/@([\wÀ-ÿ.-]+)/g, `<span style="color:${mentionColor}; font-weight:700;">@$1</span>`);
+    }
+    function renderInternalReactions(reactions) {
+        const counts = {};
+        Object.values(reactions || {}).forEach(emoji => { if (emoji) counts[emoji] = (counts[emoji] || 0) + 1; });
+        return Object.entries(counts).map(([emoji, count]) => `<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; background:rgba(255,255,255,0.08); border:1px solid var(--border); font-size:0.72rem;">${emoji}${count > 1 ? ` ${count}` : ''}</span>`).join('');
+    }
+    function setInternalReply(messageId, sender, text) {
+        currentInternalReplyId = messageId;
+        document.getElementById('internal-reply-sender').innerText = `Respondendo ${sender || 'Equipe'}`;
+        document.getElementById('internal-reply-text').innerText = text || '';
+        document.getElementById('internal-reply-bar').style.display = 'flex';
+        document.getElementById('internal-input').focus();
+    }
+    function setInternalReplyFromCache(messageId) {
+        const item = internalMessageCache[messageId] || {};
+        setInternalReply(messageId, item.sender || 'Equipe', item.text || '');
+    }
+    function cancelInternalReply() {
+        currentInternalReplyId = null;
+        const bar = document.getElementById('internal-reply-bar');
+        if (bar) bar.style.display = 'none';
+    }
+    async function reactInternalMessage(messageId, emoji) {
+        await fetch('/api/internal_chat/react', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId, emoji})});
+    }
+    function hideInternalMessagePanels(exceptId = '') {
+        document.querySelectorAll('.internal-msg-menu, .internal-reaction-panel, .internal-forward-panel, .internal-edit-panel').forEach(el => {
+            if (el.id !== exceptId) el.style.display = 'none';
+        });
+    }
+    function toggleInternalMessageMenu(messageId, event) {
+        event.stopPropagation();
+        const panel = document.getElementById(`internal-menu-${messageId}`);
+        if (!panel) return;
+        const willShow = panel.style.display !== 'flex';
+        hideInternalMessagePanels(willShow ? panel.id : '');
+        panel.style.display = willShow ? 'flex' : 'none';
+        if (willShow) setTimeout(() => panel.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'}), 30);
+    }
+    function toggleInternalReactionPanel(messageId) {
+        const panel = document.getElementById(`internal-reactions-${messageId}`);
+        if (!panel) return;
+        const willShow = panel.style.display !== 'flex';
+        hideInternalMessagePanels(willShow ? panel.id : '');
+        panel.style.display = willShow ? 'flex' : 'none';
+        if (willShow) setTimeout(() => panel.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'}), 30);
+    }
+    function toggleInternalForwardPanel(messageId) {
+        const panel = document.getElementById(`internal-forward-${messageId}`);
+        if (!panel) return;
+        const willShow = panel.style.display !== 'block';
+        hideInternalMessagePanels(willShow ? panel.id : '');
+        panel.style.display = willShow ? 'block' : 'none';
+        if (willShow) setTimeout(() => panel.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'}), 30);
+    }
+    function toggleInternalEditPanel(messageId) {
+        const panel = document.getElementById(`internal-edit-${messageId}`);
+        if (!panel) return;
+        const willShow = panel.style.display !== 'block';
+        hideInternalMessagePanels(willShow ? panel.id : '');
+        panel.style.display = willShow ? 'block' : 'none';
+        if (willShow) panel.querySelector('textarea')?.focus();
+        if (willShow) setTimeout(() => panel.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'smooth'}), 30);
+    }
+    function internalTargetOptionsHtml() {
+        return Array.from(document.querySelectorAll('#int-list-col .contact-card')).map(card => {
+            const title = (card.querySelector('.card-title')?.innerText || '').trim();
+            const target = title === 'Comunicação Interna' ? 'geral' : title;
+            return `<option value="${escapeHtml(target)}">${escapeHtml(title)}</option>`;
+        }).join('');
+    }
+    async function forwardInternalMessage(messageId) {
+        const select = document.getElementById(`internal-forward-target-${messageId}`);
+        if (!select) return;
+        await fetch('/api/internal_chat/forward', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId, target: select.value})});
+        hideInternalMessagePanels();
+    }
+    async function editInternalMessage(messageId) {
+        const input = document.getElementById(`internal-edit-text-${messageId}`);
+        const text = (input?.value || '').trim();
+        if (!text) return;
+        const res = await fetch('/api/internal_chat/edit', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId, text})});
+        const data = await res.json();
+        if (!res.ok || data.status !== 'ok') return Toastify({text: data.message || "Falha ao editar mensagem.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        hideInternalMessagePanels();
+        await loadInternalChat();
+    }
+    async function deleteInternalMessage(messageId) {
+        if (!confirm('Apagar esta mensagem para todos?')) return;
+        const res = await fetch('/api/internal_chat/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId})});
+        const data = await res.json();
+        if (!res.ok || data.status !== 'ok') return Toastify({text: data.message || "Falha ao apagar mensagem.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        hideInternalMessagePanels();
+        await loadInternalChat();
+    }
+    async function togglePinInternalMessage(messageId, shouldPin) {
+        const endpoint = shouldPin ? 'pin' : 'unpin';
+        const res = await fetch(`/api/internal_chat/${endpoint}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message_id: messageId})});
+        const data = await res.json();
+        if (!res.ok || data.status !== 'ok') return Toastify({text: data.message || "Falha ao atualizar fixação.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        hideInternalMessagePanels();
+        await loadInternalChat();
+    }
+    async function loadInternalChat() {
+        const box = document.getElementById('internal-chat-history');
+        const previousHtml = box ? box.innerHTML : '';
+        try {
+        const res = await fetch('/api/internal_chat/' + encodeURIComponent(currentInternalTarget));
+        if (!res.ok) throw new Error(`internal_chat ${res.status}`);
+        const msgs = await res.json();
+        if (!Array.isArray(msgs)) throw new Error('Resposta inválida do chat interno');
+        let htmlStr = '';
+        internalMessageCache = {};
+        let latestVisibleInternalId = 0;
+        msgs.forEach(m => {
+            latestVisibleInternalId = Math.max(latestVisibleInternalId, Number(m.id || 0));
+            internalMessageCache[m.id] = {sender: m.sender_name, text: m.msg_text || ''};
+            let isMe = m.sender_name === '{{ user.name }}';
+            let align = isMe ? 'flex-end' : 'flex-start'; let bg = isMe ? 'var(--wa-green)' : 'var(--surface)'; let color = isMe ? '#000' : 'var(--text-main)';
+            const metaColor = isMe ? 'rgba(0,0,0,0.68)' : 'var(--text-muted)';
+            const iconColor = isMe ? '#05382f' : 'var(--text-muted)';
+            const isDeleted = Boolean(m.deleted_at);
+            const isPinned = Boolean(m.pinned_at);
+            const canManage = isMe || '{{ user.role }}' === 'admin';
+            let nameDisplay = '';
+            if(currentInternalTarget === 'geral' && !isMe) { let nameColor = getColorFromName(m.sender_name); nameDisplay = `<div style="font-size:0.75rem; margin-bottom:4px; font-weight:700; color:${nameColor};">${m.sender_name}</div>`; } 
+            else if (!isMe) { nameDisplay = `<div style="font-size:0.7rem; opacity:0.7; margin-bottom:4px;">${m.sender_name}</div>`; }
+            let timeStr = `<div style="font-size:0.6rem; color:${metaColor}; text-align:right; margin-top:4px;">${formatTime(m.timestamp)}</div>`;
+            const pinnedHtml = isPinned ? `<div style="display:flex; align-items:center; gap:4px; margin-bottom:6px; color:${isMe ? '#06352d' : 'var(--primary)'}; font-size:0.68rem; font-weight:700;"><span class="material-symbols-outlined" style="font-size:14px;">push_pin</span>Fixada por ${escapeHtml(m.pinned_by || 'Equipe')}</div>` : '';
+            const replyHtml = m.reply_to_id && !isDeleted ? `<div style="border-left:3px solid var(--primary); padding:6px 8px; margin-bottom:6px; background:rgba(0,0,0,0.12); border-radius:6px;"><div style="font-size:0.68rem; font-weight:700;">${escapeHtml(m.reply_sender_name || 'Mensagem')}</div><div style="font-size:0.72rem; opacity:0.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(m.reply_msg_text || '')}</div></div>` : '';
+            const forwardedHtml = m.forwarded_from_id ? '<div style="font-size:0.68rem; opacity:0.7; margin-bottom:4px;">Encaminhada</div>' : '';
+            const reactionsHtml = renderInternalReactions(m.reactions);
+            const menuButton = `<span class="material-symbols-outlined act-icon" style="color:${iconColor};" onclick="toggleInternalMessageMenu(${m.id}, event)">more_vert</span>`;
+            const messageHtml = isDeleted ? '<span style="font-style:italic; opacity:0.7;">Mensagem apagada</span>' : formatInternalMessage(m.msg_text, isMe);
+            const editedHtml = m.edited_at && !isDeleted ? `<span style="font-size:0.6rem; color:${metaColor};">editada</span>` : '';
+            const panelsHtml = `<div id="internal-menu-${m.id}" class="internal-msg-menu" style="display:none; flex-direction:column; gap:4px; margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:rgba(0,0,0,0.16);">
+                    ${!isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); setInternalReplyFromCache(${m.id}); hideInternalMessagePanels();"><span class="material-symbols-outlined">reply</span>Responder</button>` : ''}
+                    ${canManage && !isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); toggleInternalEditPanel(${m.id});"><span class="material-symbols-outlined">edit</span>Editar</button>` : ''}
+                    ${!isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); toggleInternalReactionPanel(${m.id});"><span class="material-symbols-outlined">add_reaction</span>Reagir</button>` : ''}
+                    ${!isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); toggleInternalForwardPanel(${m.id});"><span class="material-symbols-outlined">forward</span>Encaminhar</button>` : ''}
+                    ${!isDeleted ? `<button class="btn" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); togglePinInternalMessage(${m.id}, ${isPinned ? 'false' : 'true'});"><span class="material-symbols-outlined">push_pin</span>${isPinned ? 'Desfixar' : 'Fixar'}</button>` : ''}
+                    ${canManage && !isDeleted ? `<button class="btn btn-danger" style="justify-content:flex-start; padding:7px 8px;" onclick="event.stopPropagation(); deleteInternalMessage(${m.id});"><span class="material-symbols-outlined">delete</span>Apagar</button>` : ''}
+                </div>
+                <div id="internal-edit-${m.id}" class="internal-edit-panel" style="display:none; margin-top:6px; padding:8px; border:1px solid var(--border); border-radius:8px; background:rgba(0,0,0,0.16);">
+                    <textarea id="internal-edit-text-${m.id}" class="input-text" rows="3" style="margin-bottom:8px; resize:vertical;">${escapeHtml(m.msg_text || '')}</textarea>
+                    <button class="btn btn-primary" style="width:100%;" onclick="event.stopPropagation(); editInternalMessage(${m.id});">Salvar edição</button>
+                </div>
+                <div id="internal-reactions-${m.id}" class="internal-reaction-panel" style="display:none; gap:8px; margin-top:6px; padding:8px; border:1px solid var(--border); border-radius:8px; background:rgba(0,0,0,0.16);">
+                    ${['👍','❤️','✅','👀'].map(emoji => `<button class="btn" style="padding:6px 8px;" onclick="event.stopPropagation(); reactInternalMessage(${m.id}, '${emoji}'); hideInternalMessagePanels();">${emoji}</button>`).join('')}
+                </div>
+                <div id="internal-forward-${m.id}" class="internal-forward-panel" style="display:none; margin-top:6px; padding:8px; border:1px solid var(--border); border-radius:8px; background:rgba(0,0,0,0.16);">
+                    <select id="internal-forward-target-${m.id}" class="input-text" style="margin-bottom:8px;">${internalTargetOptionsHtml()}</select>
+                    <button class="btn" style="width:100%; height:38px; border-radius:8px; justify-content:center; background:var(--wa-green); color:#000; border:1px solid var(--wa-green); padding:0 12px;" onclick="event.stopPropagation(); forwardInternalMessage(${m.id});">Encaminhar</button>
+                </div>`;
+            htmlStr += `<div class="msg-bubble" style="align-self:${align}; background:${bg}; color:${color}; ${isPinned ? 'border:1px solid var(--primary); box-shadow:0 0 0 1px rgba(186,128,255,0.18);' : ''}">${nameDisplay}${pinnedHtml}${replyHtml}${forwardedHtml}${messageHtml}${reactionsHtml && !isDeleted ? `<div style="display:flex; gap:4px; margin-top:6px; flex-wrap:wrap;">${reactionsHtml}</div>` : ''}<div style="display:flex; justify-content:flex-end; align-items:center; gap:4px; margin-top:4px;">${editedHtml}${menuButton}${timeStr}</div>${panelsHtml}</div>`;
+        });
+        box.innerHTML = htmlStr; box.scrollTop = box.scrollHeight;
+        if (document.getElementById('tab-internal')?.classList.contains('active')) {
+            clearInternalUnread(currentInternalTarget, latestVisibleInternalId);
+        }
+        } catch(e) {
+            console.error('Falha ao carregar chat interno:', e);
+            if (box && previousHtml) box.innerHTML = previousHtml;
+            Toastify({text: "Falha ao carregar comunicação interna.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        }
+    }
+    async function sendInternalMessage() {
+        const input = document.getElementById('internal-input');
+        const text = input.value.trim();
+        if(!text) return;
+        const replyId = currentInternalReplyId;
+        try {
+            const res = await fetch('/api/internal_chat/send', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({target: currentInternalTarget, text, reply_to_id: replyId})});
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.message || 'Falha ao enviar');
+            input.value = '';
+            cancelInternalReply();
+            await loadInternalChat();
+        } catch(e) {
+            Toastify({text: "Falha ao enviar mensagem interna.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        }
+    }
+    async function sendQuickInternalMessage() {
+        const input = document.getElementById('quick-internal-input');
+        const text = input.value.trim();
+        if(!text) return;
+        try {
+            const res = await fetch('/api/internal_chat/send', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({target: "geral", text: "🚨: " + text})});
+            const data = await res.json();
+            if (!res.ok || data.status !== 'ok') throw new Error(data.message || 'Falha ao enviar');
+            input.value = '';
+            if (currentInternalTarget === 'geral') await loadInternalChat();
+        } catch(e) {
+            Toastify({text: "Falha ao enviar mensagem para equipe.", duration: 3000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        }
+    }
+    function togglePanelNoticeAll(checked) {
+        document.querySelectorAll('.panel-notice-target').forEach(el => { el.checked = checked; });
+    }
+    function syncPanelNoticeAll() {
+        const targets = Array.from(document.querySelectorAll('.panel-notice-target'));
+        const all = document.getElementById('panel-notice-all');
+        if (all) all.checked = targets.length > 0 && targets.every(el => el.checked);
+    }
+    async function sendPanelNotice() {
+        const input = document.getElementById('panel-notice-text');
+        const text = (input?.value || '').trim();
+        if (!text) return notifyToast("Digite o comunicado para exibir nos painéis.", true);
+        const targets = Array.from(document.querySelectorAll('.panel-notice-target:checked')).map(el => el.value);
+        if (!targets.length) return notifyToast("Selecione ao menos um painel de destino.", true);
+        try {
+            const res = await fetch('/api/admin/panel_notice', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: text, targets: targets})
+            });
+            const data = await res.json();
+            if (data.status !== 'ok') return notifyToast(data.message || "Falha ao enviar comunicado.", true);
+            notifyToast(`Comunicado enviado para: ${(data.targets || targets).join(', ')}.`);
+            input.value = '';
+        } catch (e) {
+            notifyToast("Falha de conexão ao enviar comunicado.", true);
+        }
+    }
+    function changeMonth(dir) { calDate.setMonth(calDate.getMonth() + dir); renderCalendar(); }
+    async function renderCalendar() {
+        const y = calDate.getFullYear(); const m = calDate.getMonth(); document.getElementById('cal-month-label').innerText = new Date(y, m, 1).toLocaleDateString('pt-BR', {month:'short', year:'numeric'}).toUpperCase();
+        const ymStr = `${y}-${String(m+1).padStart(2,'0')}`; const res = await fetch('/api/calendar/' + ymStr); monthEvents = await res.json();
+        await loadDueCalendarTasks();
+        const firstDay = new Date(y, m, 1).getDay(); const daysInMonth = new Date(y, m+1, 0).getDate(); const box = document.getElementById('cal-days'); box.innerHTML = '';
+        for(let i=0; i<firstDay; i++) box.innerHTML += '<div></div>';
+        for(let i=1; i<=daysInMonth; i++) { let dStr = `${ymStr}-${String(i).padStart(2,'0')}`; let hasEv = monthEvents.some(e => e.event_date === dStr) ? 'has-event' : ''; box.insertAdjacentHTML('beforeend', `<div class="cal-day ${hasEv}" data-date="${dStr}" onclick="selectDate('${dStr}', this)">${i}</div>`); }
+    }
+    function agendaDateLabel(dStr) {
+        return dStr ? dStr.split('-').reverse().join('/') : 'Selecione';
+    }
+    function agendaStatusLabel(status) {
+        return {pendente:'Pendente', remarcado:'Remarcado', contatado:'Contatado', cancelado:'Cancelado'}[status || 'pendente'] || status;
+    }
+    function agendaDueLabel(eventItem) {
+        if (eventItem.due_at) return formatTime(eventItem.due_at);
+        return '--:--';
+    }
+    function agendaContactLabel(e) {
+        return e.contact_name || (e.phone ? e.phone : '');
+    }
+    function agendaCardHtml(e) {
+        const status = e.status || 'pendente';
+        const canAct = status !== 'contatado' && status !== 'cancelado';
+        return `<div style="background:var(--surface); padding:12px; border-radius:8px; border:1px solid var(--border); display:flex; gap:10px; align-items:flex-start; justify-content:space-between;">
+            <div style="flex:1; min-width:0;">
+                <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
+                    <span style="font-size:0.7rem; color:var(--primary);">${escapeHtml(e.user_name || '-')}</span>
+                    <span style="font-size:0.7rem; color:var(--text-muted);">${escapeHtml(agendaDueLabel(e))}</span>
+                    <span style="font-size:0.7rem; color:var(--text-muted);">${escapeHtml(agendaStatusLabel(status))}</span>
+                </div>
+                <div style="font-size:0.86rem; line-height:1.4;">${escapeHtml(e.note || '')}</div>
+                ${e.phone ? `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:6px;">${escapeHtml(e.phone)}</div>` : ''}
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                ${canAct ? `<button class="btn btn-primary" style="padding:5px 8px; font-size:0.72rem;" onclick="completeAgendaNote(${e.id})">Contatado</button><button class="btn" style="padding:5px 8px; font-size:0.72rem;" onclick="rescheduleAgendaNote(${e.id})">Remarcar</button>` : ''}
+                <button class="btn" style="padding:5px 8px; color:#ff5252; border-color:#4A1C22;" onclick="delAgendaNote(${e.id})"><span class="material-symbols-outlined" style="font-size:16px;">delete</span></button>
+            </div>
+        </div>`;
+    }
+    function renderAgendaDayDetails() {
+        const label = agendaDateLabel(selectedDateStr);
+        const inlineLabel = document.getElementById('agenda-date-label');
+        const modalLabel = document.getElementById('agenda-modal-date-label');
+        if (inlineLabel) inlineLabel.innerText = label;
+        if (modalLabel) modalLabel.innerText = `Agenda de ${label}`;
+        const evs = monthEvents.filter(e => e.event_date === selectedDateStr);
+        const html = evs.length
+            ? evs.map(e => agendaCardHtml(e)).join('')
+            : '<div style="color:var(--text-muted); padding:16px; text-align:center; border:1px dashed var(--border); border-radius:8px;">Livre.</div>';
+        const inlineBox = document.getElementById('agenda-notes-list');
+        const modalBox = document.getElementById('agenda-modal-notes-list');
+        if (inlineBox) inlineBox.innerHTML = html;
+        if (modalBox) modalBox.innerHTML = html;
+    }
+    function selectDate(dStr, element = null, options = {}) {
+        document.querySelectorAll('.cal-day').forEach(el => el.classList.remove('active'));
+        const activeDay = element || document.querySelector(`.cal-day[data-date="${dStr}"]`);
+        if (activeDay) activeDay.classList.add('active');
+        selectedDateStr = dStr;
+        renderAgendaDayDetails();
+        if (options.openModal !== false) document.getElementById('agendaDayModal').style.display = 'flex';
+    }
+    function refreshSelectedAgendaDate(openModal = false) {
+        if (selectedDateStr) selectDate(selectedDateStr, null, {openModal});
+    }
+    async function loadDueCalendarTasks() {
+        const box = document.getElementById('agenda-due-list');
+        if (!box) return;
+        try {
+            const res = await fetch('/api/calendar/due/tasks');
+            const tasks = await res.json();
+            if (!Array.isArray(tasks) || tasks.length === 0) {
+                box.innerHTML = '';
+                return;
+            }
+            box.innerHTML = `<div style="font-size:0.76rem; color:#F15C6D; font-weight:700; display:flex; align-items:center; gap:6px;"><span class="material-symbols-outlined" style="font-size:16px;">notification_important</span>Tarefas vencidas</div>` + tasks.slice(0, 8).map(e => {
+                const contactLabel = agendaContactLabel(e);
+                return `<div style="background:#2A1114; border:1px solid #4A1C22; border-radius:8px; padding:10px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+                    <div style="min-width:0;">
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:5px;"><span style="font-size:0.68rem; color:#F15C6D;">${escapeHtml(agendaDueLabel(e))}</span><span style="font-size:0.68rem; color:var(--text-muted);">${escapeHtml(e.assigned_to || e.user_name || '-')}</span>${contactLabel ? `<span style="font-size:0.68rem; color:var(--text-muted);">${escapeHtml(contactLabel)}</span>` : ''}</div>
+                        <div style="font-size:0.82rem; color:var(--text-main); line-height:1.35;">${escapeHtml(e.note || '')}</div>
+                    </div>
+                    <button class="btn btn-primary" style="padding:6px 8px; font-size:0.72rem; flex-shrink:0;" onclick="completeAgendaNote(${e.id})">Contatado</button>
+                </div>`;
+            }).join('');
+        } catch(e) {}
+    }
+    async function saveAgendaNote(source = 'inline') {
+        const fromModal = source === 'modal';
+        const inp = document.getElementById(fromModal ? 'agenda-modal-input' : 'agenda-input');
+        const timeInp = document.getElementById(fromModal ? 'agenda-modal-time' : 'agenda-time');
+        const phoneInp = document.getElementById(fromModal ? 'agenda-modal-phone' : 'agenda-phone');
+        if(!inp.value.trim() || !selectedDateStr) return notifyToast('Selecione uma data e informe a tarefa.', true);
+        const res = await fetch('/api/calendar', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({date: selectedDateStr, time: timeInp?.value || '09:00', note: inp.value.trim(), phone: phoneInp?.value || '', repeat_until_done: true})});
+        const data = await res.json();
+        if (data.status !== 'ok') return notifyToast(data.message || 'Falha ao salvar agenda.', true);
+        inp.value = '';
+        if (phoneInp) phoneInp.value = '';
+        await renderCalendar();
+        refreshSelectedAgendaDate(fromModal);
+    }
+    async function completeAgendaNote(id) {
+        await fetch(`/api/calendar/${id}/complete`, {method: 'POST'});
+        await renderCalendar();
+        refreshSelectedAgendaDate();
+    }
+    async function rescheduleAgendaNote(id) {
+        const date = prompt('Nova data (AAAA-MM-DD):', selectedDateStr || '');
+        if (!date) return;
+        const time = prompt('Novo horário (HH:MM):', document.getElementById('agenda-time')?.value || '09:00') || '09:00';
+        const res = await fetch(`/api/calendar/${id}/reschedule`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({date, time})});
+        const data = await res.json();
+        if (data.status !== 'ok') return notifyToast(data.message || 'Falha ao remarcar agenda.', true);
+        selectedDateStr = date;
+        await renderCalendar();
+        refreshSelectedAgendaDate();
+    }
+    async function delAgendaNote(id) { await fetch('/api/calendar/' + id, {method: 'DELETE'}); await renderCalendar(); refreshSelectedAgendaDate(); }
+    function openUserModal(user='', name='', role='vendas_1', status='1') { document.getElementById('u-title').innerText = user ? 'Editar Usuário' : 'Novo Usuário'; document.getElementById('u-username').value = user; document.getElementById('u-username').disabled = !!user; document.getElementById('u-name').value = name; document.getElementById('u-role').value = role; document.getElementById('u-status').value = status; document.getElementById('u-password').value = ''; document.getElementById('userModal').style.display = 'flex'; }
+    async function saveUser() { await fetch('/api/admin/users', {method:'POST', body:JSON.stringify({username: document.getElementById('u-username').value, password: document.getElementById('u-password').value, name: document.getElementById('u-name').value, role: document.getElementById('u-role').value, is_active: document.getElementById('u-status').value})}); window.location.reload(); }
+    async function clearUserSession(username) {
+        await fetch('/api/admin/sessions/clear', {method:'POST', body:JSON.stringify({username})});
+        Toastify({text: "Sessão liberada.", duration: 2500, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
+    }
+    async function saveBotSettings() { await fetch('/api/admin/settings', {method:'POST', body:JSON.stringify({greeting: document.getElementById('set-greeting').value, menu: document.getElementById('set-menu').value, off_hours: document.getElementById('set-off').value})}); Toastify({text: "✅ Salvo!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast(); }
+    async function executeCleanup() {
+        const resultDiv = document.getElementById('cleanup-result'); resultDiv.innerHTML = "Processando..."; const types = []; const checkboxes = document.querySelectorAll('#tab-tools .cleanup-media-type:checked');
+        checkboxes.forEach((cb) => { if(['image','audio','video','document'].includes(cb.value)) types.push(cb.value); }); const days = parseInt(document.getElementById('cleanup-days').value);
+        if (types.length === 0) return;
+        try { const response = await fetch('/api/admin/cleanup-media', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_types: types, days_old: days }) }); const data = await response.json(); if (data.status === 'success') { resultDiv.innerHTML = data.message; } } catch (error) {}
+    }
+    function getSelectedPrefixes() {
+        return Array.from(document.querySelectorAll('.prefix-option:checked')).map(input => input.value);
+    }
+    function normalizePrefixText(text) {
+        return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+    function renderPrefixOption(prefix, label, count = '', checked = true, manual = false) {
+        const token = normalizePrefixText(prefix);
+        if (!token) return '';
+        return `<label style="display:flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:8px; padding:7px 9px; background:var(--bg-base); font-size:0.78rem;">
+            <input type="checkbox" class="prefix-option" value="${escapeHtml(token)}" ${checked ? 'checked' : ''}>
+            <span><strong>${escapeHtml(token)}</strong>${label ? ' -> ' + escapeHtml(label) : ''}${count !== '' ? ' (' + count + ')' : ''}${manual ? ' · manual' : ''}</span>
+        </label>`;
+    }
+    function addManualPrefixes() {
+        const input = document.getElementById('manual-prefix-input');
+        const options = document.getElementById('prefix-options');
+        const values = String(input.value || '').split(',').map(item => normalizePrefixText(item)).filter(Boolean);
+        if (!values.length) return notifyToast("Digite ao menos um prefixo.", true);
+        let added = 0;
+        values.forEach(prefix => {
+            if (document.querySelector(`.prefix-option[value="${prefix}"]`)) return;
+            options.insertAdjacentHTML('beforeend', renderPrefixOption(prefix, '', '', true, true));
+            added += 1;
+        });
+        input.value = '';
+        notifyToast(added ? `${added} prefixo(s) manual(is) incluído(s).` : "Os prefixos informados já estavam na lista.");
+    }
+    function renderPrefixGroups(data, applied = false) {
+        const box = document.getElementById('prefix-preview-result');
+        const groups = data.groups || [];
+        if (!groups.length) {
+            box.innerHTML = '<div style="color:var(--text-muted); padding:12px;">Nenhum contato encontrado com os prefixos selecionados.</div>';
+            return;
+        }
+        const rows = groups.map(group => {
+            const result = data.result && data.result[group.list_name] ? data.result[group.list_name] : null;
+            const insertedText = result ? `<div style="font-size:0.75rem; color:var(--primary); margin-top:4px;">Novos vínculos: ${result.inserted} de ${result.matched}</div>` : '';
+            const examples = (group.examples || []).map(item => `<div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${escapeHtml(item.name || '(sem nome)')} · ${escapeHtml(cleanPhone(item.phone || ''))}</div>`).join('');
+            return `<div style="border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--bg-base);">
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
+                    <strong>${escapeHtml(group.list_name)}</strong>
+                    <span style="color:var(--primary); font-weight:700;">${group.count}</span>
+                </div>
+                <div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;">Prefixos: ${(group.prefixes || []).map(escapeHtml).join(', ')}</div>
+                ${insertedText}
+                <div style="margin-top:8px;">${examples}</div>
+            </div>`;
+        }).join('');
+        const title = applied ? 'Listas atualizadas' : 'Simulação pronta';
+        box.innerHTML = `<div style="font-weight:700; color:var(--primary);">${title}: ${data.total || 0} contato(s)</div>${rows}`;
+    }
+    function confirmPrefixApplyToast(onConfirm) {
+        const node = document.createElement('div');
+        node.style.display = 'flex';
+        node.style.flexDirection = 'column';
+        node.style.gap = '10px';
+        node.innerHTML = `
+            <div style="font-weight:700;">Aplicar contatos nas listas?</div>
+            <div style="font-size:0.8rem; color:var(--text-muted);">Os nomes, responsáveis e históricos não serão alterados.</div>
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <button type="button" data-action="cancel" style="padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text-main); cursor:pointer;">Cancelar</button>
+                <button type="button" data-action="confirm" style="padding:6px 10px; border-radius:6px; border:1px solid var(--primary); background:var(--primary); color:#111; cursor:pointer;">Aplicar</button>
+            </div>
+        `;
+        const toast = Toastify({
+            node,
+            duration: -1,
+            gravity: "top",
+            position: "right",
+            close: false,
+            style: {
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                color: "var(--text-main)",
+                boxShadow: "0 10px 28px rgba(0,0,0,0.35)"
+            }
+        });
+        toast.showToast();
+        node.querySelector('[data-action="cancel"]').onclick = () => toast.hideToast();
+        node.querySelector('[data-action="confirm"]').onclick = async () => {
+            toast.hideToast();
+            await onConfirm();
+        };
+    }
+    async function scanContactPrefixes() {
+        const options = document.getElementById('prefix-options');
+        const summary = document.getElementById('prefix-scan-summary');
+        const result = document.getElementById('prefix-preview-result');
+        const selectedBefore = getSelectedPrefixes();
+        options.innerHTML = '';
+        result.innerHTML = '';
+        summary.innerText = 'Varrendo contatos...';
+        try {
+            const res = await fetch('/api/admin/contact_prefix_scan?min_count=2&limit_examples=3');
+            const data = await res.json();
+            summary.innerText = `${data.total || 0} contatos analisados. Marque os prefixos confiáveis e simule antes de aplicar.`;
+            const prefixes = (data.prefixes || []).filter(item => item.known);
+            options.innerHTML = prefixes.map(item => renderPrefixOption(item.prefix, item.canonical, item.count, true, false)).join('');
+            selectedBefore.forEach(prefix => {
+                if (!document.querySelector(`.prefix-option[value="${prefix}"]`)) {
+                    options.insertAdjacentHTML('beforeend', renderPrefixOption(prefix, '', '', true, true));
+                }
+            });
+            notifyToast(`Varredura concluída: ${prefixes.length} prefixo(s) conhecido(s) encontrado(s).`);
+        } catch(e) {
+            summary.innerText = 'Falha ao varrer prefixos.';
+            notifyToast("Falha ao varrer prefixos.", true);
+        }
+    }
+    async function previewPrefixLists() {
+        const prefixes = getSelectedPrefixes();
+        if (!prefixes.length) return notifyToast("Selecione ao menos um prefixo.", true);
+        document.getElementById('prefix-preview-result').innerHTML = '<div style="color:var(--text-muted); padding:12px;">Simulando listas...</div>';
+        try {
+            const res = await fetch('/api/admin/contact_prefix_preview', {method:'POST', body:JSON.stringify({prefixes, limit_examples: 5})});
+            const data = await res.json();
+            if (data.status !== 'ok') return notifyToast(data.message || "Falha ao simular.", true);
+            renderPrefixGroups(data, false);
+            notifyToast(`Simulação pronta: ${data.total || 0} contato(s) encontrado(s).`);
+        } catch(e) {
+            notifyToast("Falha de conexão ao simular listas.", true);
+        }
+    }
+    async function applyPrefixLists() {
+        const prefixes = getSelectedPrefixes();
+        if (!prefixes.length) return notifyToast("Selecione ao menos um prefixo.", true);
+        confirmPrefixApplyToast(async () => {
+            await executePrefixApply(prefixes);
+        });
+    }
+    async function executePrefixApply(prefixes) {
+        document.getElementById('prefix-preview-result').innerHTML = '<div style="color:var(--text-muted); padding:12px;">Aplicando listas...</div>';
+        try {
+            const res = await fetch('/api/admin/contact_prefix_apply', {method:'POST', body:JSON.stringify({prefixes, limit_examples: 5})});
+            const data = await res.json();
+            if (data.status !== 'ok') return notifyToast(data.message || "Falha ao aplicar listas.", true);
+            renderPrefixGroups(data, true);
+            notifyToast(`Listas por prefixo aplicadas: ${data.total || 0} contato(s) processado(s).`);
+        } catch(e) {
+            notifyToast("Falha de conexão ao aplicar listas.", true);
+        }
+    }
+    function getOwnerMode() {
+        return document.getElementById('contact-owner-mode')?.value || 'auto';
+    }
+    function getOwnerPayload() {
+        return {owner_mode: getOwnerMode(), prefixes: getSelectedPrefixes()};
+    }
+    function renderOwnerSummary(data, title) {
+        const box = document.getElementById('contact-owner-result');
+        const summary = data.summary || {};
+        const byOwner = summary.by_owner || {};
+        const ownerRows = Object.keys(byOwner).map(owner => `<span style="display:inline-flex; gap:6px; align-items:center; border:1px solid var(--border); border-radius:8px; padding:5px 8px;"><strong>${escapeHtml(owner)}</strong> ${byOwner[owner]}</span>`).join('');
+        const examples = (data.examples || []).map(item => `<div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${escapeHtml(item.name || '(sem nome)')} · ${escapeHtml(cleanPhone(item.phone || ''))} → <strong>${escapeHtml(item.assigned_to || '')}</strong>${item.reason ? ' · ' + escapeHtml(item.reason) : ''}</div>`).join('');
+        const metrics = summary.total_records !== undefined
+            ? `Lidos: ${summary.total_records || 0} · Válidos: ${summary.valid_contacts || 0} · Novos: ${summary.new_contacts ?? summary.created ?? 0} · Existentes: ${summary.existing || 0} · Sem nome: ${summary.unnamed_contacts || 0} · Ignorados: ${summary.ignored || 0}`
+            : `Candidatos: ${summary.total_candidates || 0} · Atualizações: ${summary.total_updates || 0} · Prefixos: ${summary.prefix_matched || 0} · Balanceados: ${summary.balanced || 0} · Mantidos: ${summary.kept || 0}`;
+        box.innerHTML = `
+            <div style="border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--bg-base);">
+                <div style="font-weight:700; color:var(--primary); margin-bottom:8px;">${escapeHtml(title)}</div>
+                <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">${ownerRows}</div>
+                <div style="font-size:0.78rem; color:var(--text-muted);">
+                    ${escapeHtml(metrics)}
+                </div>
+                <div style="margin-top:10px;">${examples || '<span style="font-size:0.78rem; color:var(--text-muted);">Sem exemplos para mostrar.</span>'}</div>
+            </div>`;
+    }
+    async function previewAdminContactSync() {
+        document.getElementById('contact-owner-result').innerHTML = '<div style="color:var(--text-muted); padding:12px;">Consultando Evolution...</div>';
+        try {
+            const res = await fetch('/api/admin/contacts/sync_preview', {method:'POST', body:JSON.stringify(getOwnerPayload())});
+            const data = await res.json();
+            if (data.status !== 'ok') return notifyToast(data.message || "Falha ao simular sincronização.", true);
+            renderOwnerSummary(data, 'Prévia da sincronização WhatsApp');
+            notifyToast(`Sync simulado: ${data.summary?.new_contacts || 0} novo(s) contato(s).`);
+        } catch(e) {
+            notifyToast("Falha de conexão ao simular sync.", true);
+        }
+    }
+    async function applyAdminContactSync() {
+        document.getElementById('contact-owner-result').innerHTML = '<div style="color:var(--text-muted); padding:12px;">Sincronizando contatos...</div>';
+        try {
+            const res = await fetch('/api/admin/contacts/sync_apply', {method:'POST', body:JSON.stringify(getOwnerPayload())});
+            const data = await res.json();
+            if (data.status !== 'ok') return notifyToast(data.message || "Falha ao sincronizar contatos.", true);
+            renderOwnerSummary(data, 'Sincronização WhatsApp aplicada');
+            notifyToast(`Sincronização aplicada: ${data.summary?.created || 0} contato(s) criado(s).`);
+        } catch(e) {
+            notifyToast("Falha de conexão ao aplicar sync.", true);
+        }
+    }
+    async function previewOwnerRepair() {
+        document.getElementById('contact-owner-result').innerHTML = '<div style="color:var(--text-muted); padding:12px;">Simulando correção da carteira...</div>';
+        try {
+            const res = await fetch('/api/admin/contact_owner_preview', {method:'POST', body:JSON.stringify(getOwnerPayload())});
+            const data = await res.json();
+            if (data.status !== 'ok') return notifyToast(data.message || "Falha ao simular correção.", true);
+            renderOwnerSummary(data, 'Prévia da redistribuição de excedentes');
+            notifyToast(`Excedentes simulados: ${data.summary?.total_updates || 0} contato(s).`);
+        } catch(e) {
+            notifyToast("Falha de conexão ao simular correção.", true);
+        }
+    }
+    async function applyOwnerRepair() {
+        document.getElementById('contact-owner-result').innerHTML = '<div style="color:var(--text-muted); padding:12px;">Aplicando correção da carteira...</div>';
+        try {
+            const res = await fetch('/api/admin/contact_owner_apply', {method:'POST', body:JSON.stringify(getOwnerPayload())});
+            const data = await res.json();
+            if (data.status !== 'ok') return notifyToast(data.message || "Falha ao aplicar correção.", true);
+            renderOwnerSummary(data, 'Excedentes redistribuídos');
+            notifyToast(`Excedentes redistribuídos: ${data.result?.updated || 0} contato(s).`);
+        } catch(e) {
+            notifyToast("Falha de conexão ao aplicar correção.", true);
+        }
+    }
+    function applyPreset(bg, primary, text) { document.getElementById('prof-bg').value = bg; document.getElementById('prof-primary').value = primary; document.getElementById('prof-text').value = text; previewColor(); }
+    function previewColor() { const bg = document.getElementById('prof-bg').value; const primary = document.getElementById('prof-primary').value; const text = document.getElementById('prof-text').value; document.documentElement.style.setProperty('--bg-base', bg, 'important'); document.documentElement.style.setProperty('--primary', primary, 'important'); document.documentElement.style.setProperty('--text-main', text, 'important'); }
+    async function saveProfile() { 
+        let currentAvatar = ''; const imgElement = document.querySelector('#preview-avatar img'); if (imgElement) currentAvatar = imgElement.getAttribute('src');
+        const payload = { name: document.getElementById('prof-name').value, bio: '', avatar: currentAvatar, bg_color: document.getElementById('prof-bg').value, primary_color: document.getElementById('prof-primary').value, text_color: document.getElementById('prof-text').value };
+        await fetch('/api/profile/update', { method: 'POST', body: JSON.stringify(payload) }); Toastify({text: "✅ Perfil Salvo!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast(); 
+    }
+    async function checkEvoStatus(session) { try { const res = await fetch(`/api/admin/evo/status?session=${session}`); const data = await res.json(); const el = document.getElementById(`status-${session}`); if(data.status === 'open') { el.innerText = "Conectado"; el.style.color = "var(--wa-green)"; } else { el.innerText = "Desconectado"; el.style.color = "var(--text-muted)"; } } catch(e) {} }
+    async function generateQR(session) {
+        document.getElementById('qr-container').innerHTML = '<span style="color:#000;">Gerando QR...</span>'; document.getElementById('qrModal').style.display = 'flex';
+        try { const res = await fetch('/api/admin/evo/connect', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({session: session}) }); const data = await res.json(); if(data.qr) { document.getElementById('qr-container').innerHTML = `<img src="${data.qr}" style="max-width:100%; border-radius:8px;">`; } else { document.getElementById('qr-container').innerHTML = `<span style="color:#000;">${data.message || 'Erro ao gerar.'}</span>`; } } catch(e) { document.getElementById('qr-container').innerHTML = '<span style="color:#000;">Falha de comunicação.</span>'; }
+    }
+    async function disconnectEvo(session) { if(!confirm(`Deseja desconectar a sessão ${session}?`)) return; await fetch('/api/admin/evo/logout', { method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({session: session}) }); checkEvoStatus(session); }
+    /** Monta a URL realtime usando ws/wss conforme o protocolo atual da pagina. */
+    function realtimeWebSocketUrl() {
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        return `${protocol}://${window.location.host}/ws`;
+    }
+    /** Agenda reconexao progressiva para recuperar eventos sem exigir F5 do painel. */
+    function scheduleRealtimeReconnect() {
+        if (wsReconnectTimer) return;
+        setRealtimeStatus(wsReconnectAttempts >= 3 ? 'offline' : 'reconnecting');
+        const delay = Math.min(WS_MAX_RECONNECT_DELAY, 1000 * Math.pow(2, wsReconnectAttempts));
+        wsReconnectAttempts += 1;
+        wsReconnectTimer = setTimeout(() => {
+            wsReconnectTimer = null;
+            connectRealtime();
+        }, delay);
+    }
+    /** Abre o WebSocket do painel e reinstala handlers quando a conexao cair. */
+    function connectRealtime() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+        setRealtimeStatus('reconnecting');
+        try {
+            ws = new WebSocket(realtimeWebSocketUrl());
+            ws.onopen = () => {
+                const shouldNotifyRecovery = realtimeWasConnected && realtimeDropNotified;
+                wsReconnectAttempts = 0;
+                realtimeWasConnected = true;
+                realtimeDropNotified = false;
+                setRealtimeStatus('online');
+                syncInternalUnreadSince('ws_open');
+                if (shouldNotifyRecovery) notifyToast('Tempo real reconectado.', false, 2200);
+            };
+            ws.onmessage = handleRealtimeMessage;
+            ws.onclose = () => {
+                if (realtimeWasConnected && !realtimeDropNotified) {
+                    notifyToast('Conexão em tempo real caiu. Tentando reconectar...', true, 4500);
+                    realtimeDropNotified = true;
+                }
+                scheduleRealtimeReconnect();
+            };
+            ws.onerror = () => {
+                try { ws.close(); } catch(e) {}
+            };
+        } catch(e) {
+            scheduleRealtimeReconnect();
+        }
+    }
+    async function handleRealtimeMessage(event) {
+        const data = String(event.data || '');
+        let payload = null;
+        if (data.startsWith('{')) {
+            try { payload = JSON.parse(data); } catch (e) {}
+        }
+        if (payload && payload.type === 'panel_notice') {
+            const myRole = '{{ user.role }}';
+            const targets = Array.isArray(payload.targets) ? payload.targets : [];
+            if (targets.includes(myRole)) {
+                playMsnSound();
+                enqueueAttentionNotice(
+                    `Comunicado de ${payload.sender || 'Admin'}`,
+                    payload.text || 'Novo comunicado.',
+                    'admin'
+                );
+            }
+            return;
+        }
+        if (payload && payload.type === 'calendar_reminder') {
+            const myRole = '{{ user.role }}';
+            const myName = {{ user.name|tojson }};
+            const target = payload.assigned_to || payload.user_name || '';
+            if (target === myName || target === myRole || (myRole === 'admin' && target === 'admin')) {
+                playMsnSound();
+                enqueueAttentionNotice(
+                    payload.title || 'Agenda pendente',
+                    `${payload.text || 'Tarefa de agenda pendente.'}\n\nAbra a Agenda para marcar como contatado ou remarcar.`,
+                    'admin'
+                );
+            }
+            return;
+        }
+        if (payload && payload.type === 'internal_message') {
+            await handleInternalChatEvent(payload);
+            return;
+        }
+        if (payload && (payload.type === 'internal_reaction' || payload.type === 'internal_message_update')) {
+            if (document.getElementById('tab-internal').classList.contains('active')) await loadInternalChat();
+            return;
+        }
+        if (data === 'update') {
+            loadGlobalMetrics();
+            scheduleTeamThermometerRefresh('update');
+            return;
+        }
+        if (data === 'calendar_update') {
+            if (document.getElementById('tab-agenda')?.classList.contains('active')) renderCalendar();
+            scheduleTeamThermometerRefresh('calendar_update');
+            return;
+        }
+        if (data.startsWith('chat_')) {
+            const phone = data.split('_')[1];
+            if (typeof currentAuditPhone !== 'undefined' && phone === currentAuditPhone && document.getElementById('tab-auditoria').classList.contains('active')) { await refreshAuditChat(); } 
+            else { const card = document.getElementById('audit-contact-' + phone); if (card) { const clientName = card.querySelector('.card-title')?.innerText || "Cliente"; playBeep(`Mensagem de ${clientName}`, "Clique aqui para visualizar.", phone); card.style.borderLeft = "4px solid var(--wa-green)"; } }
+        } else if (data === 'audit_logs') {
+            scheduleTeamThermometerRefresh('audit_logs');
+            if (document.getElementById('tab-logs').classList.contains('active')) {
+                clearAuditLogsPending();
+                await loadAuditLogs(true);
+            } else {
+                markAuditLogsPending();
+            }
+        }
+    }

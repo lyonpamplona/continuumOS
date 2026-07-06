@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>continnumOS - Guia de instalacao e deploy</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+:root{
+  --bg:#0d0d0f; --bg2:#141417; --bg3:#1c1c21; --border:#2a2a30;
+  --text:#f2ede6; --mut:#9a9aa0; --mut2:#6b6b72;
+  --primary:#ff6a00; --primary2:#ffb020;
+  --ok:#3ddc84; --bad:#ff4d4d; --blue:#2aabee;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  --sans:'Space Grotesk',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.62}
+.wrap{display:flex;min-height:100vh}
+.aside{width:290px;flex-shrink:0;position:sticky;top:0;height:100vh;overflow:auto;background:var(--bg2);border-right:1px solid var(--border);padding:20px 14px}
+.aside h1{font-size:20px;margin:0;letter-spacing:.5px}
+.aside h1 span{color:var(--primary)}
+.aside .sub{color:var(--mut);font-size:12px;margin:2px 0 14px}
+#q{width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;margin-bottom:10px}
+nav a{display:block;color:var(--mut);text-decoration:none;padding:5px 9px;border-radius:7px;font-size:13px}
+nav a:hover{color:var(--text);background:var(--bg3)}
+nav a.grp{color:var(--primary2);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-top:12px;padding-bottom:2px}
+nav a.sub2{padding-left:20px;font-size:12px;color:var(--mut2)}
+.main{flex:1;min-width:0;padding:34px 46px 90px;max-width:1000px}
+h2{font-size:23px;border-bottom:1px solid var(--border);padding-bottom:7px;margin:46px 0 16px;scroll-margin-top:20px}
+h3{font-size:17px;color:var(--primary2);margin:26px 0 8px}
+h4{font-size:14px;margin:18px 0 6px;color:var(--text)}
+p{margin:9px 0}
+.lead{font-size:16px;color:#e8e2d8}
+b{color:#fff}
+a.link{color:var(--blue)}
+code,.mono{font-family:var(--mono);font-size:.9em}
+.file{font-family:var(--mono);color:var(--primary2);font-size:.9em}
+.mono{background:var(--bg3);padding:1px 5px;border-radius:5px;color:#ffd9b0}
+pre.code{background:#08080a;border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:9px;padding:14px 16px;overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.6;color:#d8d2c8}
+pre.code .c{color:#6b6b72}
+pre.code .k{color:#ff6a00}
+pre.code .s{color:#3ddc84}
+pre.code .v{color:#ffb020}
+.tag{display:inline-block;background:var(--bg3);color:var(--primary2);font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;vertical-align:middle;margin-left:6px}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--primary2);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td.mono,th.mono{font-family:var(--mono);font-size:12px}
+.callout{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:9px;padding:12px 15px;margin:14px 0}
+.callout.ok{border-left-color:var(--ok)}
+.callout.bad{border-left-color:var(--bad)}
+.callout.blue{border-left-color:var(--blue)}
+.callout .h{display:block;font-weight:700;margin-bottom:3px;color:#fff}
+.callout.ok .h{color:var(--ok)}
+.callout.bad .h{color:var(--bad)}
+.callout.blue .h{color:var(--blue)}
+.diagram{background:#08080a;border:1px dashed var(--border);border-radius:9px;padding:16px;font-family:var(--mono);font-size:12px;white-space:pre;overflow:auto;color:#cfc9bf;line-height:1.5}
+.diagram b{color:var(--primary2)}
+.step{counter-reset:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px 14px 54px;position:relative;margin:12px 0}
+.step .n{position:absolute;left:14px;top:14px;width:28px;height:28px;border-radius:8px;background:var(--primary);color:#0a0a0a;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px}
+.step h4{margin:2px 0 6px}
+.badge-row{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--mut)}
+.stat b{color:var(--primary2);font-size:18px;display:block}
+ul,ol{margin:9px 0;padding-left:22px}
+li{margin:4px 0}
+.pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:1px 8px;border-radius:20px;border:1px solid var(--border)}
+.pill.req{color:var(--bad);border-color:#ff4d4d55}
+.pill.opt{color:var(--mut);}
+.pill.sec{color:var(--primary2);border-color:#ffb02055}
+.footer{margin-top:50px;padding-top:16px;border-top:1px solid var(--border);color:var(--mut2);font-size:12.5px}
+.kbd{font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<aside class="aside">
+  <h1><span>continnum</span>OS</h1>
+  <div class="sub">Guia de instalacao & deploy</div>
+  <input id="q" type="text" placeholder="Filtrar secoes..." oninput="filterNav(this.value)">
+  <nav id="nav">
+    <a class="grp">Comecar</a>
+    <a href="#intro">Como usar este guia</a>
+    <a href="#arq">1. Arquitetura do deploy</a>
+    <a href="#req">2. Pre-requisitos</a>
+    <a href="#codigo">3. Obter o codigo</a>
+    <a class="grp">Configuracao</a>
+    <a href="#env">4. O arquivo .env</a>
+    <a class="sub2" href="#env-core">4.1 Nucleo (obrigatorias)</a>
+    <a class="sub2" href="#env-sec">4.2 Seguranca & sessao</a>
+    <a class="sub2" href="#env-fases">4.3 Por fase (6-9)</a>
+    <a href="#docker">5. Docker explicado</a>
+    <a class="grp">Subir o sistema</a>
+    <a href="#subir">6. Subir o stack</a>
+    <a href="#migrations">7. Migrations (Alembic)</a>
+    <a href="#acesso">8. Primeiro acesso</a>
+    <a href="#whatsapp">9. Conectar o WhatsApp</a>
+    <a href="#pos">10. Pos-instalacao</a>
+    <a class="grp">Producao</a>
+    <a href="#https">11. HTTPS / proxy reverso</a>
+    <a class="sub2" href="#site">11.1 Publicar o site</a>
+    <a href="#segredos">12. Segredos em producao</a>
+    <a href="#backup">13. Backups & restore</a>
+    <a href="#obs">14. Observabilidade</a>
+    <a href="#checklist">15. Checklist de producao</a>
+    <a href="#trouble">16. Troubleshooting</a>
+  </nav>
+</aside>
+<main class="main">
+
+<h2 id="intro" style="border:0;margin-top:0">continnumOS &mdash; instalacao do ambiente, do zero ao primeiro acesso</h2>
+<p class="lead">Este guia leva voce, passo a passo, de um servidor vazio ate o painel do continnumOS aberto no navegador e o WhatsApp conectado. Tudo com <b>Docker</b>, o arquivo <span class="file">.env</span> e comandos prontos para copiar.</p>
+
+<div class="badge-row">
+  <div class="stat"><b>4</b> containers</div>
+  <div class="stat"><b>1</b> arquivo .env</div>
+  <div class="stat"><b>~15 min</b> instalacao</div>
+  <div class="stat"><b>Docker</b> Compose</div>
+  <div class="stat"><b>Postgres 15</b> + Redis</div>
+</div>
+
+<div class="callout blue"><span class="h">O que voce vai precisar em maos</span>
+Um servidor Linux com acesso <span class="mono">root</span>/sudo, um dominio (opcional, mas recomendado para HTTPS) e ~15 minutos. Nao e preciso instalar Python, Postgres ou Redis manualmente &mdash; o Docker cuida de tudo.</div>
+
+<h4>Como ler</h4>
+<ul>
+<li>Blocos escuros com borda laranja sao <b>comandos ou arquivos reais</b> &mdash; copie e cole.</li>
+<li><span class="pill req">obrigatorio</span> voce precisa preencher. <span class="pill sec">seguranca</span> troque antes de ir a producao. <span class="pill opt">opcional</span> pode deixar o padrao.</li>
+<li>Caixas azuis trazem <b>dicas</b>, verdes <b>boas praticas</b>, vermelhas <b>alertas</b>.</li>
+</ul>
+
+<h2 id="arq">1. Arquitetura do deploy</h2>
+<p>O sistema sobe como <b>4 containers</b> orquestrados por um unico <span class="file">docker-compose.yaml</span>. Eles conversam por uma rede interna do Docker (referenciando-se pelo nome do servico).</p>
+<div class="diagram">                         INTERNET
+                            |  (porta 8000 -> painel / 8080 -> Evolution)
+          +-----------------+------------------+
+          |                                    |
+     <b>bot</b> (FastAPI)  &lt;--- webhook ---  <b>evolution_api</b> (WhatsApp)
+     porta 8000                              porta 8080
+          |   \                                  |
+          |    \____________ _____________________|
+          v                 v                     v
+     <b>postgres_db</b> (15)     <b>redis</b> (tempo real/travas/filas)
+     volume pg_data       (pub/sub, rate-limit, agendamentos)
+</div>
+<table>
+<tr><th>Container</th><th>Imagem</th><th>Papel</th><th>Porta</th></tr>
+<tr><td class="mono">bot</td><td class="mono">build local (Dockerfile)</td><td>A aplicacao: painel web, API e webhook. E o continnumOS em si.</td><td class="mono">8000</td></tr>
+<tr><td class="mono">evolution_api</td><td class="mono">evoapicloud/evolution-api</td><td>Gateway do WhatsApp: conecta o numero e entrega mensagens ao <span class="mono">bot</span> via webhook.</td><td class="mono">8080</td></tr>
+<tr><td class="mono">postgres_db</td><td class="mono">postgres:15-alpine</td><td>Banco de dados (com isolamento por tenant via RLS). Dados persistem no volume <span class="mono">pg_data</span>.</td><td class="mono">interna</td></tr>
+<tr><td class="mono">redis</td><td class="mono">redis:alpine</td><td>Tempo real (WebSocket pub/sub), travas, rate-limit, agendamentos e fila de jobs.</td><td class="mono">interna</td></tr>
+</table>
+<div class="callout"><span class="h">Por que so o painel e o Evolution expoem porta</span>
+Apenas <span class="mono">bot</span> (8000) e <span class="mono">evolution_api</span> (8080) publicam portas. Postgres e Redis ficam <b>fechados</b> na rede interna &mdash; nao sao acessiveis de fora, o que e mais seguro.</div>
+
+<h2 id="req">2. Pre-requisitos</h2>
+<h3>2.1 Servidor</h3>
+<ul>
+<li><b>SO:</b> Ubuntu 22.04+ (ou qualquer Linux com Docker). </li>
+<li><b>Recursos minimos:</b> 2 vCPU e 4 GB de RAM (os limites de memoria ja vem definidos no compose: bot 768m, postgres 768m, evolution 1024m, redis 256m).</li>
+<li><b>Disco:</b> 20 GB+ (banco, midias e backups crescem com o uso).</li>
+</ul>
+<h3>2.2 Instalar Docker + Compose</h3>
+<pre class="code"><span class="c"># Ubuntu/Debian - instalacao oficial do Docker Engine + plugin Compose</span>
+<span class="k">curl</span> -fsSL https://get.docker.com | sh
+<span class="k">sudo</span> usermod -aG docker $USER   <span class="c"># usar docker sem sudo (relogar depois)</span>
+<span class="k">docker</span> --version
+<span class="k">docker</span> compose version</pre>
+<h3>2.3 Dominio e DNS (recomendado)</h3>
+<ul>
+<li>Aponte um registro <span class="mono">A</span> do seu dominio (ex.: <span class="mono">painel.seudominio.com</span>) para o IP do servidor.</li>
+<li>Para <b>signup self-service com subdominio por cliente</b> (Fase 8), crie tambem um <b>wildcard</b> <span class="mono">*.seudominio.com</span> apontando para o mesmo IP.</li>
+</ul>
+
+<h2 id="codigo">3. Obter o codigo</h2>
+<pre class="code"><span class="c"># envie o projeto para o servidor (git, scp ou unzip do pacote entregue)</span>
+<span class="k">cd</span> /opt
+<span class="c"># exemplo com o zip entregue:</span>
+<span class="k">unzip</span> continnumos-fase13.zip -d continnumos
+<span class="k">cd</span> continnumos
+<span class="k">ls</span>   <span class="c"># Dockerfile, docker-compose.yaml, .env.example, main.py, ...</span></pre>
+<div class="callout"><span class="h">Estrutura relevante na raiz</span>
+<span class="file">Dockerfile</span> (imagem do bot) &middot; <span class="file">docker-compose.yaml</span> (os 4 servicos) &middot; <span class="file">.env.example</span> (modelo de configuracao) &middot; <span class="file">requirements.txt</span> (dependencias) &middot; <span class="file">alembic.ini</span> (migrations) &middot; pastas <span class="mono">templates/</span>, <span class="mono">static/</span>, <span class="mono">migrations/</span>.</div>
+
+<h2 id="env">4. O arquivo <span class="file">.env</span> &mdash; o coracao da configuracao</h2>
+<p>Toda a configuracao vive em um unico arquivo <span class="file">.env</span>. Comece copiando o modelo:</p>
+<pre class="code"><span class="k">cp</span> .env.example .env
+<span class="k">nano</span> .env   <span class="c"># edite os valores marcados como 'troque-...'</span></pre>
+<div class="callout bad"><span class="h">Antes de qualquer coisa</span>
+Troque <b>todos</b> os valores que comecam com <span class="mono">troque-...</span>. Gere segredos fortes com o comando abaixo &mdash; nunca use os exemplos em producao.</div>
+<pre class="code"><span class="c"># gera um segredo aleatorio forte (use um para cada *_SECRET / senha)</span>
+<span class="k">openssl</span> rand -hex 32</pre>
+
+<h3 id="env-core">4.1 Nucleo &mdash; conexoes e admin <span class="tag">obrigatorias</span></h3>
+<table>
+<tr><th>Variavel</th><th>O que e</th><th>Acao</th></tr>
+<tr><td class="mono">POSTGRES_USER<br>POSTGRES_PASSWORD<br>POSTGRES_DB</td><td>Credenciais do banco Postgres (usadas pelo container do banco e pelo Evolution).</td><td><span class="pill sec">troque a senha</span></td></tr>
+<tr><td class="mono">DATABASE_URL</td><td>String de conexao que o <span class="mono">bot</span> usa. <b>Deve bater</b> com user/senha/db acima. Host = <span class="mono">postgres_db</span> (nome do servico).</td><td><span class="pill req">ajuste</span></td></tr>
+<tr><td class="mono">REDIS_URL</td><td>Conexao com o Redis. Padrao <span class="mono">redis://redis:6379/0</span> ja funciona no compose.</td><td><span class="pill opt">padrao ok</span></td></tr>
+<tr><td class="mono">EVO_API_URL<br>EVO_API_KEY</td><td>URL interna do Evolution (<span class="mono">http://evolution_api:8080</span>) e a chave de API que protege o gateway.</td><td><span class="pill sec">troque a chave</span></td></tr>
+<tr><td class="mono">ADMIN_USERNAME<br>ADMIN_PASSWORD<br>ADMIN_PHONE</td><td>O <b>primeiro usuario admin</b>, criado automaticamente no boot. Com ele voce faz o primeiro login.</td><td><span class="pill sec">troque a senha</span></td></tr>
+</table>
+<div class="callout"><span class="h">Regra de ouro do DATABASE_URL</span>
+O formato e <span class="mono">postgresql://USER:SENHA@postgres_db:5432/DB</span>. Se voce mudar <span class="mono">POSTGRES_PASSWORD</span>, mude a senha aqui tambem &mdash; sao o mesmo valor em lugares diferentes.</div>
+
+<h3 id="env-sec">4.2 Seguranca, sessao e CORS <span class="tag">seguranca</span></h3>
+<table>
+<tr><th>Variavel</th><th>O que e</th></tr>
+<tr><td class="mono">JWT_SECRET</td><td>Assina os cookies de sessao (login). <b>Segredo forte obrigatorio.</b></td></tr>
+<tr><td class="mono">WEBHOOK_SECRET</td><td>Autentica o webhook do WhatsApp (o Evolution envia como <span class="mono">Bearer</span>). Deve ser identico nos dois lados &mdash; o compose ja reutiliza a mesma variavel.</td></tr>
+<tr><td class="mono">SESSION_TTL_SECONDS</td><td>Duracao do login (padrao 86400 = 24h).</td></tr>
+<tr><td class="mono">ENFORCE_SINGLE_SESSION</td><td><span class="mono">true</span> derruba sessoes antigas ao logar de novo (1 sessao por usuario).</td></tr>
+<tr><td class="mono">COOKIE_SECURE</td><td>Mantenha <span class="mono">true</span> em producao (cookies so por HTTPS).</td></tr>
+<tr><td class="mono">ALLOWED_ORIGINS</td><td>Lista de origens liberadas para o painel (CORS). Coloque a URL real do seu painel.</td></tr>
+<tr><td class="mono">MAX_MEDIA_UPLOAD_MB</td><td>Tamanho maximo de midia enviada pelo painel (padrao 32).</td></tr>
+</table>
+
+<h3 id="env-fases">4.3 Configuracoes por fase (6 a 13) <span class="tag">maioria opcional</span></h3>
+<p>O <span class="file">.env.example</span> agrupa as variaveis por fase, com comentarios. As mais relevantes:</p>
+<table>
+<tr><th>Grupo</th><th>Variaveis-chave</th><th>Para que serve</th></tr>
+<tr><td>Storage (F5)</td><td class="mono">STORAGE_BACKEND, S3_*</td><td><span class="mono">local</span> grava midia em disco; <span class="mono">s3</span> usa bucket S3/R2. Preencha S3_* apenas se usar nuvem.</td></tr>
+<tr><td>Migrations (F6)</td><td class="mono">RUN_DB_MIGRATIONS_ON_BOOT</td><td><span class="mono">true</span> cria/atualiza tabelas ao subir (simples). Em producao seria, prefira <span class="mono">false</span> + Alembic (secao 7).</td></tr>
+<tr><td>Pagamento (F6/F12)</td><td class="mono">PAYMENT_PROVIDER, PAYMENT_WEBHOOK_SECRET, BILLING_*</td><td>Gateway (manual/stripe/mercadopago/asaas), segredo do webhook e reativacao automatica ao pagar.</td></tr>
+<tr><td>Rate limit (F6)</td><td class="mono">RATE_LIMIT_*</td><td>Protege contra abuso e custo do WhatsApp (janela e limites por tenant/IP).</td></tr>
+<tr><td>Escala (F7)</td><td class="mono">WEB_CONCURRENCY, RUN_BACKGROUND_JOBS, JOB_QUEUE_*</td><td>Nº de workers, quem roda os loops de fundo e a fila de jobs pesados.</td></tr>
+<tr><td>Observabilidade (F7)</td><td class="mono">METRICS_ENABLED, METRICS_TOKEN, SENTRY_DSN, OTEL_*</td><td>Metricas Prometheus em <span class="mono">/metrics</span>, erros no Sentry e tracing OpenTelemetry.</td></tr>
+<tr><td>Signup/LGPD (F8)</td><td class="mono">SIGNUP_ENABLED, TRIAL_DAYS, BASE_DOMAIN, DATA_RETENTION_DAYS, DPO_CONTACT_EMAIL</td><td>Auto-cadastro com trial, subdominio por cliente, retencao de dados e contato do DPO.</td></tr>
+<tr><td>Setores</td><td class="mono">VENDAS_1, VENDAS_2, FINANCEIRO, ENGENHARIA</td><td>Rotulos exibidos dos setores/filas de atendimento.</td></tr>
+<tr><td>Memoria</td><td class="mono">*_MEM_LIMIT / *_RESERVATION</td><td>Limites de RAM por container (ja com padroes seguros).</td></tr>
+</table>
+<div class="callout blue"><span class="h">Fases 10 a 13 nao exigem novas variaveis obrigatorias</span>
+IA/fluxos (F10), omnichannel (F11), vendas/CRM (F12) e produtividade (F13) sao configurados <b>dentro do painel</b>, por tenant (chaves de IA, canais, cadencias, filas/SLA, etc.). O <span class="file">.env</span> cobre a infraestrutura; o resto e no produto.</div>
+
+<h2 id="docker">5. Docker explicado</h2>
+<h3>5.1 O <span class="file">Dockerfile</span> (imagem do bot)</h3>
+<pre class="code"><span class="k">FROM</span> python:3.11-slim              <span class="c"># base enxuta</span>
+<span class="k">WORKDIR</span> /app
+<span class="k">COPY</span> requirements.txt .
+<span class="k">RUN</span> pip install --no-cache-dir -r requirements.txt
+<span class="k">COPY</span> . .
+<span class="k">RUN</span> mkdir -p /data/midias /data/backups /app/logs   <span class="c"># dados/logs/backups</span>
+<span class="k">HEALTHCHECK</span> ... CMD (consulta /health)     <span class="c"># reinicia se cair</span>
+<span class="k">CMD</span> ["uvicorn","main:app","--host","0.0.0.0","--port","8000"]</pre>
+<p>Pontos importantes: instala as dependencias do <span class="file">requirements.txt</span>, cria os diretorios de dados e define um <b>healthcheck</b> que consulta <span class="mono">/health</span> &mdash; se o app travar, o orquestrador reinicia o container.</p>
+<h4>Dependencias (requirements.txt)</h4>
+<table>
+<tr><td class="mono">fastapi + uvicorn</td><td>Servidor web assincrono.</td></tr>
+<tr><td class="mono">asyncpg</td><td>Driver PostgreSQL.</td></tr>
+<tr><td class="mono">redis</td><td>Tempo real, travas, filas.</td></tr>
+<tr><td class="mono">jinja2</td><td>Templates do painel.</td></tr>
+<tr><td class="mono">httpx</td><td>Cliente HTTP (Evolution / IA).</td></tr>
+<tr><td class="mono">bcrypt + pyjwt</td><td>Senha e cookies de sessao.</td></tr>
+<tr><td class="mono">boto3 + aiofiles</td><td>Midia em S3 ou disco.</td></tr>
+<tr><td class="mono">loguru + psutil</td><td>Logs e metricas de sistema.</td></tr>
+</table>
+<h3>5.2 O <span class="file">docker-compose.yaml</span> (os 4 servicos)</h3>
+<p>Ele define <span class="mono">bot</span>, <span class="mono">evolution_api</span>, <span class="mono">postgres_db</span> e <span class="mono">redis</span>, todos com <span class="mono">restart: always</span> e limites de memoria. Detalhes que valem entender:</p>
+<ul>
+<li>O <span class="mono">bot</span> carrega o <span class="file">.env</span> via <span class="mono">env_file</span> e monta volumes (<span class="mono">bot_data</span> para <span class="mono">/data</span>, alem de <span class="mono">static</span>, <span class="mono">templates</span>, <span class="mono">logs</span>).</li>
+<li>O <span class="mono">evolution_api</span> ja vem configurado para enviar eventos ao <span class="mono">http://bot:8000/webhook</span> com o cabecalho <span class="mono">Bearer WEBHOOK_SECRET</span> &mdash; a integracao com o WhatsApp e automatica.</li>
+<li><span class="mono">depends_on</span> garante a ordem de subida (banco/redis/evolution antes do bot).</li>
+<li>Persistencia: volumes <span class="mono">pg_data</span> (banco) e <span class="mono">bot_data</span> (midias/backups). <b>Nao apague</b> esses volumes sem backup.</li>
+</ul>
+<div class="callout"><span class="h">Workers no compose</span>
+No compose o bot sobe com <span class="mono">--workers 4</span>. Se usar varios workers/replicas, deixe <span class="mono">RUN_BACKGROUND_JOBS=true</span> em <b>apenas um</b> processo para os loops de fundo (SLA, cadencias, follow-ups) nao duplicarem trabalho.</div>
+
+<h2 id="subir">6. Subir o stack</h2>
+<div class="step"><div class="n">1</div><h4>Construir e iniciar</h4>
+<pre class="code"><span class="k">docker</span> compose up -d --build</pre>
+Sobe os 4 containers em segundo plano. Na primeira vez, o build da imagem do bot leva alguns minutos.</div>
+<div class="step"><div class="n">2</div><h4>Conferir se estao de pe</h4>
+<pre class="code"><span class="k">docker</span> compose ps          <span class="c"># todos 'running' / healthy</span>
+<span class="k">docker</span> compose logs -f bot  <span class="c"># acompanhar o boot do app</span></pre>
+Procure no log do <span class="mono">bot</span> pelas mensagens de criacao de tabelas (Fases 9 a 13) e "Application startup complete".</div>
+<div class="step"><div class="n">3</div><h4>Testar a saude</h4>
+<pre class="code"><span class="k">curl</span> http://localhost:8000/health   <span class="c"># deve responder OK/200</span></pre></div>
+<div class="callout ok"><span class="h">O que acontece no primeiro boot</span>
+O app roda <span class="mono">init_db()</span> (cria o pool com RLS e todas as tabelas), garante o <b>usuario admin</b> a partir do <span class="file">.env</span>, aquece o cache do tenant padrao e inicia os <b>12 loops de fundo</b> (se <span class="mono">RUN_BACKGROUND_JOBS=true</span>).</div>
+
+<h2 id="migrations">7. Migrations versionadas (Alembic) <span class="tag">producao</span></h2>
+<p>Para desenvolvimento, <span class="mono">RUN_DB_MIGRATIONS_ON_BOOT=true</span> cria as tabelas sozinho. Em producao seria, o recomendado e desligar isso e controlar o schema com <b>Alembic</b> (reproduzivel e reversivel):</p>
+<pre class="code"><span class="c"># no .env</span>
+RUN_DB_MIGRATIONS_ON_BOOT=<span class="v">false</span>
+
+<span class="c"># aplicar as migrations (dentro do container bot)</span>
+<span class="k">docker</span> compose exec bot alembic upgrade head
+
+<span class="c"># criar uma nova migration apos mudar o schema</span>
+<span class="k">docker</span> compose exec bot alembic revision --autogenerate -m "descricao"</pre>
+<div class="callout"><span class="h">Regra pratica</span>
+<b>Dev/homolog:</b> boot cria tabelas (rapido). <b>Producao:</b> <span class="mono">false</span> + <span class="mono">alembic upgrade head</span> no deploy &mdash; assim toda mudanca de banco fica versionada e reversivel.</div>
+
+<h2 id="acesso">8. Primeiro acesso ao sistema</h2>
+<div class="step"><div class="n">1</div><h4>Abrir o painel</h4>
+Acesse <span class="mono">http://SEU_IP:8000</span> (ou <span class="mono">https://painel.seudominio.com</span> apos configurar o proxy).</div>
+<div class="step"><div class="n">2</div><h4>Fazer login como admin</h4>
+Use <span class="mono">ADMIN_USERNAME</span> e <span class="mono">ADMIN_PASSWORD</span> definidos no <span class="file">.env</span>. O sistema cria esse usuario no primeiro boot e redireciona para o painel conforme o papel.</div>
+<div class="step"><div class="n">3</div><h4>Trocar a senha e criar a equipe</h4>
+Troque a senha do admin, e em <b>Admin -&gt; Usuarios</b> cadastre os atendentes (papeis <span class="mono">vendas_1</span>, <span class="mono">vendas_2</span>, <span class="mono">financeiro</span>, <span class="mono">engenharia</span>).</div>
+<div class="callout bad"><span class="h">Seguranca no primeiro dia</span>
+Troque a senha do admin imediatamente, confirme que <span class="mono">COOKIE_SECURE=true</span> e que o painel so responde por HTTPS antes de expor a internet.</div>
+
+<h2 id="whatsapp">9. Conectar o WhatsApp (Evolution API)</h2>
+<p>O <span class="mono">evolution_api</span> ja sobe integrado ao bot. Falta apenas <b>criar a instancia</b> e parear o numero pelo QR Code.</p>
+<div class="step"><div class="n">1</div><h4>Provisionar a instancia</h4>
+No painel admin, em <b>Instancias</b>, crie/provisione uma instancia. Por baixo, o sistema chama o Evolution (<span class="mono">ensure_instance</span>) usando a <span class="mono">EVO_API_KEY</span>.</div>
+<div class="step"><div class="n">2</div><h4>Ler o QR Code</h4>
+Abra o <b>WhatsApp -&gt; Aparelhos conectados -&gt; Conectar um aparelho</b> no celular e escaneie o QR exibido no painel.</div>
+<div class="step"><div class="n">3</div><h4>Validar a conexao</h4>
+O estado deve ir para <span class="mono">open</span>/conectado. Envie uma mensagem de teste ao numero &mdash; ela deve aparecer no painel em tempo real (via webhook + WebSocket).</div>
+<div class="callout blue"><span class="h">Como o webhook chega ate voce</span>
+O Evolution esta configurado com <span class="mono">WEBHOOK_GLOBAL_URL=http://bot:8000/webhook</span> e <span class="mono">Authorization: Bearer WEBHOOK_SECRET</span>. Toda mensagem recebida entra pelo pipeline do webhook (idempotencia, IA, fluxos, roteamento) e e empurrada ao painel.</div>
+
+<h2 id="pos">10. Configuracao pos-instalacao (no painel)</h2>
+<p>Com o sistema no ar, ajuste o produto por tenant, direto na interface:</p>
+<table>
+<tr><th>Area</th><th>Onde</th><th>O que configurar</th></tr>
+<tr><td>Marca / horario</td><td>Admin -&gt; Configuracoes do tenant</td><td>Nome, logo, cores (white-label), horario de atendimento.</td></tr>
+<tr><td>IA & fluxos (F10)</td><td>Console de IA (admin)</td><td>Chave do provedor de IA, base de conhecimento (RAG), construtor de fluxos no-code e roteamento.</td></tr>
+<tr><td>Omnichannel (F11)</td><td>Console de canais/campanhas</td><td>Conectar Telegram, Instagram, Messenger, email, webchat; criar segmentos e campanhas.</td></tr>
+<tr><td>Vendas & CRM (F12)</td><td>Console VENDAS/CRM</td><td>Pipeline, catalogo de produtos, cadencias, metas e regras de comissao. Pagamento via <span class="mono">PAYMENT_PROVIDER</span>.</td></tr>
+<tr><td>Produtividade (F13)</td><td>Console EQUIPE</td><td>Filas e prazos de SLA, formularios de QA, gamificacao e escalas dos atendentes.</td></tr>
+</table>
+
+<h2 id="https">11. HTTPS e proxy reverso</h2>
+<p>Nao exponha a porta 8000 diretamente. Coloque um proxy reverso na frente para TLS/HTTPS. Exemplo com <b>Caddy</b> (HTTPS automatico via Let's Encrypt):</p>
+<pre class="code"><span class="c"># Caddyfile</span>
+painel.seudominio.com {
+    reverse_proxy localhost:8000
+}</pre>
+<p>Ou com <b>Nginx</b> (trecho essencial):</p>
+<pre class="code"><span class="k">server</span> {
+    server_name painel.seudominio.com;
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;      <span class="c"># WebSocket</span>
+        proxy_set_header Connection "upgrade";        <span class="c"># tempo real</span>
+    }
+}</pre>
+<div class="callout bad"><span class="h">Nao esqueca o WebSocket</span>
+O painel usa WebSocket (<span class="mono">/ws</span>) para tempo real. O proxy precisa repassar os cabecalhos <span class="mono">Upgrade</span>/<span class="mono">Connection</span>, senao a tela nao atualiza sozinha.</div>
+<p>Depois do HTTPS, atualize <span class="mono">ALLOWED_ORIGINS</span> e mantenha <span class="mono">COOKIE_SECURE=true</span>.</p>
+
+<h3 id="site">11.1 Publicar o site institucional (<span class="file">site/</span>)</h3>
+<p>O projeto inclui um <b>site publico estatico</b> em <span class="file">site/</span> &mdash; a landing (<span class="mono">index.html</span>), a documentacao (<span class="mono">docs.html</span>) e o tema (<span class="mono">assets/site.css</span>). Ele <b>nao</b> faz parte do container do app: o compose monta apenas <span class="mono">static/</span> e <span class="mono">templates/</span>. Publique o site separadamente &mdash; pelo proxy reverso, por um host estatico ou CDN.</p>
+<p>Arquitetura de dominios recomendada:</p>
+<div class="diagram">seudominio.com          -> <b>site/</b>   (landing + docs, estatico)
+painel.seudominio.com   -> <b>bot:8000</b> (o app / console)</div>
+<h4>Opcao A &mdash; servir com Caddy (mesmo servidor)</h4>
+<pre class="code"><span class="c"># Caddyfile</span>
+seudominio.com {
+    root * /opt/continnumos/site
+    file_server
+}
+painel.seudominio.com {
+    reverse_proxy localhost:8000
+}</pre>
+<h4>Opcao B &mdash; servir com Nginx</h4>
+<pre class="code"><span class="k">server</span> {
+    server_name seudominio.com;
+    root /opt/continnumos/site;
+    index index.html;
+    location / { try_files $uri $uri/ =404; }
+}</pre>
+<div class="callout blue"><span class="h">Sem build, sem dependencias</span>
+O site e HTML/CSS puro (icones via sprite SVG inline). Basta publicar a pasta <span class="file">site/</span> &mdash; nenhum passo de compilacao. Os botoes "Documentacao" e "Comecar" ja apontam para <span class="mono">docs.html</span> e para as ancoras de planos; ajuste os links para o dominio do seu painel (ex.: <span class="mono">https://painel.seudominio.com/login</span>) se quiser levar direto ao acesso.</div>
+
+<h2 id="segredos">12. Segredos em producao</h2>
+<p>Deixar segredos em <span class="file">.env</span> plano e aceitavel para comecar, mas em producao prefira <b>arquivos de segredo</b> (Docker/K8s secrets). O sistema resolve cada segredo nesta ordem de precedencia:</p>
+<pre class="code"><span class="v">{NOME}_FILE</span>  &gt;  <span class="v">SECRETS_DIR/{NOME}</span>  &gt;  variavel de ambiente</pre>
+<pre class="code"><span class="c"># exemplos</span>
+JWT_SECRET_FILE=/run/secrets/jwt_secret
+<span class="c"># ou aponte um diretorio com um arquivo por segredo:</span>
+SECRETS_DIR=/run/secrets</pre>
+<div class="callout ok"><span class="h">Boa pratica</span>
+Rotacione <span class="mono">JWT_SECRET</span>, <span class="mono">WEBHOOK_SECRET</span>, senhas do banco e chaves de pagamento periodicamente. Nunca versione o <span class="file">.env</span> no Git &mdash; o <span class="file">.dockerignore</span> ja ajuda a nao vaza-lo na imagem.</div>
+
+<h2 id="backup">13. Backups e restore (DR)</h2>
+<h3>13.1 Backup do banco</h3>
+<pre class="code"><span class="c"># dump logico do Postgres (rode via cron diariamente)</span>
+<span class="k">docker</span> compose exec -T postgres_db pg_dump -U $POSTGRES_USER $POSTGRES_DB \
+  &gt; backup_$(date +%F).sql</pre>
+<h3>13.2 Backup de midias/dados</h3>
+<pre class="code"><span class="c"># o volume bot_data guarda /data (midias, backups)</span>
+<span class="k">docker</span> run --rm -v continnumos_bot_data:/data -v $PWD:/out alpine \
+  tar czf /out/bot_data_$(date +%F).tgz /data</pre>
+<h3>13.3 Restore (teste periodicamente!)</h3>
+<pre class="code"><span class="k">cat</span> backup_2026-07-05.sql | docker compose exec -T postgres_db \
+  psql -U $POSTGRES_USER $POSTGRES_DB</pre>
+<div class="callout bad"><span class="h">Backup nao testado nao existe</span>
+Restaure em um ambiente separado de tempos em tempos para garantir que o processo funciona de verdade. Documente o RTO/RPO da sua operacao.</div>
+
+<h2 id="obs">14. Observabilidade</h2>
+<table>
+<tr><th>Recurso</th><th>Como ligar</th></tr>
+<tr><td>Healthcheck</td><td class="mono">GET /health</td></tr>
+<tr><td>Metricas Prometheus</td><td><span class="mono">METRICS_ENABLED=true</span> -&gt; <span class="mono">GET /metrics</span> (protegido por <span class="mono">METRICS_TOKEN</span> se definido).</td></tr>
+<tr><td>Erros (Sentry)</td><td>Preencha <span class="mono">SENTRY_DSN</span> e <span class="mono">SENTRY_ENVIRONMENT</span>.</td></tr>
+<tr><td>Tracing (OpenTelemetry)</td><td><span class="mono">OTEL_ENABLED=true</span> + <span class="mono">OTEL_EXPORTER_OTLP_ENDPOINT</span>.</td></tr>
+<tr><td>Logs</td><td><span class="mono">LOG_LEVEL</span>, <span class="mono">LOG_JSON=true</span> (para agregadores) e <span class="mono">LOG_RETENTION_DAYS</span>.</td></tr>
+</table>
+
+<h2 id="checklist">15. Checklist de producao</h2>
+<table>
+<tr><th>#</th><th>Item</th></tr>
+<tr><td>1</td><td>Todos os <span class="mono">troque-...</span> substituidos por segredos fortes.</td></tr>
+<tr><td>2</td><td><span class="mono">DATABASE_URL</span> coerente com user/senha/db do Postgres.</td></tr>
+<tr><td>3</td><td>HTTPS ativo (proxy reverso) e <span class="mono">COOKIE_SECURE=true</span>.</td></tr>
+<tr><td>4</td><td><span class="mono">ALLOWED_ORIGINS</span> com a URL real do painel.</td></tr>
+<tr><td>5</td><td>Migrations por Alembic (<span class="mono">RUN_DB_MIGRATIONS_ON_BOOT=false</span>).</td></tr>
+<tr><td>6</td><td><span class="mono">RUN_BACKGROUND_JOBS=true</span> em apenas 1 processo.</td></tr>
+<tr><td>7</td><td>Rate limiting ligado (<span class="mono">RATE_LIMIT_ENABLED=true</span>).</td></tr>
+<tr><td>8</td><td>Backups automatizados + restore testado.</td></tr>
+<tr><td>9</td><td>Segredos via <span class="mono">*_FILE</span>/<span class="mono">SECRETS_DIR</span> (secret manager).</td></tr>
+<tr><td>10</td><td>Sentry/metricas configurados e senha do admin trocada.</td></tr>
+</table>
+
+<h2 id="trouble">16. Troubleshooting</h2>
+<table>
+<tr><th>Sintoma</th><th>Causa provavel / solucao</th></tr>
+<tr><td>Bot reinicia em loop</td><td>Healthcheck falhando. Veja <span class="mono">docker compose logs bot</span>: geralmente <span class="mono">DATABASE_URL</span> errado ou Postgres ainda subindo.</td></tr>
+<tr><td>"password authentication failed"</td><td><span class="mono">DATABASE_URL</span> nao bate com <span class="mono">POSTGRES_PASSWORD</span>. Alinhe os dois e recrie: <span class="mono">docker compose up -d</span>.</td></tr>
+<tr><td>WhatsApp nao entrega mensagens</td><td><span class="mono">WEBHOOK_SECRET</span> diferente entre bot e Evolution, ou a instancia nao esta <span class="mono">open</span>. Reescaneie o QR.</td></tr>
+<tr><td>Painel nao atualiza em tempo real</td><td>Proxy sem repasse de WebSocket (<span class="mono">Upgrade/Connection</span>). Ajuste o Nginx/Caddy.</td></tr>
+<tr><td>Login cai / cookie nao fica</td><td><span class="mono">COOKIE_SECURE=true</span> sem HTTPS. Ative o TLS ou (so em teste) use <span class="mono">false</span>.</td></tr>
+<tr><td>Erro de CORS</td><td>Origem ausente em <span class="mono">ALLOWED_ORIGINS</span>. Inclua a URL do painel.</td></tr>
+<tr><td>Loops rodando 2x</td><td>Mais de um processo com <span class="mono">RUN_BACKGROUND_JOBS=true</span>. Deixe em apenas um.</td></tr>
+</table>
+
+<h4>Comandos uteis do dia a dia</h4>
+<pre class="code"><span class="k">docker</span> compose ps                 <span class="c"># status</span>
+<span class="k">docker</span> compose logs -f bot        <span class="c"># logs do app</span>
+<span class="k">docker</span> compose restart bot       <span class="c"># reiniciar so o app</span>
+<span class="k">docker</span> compose down              <span class="c"># parar tudo (mantem volumes)</span>
+<span class="k">docker</span> compose up -d --build     <span class="c"># atualizar apos mudar codigo</span>
+<span class="k">docker</span> compose exec bot bash     <span class="c"># shell dentro do container</span></pre>
+
+<div class="footer">
+  <b>continnumOS</b> &mdash; guia de instalacao e deploy (Docker Compose). Baseado nos arquivos reais do projeto: <span class="file">Dockerfile</span>, <span class="file">docker-compose.yaml</span>, <span class="file">.env.example</span>, <span class="file">requirements.txt</span>, <span class="file">alembic.ini</span>.<br>
+  Do servidor vazio ao primeiro acesso e WhatsApp conectado.
+</div>
+
+</main>
+</div>
+<script>
+function filterNav(v){
+  v=(v||'').toLowerCase().trim();
+  document.querySelectorAll('#nav a').forEach(function(a){
+    if(a.classList.contains('grp')){a.style.display='';return;}
+    var t=a.textContent.toLowerCase();
+    a.style.display=(!v||t.indexOf(v)>=0)?'':'none';
+  });
+}
+var links=[].slice.call(document.querySelectorAll('#nav a[href^="#"]'));
+var map={};
+links.forEach(function(a){var id=a.getAttribute('href').slice(1);map[id]=a;});
+function spy(){
+  var y=window.scrollY+120,cur=null;
+  Object.keys(map).forEach(function(id){
+    var el=document.getElementById(id);
+    if(el&&el.offsetTop<=y)cur=id;
+  });
+  links.forEach(function(a){a.style.background='';a.style.color='';});
+  if(cur&&map[cur]){map[cur].style.background='var(--bg3)';map[cur].style.color='var(--primary2)';}
+}
+window.addEventListener('scroll',spy);spy();
+</script>
+</body>
+</html>

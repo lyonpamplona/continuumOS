@@ -1,0 +1,386 @@
+    let isMobile = window.innerWidth <= 1024;
+    let auditOffset = 0; let auditSearch = ''; let auditTimeout = null; let currentAuditPhone = null;
+    let auditLogOffset = 0; let auditLogSearchTimeout = null;
+    let auditLogPeriod = 'all'; let auditLogLastDateLabel = '';
+    let calDate = new Date(); let selectedDateStr = null; let monthEvents = []; let currentInternalTarget = 'geral'; let currentInternalReplyId = null; let internalMessageCache = {};
+    let currentMessageCount = 0; let currentReplyId = null; let currentReactionMsgId = null; let currentForwardMsgId = null;
+    let currentEditMsgId = null;
+    let overviewChart = null;
+    let currentUserPerformanceData = null;
+    let teamThermometerMonth = "";
+    let lastKnownTeamMonth = "";
+    let lastKnownTeamDay = "";
+    let teamThermometerDirty = false;
+    let teamThermometerRefreshTimer = null;
+    let allAuditTags = []; let currentAuditTags = []; let adminTakenAuditPhones = new Set();
+    const ADMIN_CAN_WRITE = {{ 'true' if admin_can_write else 'false' }};
+    const ADMIN_CAN_COMMUNICATE = {{ 'true' if admin_can_communicate else 'false' }};
+    const ADMIN_CAN_MANAGE_CONTACTS = {{ 'true' if admin_can_manage_contacts else 'false' }};
+    const ADMIN_CAN_AUDIT = {{ 'true' if admin_can_audit else 'false' }};
+    const ADMIN_CAN_EVOLUTION = {{ 'true' if admin_can_evolution else 'false' }};
+    const ADMIN_READ_ONLY = {{ 'true' if admin_read_only else 'false' }};
+    const ADMIN_TAB_STORAGE_KEY = 'continnumOS:adminActiveTab:{{ user.role }}';
+    const ADMIN_DEFAULT_TAB = 'tab-overview';
+    const ADMIN_VALID_TABS = ['tab-overview', 'tab-auditoria', 'tab-logs', 'tab-agenda', 'tab-internal', 'tab-tools', 'tab-settings'];
+    const WS_MAX_RECONNECT_DELAY = 15000;
+    let ws = null;
+    let wsReconnectTimer = null;
+    let wsReconnectAttempts = 0;
+    let realtimeWasConnected = false;
+    let realtimeDropNotified = false;
+    let auditLogUnreadCount = 0;
+    let auditLogToastVisible = false;
+    let attentionQueue = [];
+    let attentionOpen = false;
+    const groupColors = ['#ff8a65', '#64b5f6', '#81c784', '#4db6ac', '#aed581', '#ffd54f', '#ffb74d', '#f06292', '#ba68c8', '#9575cd', '#7986cb', '#4dd0e1'];
+    const auditActionCategories = {
+        attendance: ['chat_taken', 'admin_takeover', 'chat_transferred', 'chat_finished', 'external_whatsapp_opened'],
+        contacts: ['contact_created', 'contact_existing_added', 'contact_edited', 'contact_reviewed', 'contact_bulk_action_applied', 'contact_list_created', 'contact_list_updated', 'contact_prefix_lists_applied', 'contact_owner_repair_applied', 'admin_contacts_synced', 'contacts_synced'],
+        users: ['session_cleared', 'system_user_created', 'system_user_updated'],
+        sync: ['contact_prefix_lists_applied', 'contact_owner_repair_applied', 'admin_contacts_synced', 'contacts_synced'],
+        communication: ['panel_notice_sent', 'calendar_event_created', 'calendar_event_completed', 'calendar_event_rescheduled', 'calendar_event_cancelled'],
+        system: ['external_whatsapp_opened', 'session_cleared']
+    };
+    const auditCategoryLabels = {
+        attendance: 'Atendimentos',
+        contacts: 'Contatos',
+        users: 'Usuários',
+        sync: 'Sincronização',
+        communication: 'Comunicados',
+        system: 'Sistema/Evolution'
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+        renderChart(); loadGlobalMetrics(); initTeamMonthControls(); updateClock(); loadInternalChat(); loadAuditTags();
+        updateInternalUnreadBadges();
+        syncInternalUnreadSince('startup');
+        if (ADMIN_CAN_EVOLUTION) { checkEvoStatus('vendas'); checkEvoStatus('financeiro'); checkEvoStatus('engenharia'); }
+        loadOperationsStatus(); setInterval(loadOperationsStatus, 60000);
+        setupPasteHandlers(); setupEscKey(); setupNotificationPreferences(); setupAuditLogFilters(); setupAttentionNotice(); restoreAdminActiveTab(); connectRealtime(); showLatestChangelog();
+        setInterval(checkTeamDateRollover, 60000);
+    });
+    
+    window.addEventListener('resize', () => { isMobile = window.innerWidth <= 1024; });
+
+    function getColorFromName(name) {
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        return groupColors[Math.abs(hash) % groupColors.length];
+    }
+
+    function parseLocalTimestamp(timestampStr) {
+        if(!timestampStr) return '';
+        const raw = String(timestampStr).trim();
+        const normalized = raw.replace('T', ' ').split('.')[0].replace(/Z$/, '');
+        let match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]), Number(match[6] || 0));
+        match = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (match) return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]), Number(match[4]), Number(match[5]), Number(match[6] || 0));
+        const parsed = new Date(raw);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function formatTime(timestampStr) {
+        const d = parseLocalTimestamp(timestampStr);
+        if(!d) return '';
+        let now = new Date();
+        
+        const isToday = d.getDate() === now.getDate() && 
+                        d.getMonth() === now.getMonth() && 
+                        d.getFullYear() === now.getFullYear();
+
+        const config = { hour: '2-digit', minute: '2-digit' };
+        
+        if (isToday) {
+            return d.toLocaleTimeString('pt-BR', config);
+        } else {
+            return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', config);
+        }
+    }
+
+    function escapeHtml(text) {
+        return String(text || '').replace(/[&<>"']/g, ch => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;'}[ch]));
+    }
+
+    async function showLatestChangelog() {
+        try {
+            const res = await fetch('/api/changelog/latest');
+            const data = await res.json();
+            if (!data.id || localStorage.getItem('continnumOS:lastChangelog') === data.id) return;
+            document.getElementById('changelog-title').innerText = `Novidades - ${data.title || 'ultima versao'}`;
+            const sections = (data.sections || []).map(section => {
+                const items = (section.items || []).slice(0, 8).map(item => `<li style="margin:6px 0;">${escapeHtml(item)}</li>`).join('');
+                return `<div style="margin-bottom:14px;"><div style="font-weight:700; color:var(--primary); margin-bottom:6px;">${escapeHtml(section.title)}</div><ul style="padding-left:18px;">${items}</ul></div>`;
+            }).join('');
+            document.getElementById('changelog-body').innerHTML = sections || '<div style="color:var(--text-muted);">Ajustes aplicados nesta versao.</div>';
+            document.getElementById('changelogModal').style.display = 'flex';
+            localStorage.setItem('continnumOS:lastChangelog', data.id);
+        } catch(e) {}
+    }
+
+    function closeChangelogModal() {
+        document.getElementById('changelogModal').style.display = 'none';
+    }
+
+    function setupEscKey() {
+        document.addEventListener('keydown', function(e) {
+            if (e.key === "Escape") {
+                const attentionModal = document.getElementById('attentionModal');
+                if (attentionModal && attentionModal.style.display === 'flex') {
+                    closeAttentionNotice();
+                    return;
+                }
+                document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+                cancelAuditReply();
+            }
+        });
+    }
+
+    function setupAttentionNotice() {
+        const closeButton = document.getElementById('attention-close-btn');
+        if (closeButton) closeButton.addEventListener('click', closeAttentionNotice);
+    }
+
+    function enqueueAttentionNotice(title, message, kind = 'notice') {
+        attentionQueue.push({
+            title: title || 'Notificação',
+            message: message || 'Novo aviso.',
+            kind: kind || 'notice'
+        });
+        showAttentionNotice();
+    }
+
+    function showAttentionNotice() {
+        if (attentionOpen) return;
+        const nextNotice = attentionQueue.shift();
+        if (!nextNotice) return;
+        const modal = document.getElementById('attentionModal');
+        if (!modal) return;
+        attentionOpen = true;
+        modal.classList.remove('admin');
+        if (nextNotice.kind === 'admin') modal.classList.add('admin');
+        document.getElementById('attention-kind').innerText = nextNotice.kind === 'admin' ? 'Comunicado' : 'Aviso';
+        document.getElementById('attention-title').innerText = nextNotice.title;
+        document.getElementById('attention-body').innerText = nextNotice.message;
+        modal.style.display = 'flex';
+    }
+
+    function closeAttentionNotice() {
+        const modal = document.getElementById('attentionModal');
+        if (modal) modal.style.display = 'none';
+        attentionOpen = false;
+        if (attentionQueue.length > 0) setTimeout(showAttentionNotice, 80);
+    }
+    
+    function setupPasteHandlers() {
+        const adminChatInput = document.getElementById('admin-chat-input');
+        if (adminChatInput) {
+            adminChatInput.addEventListener('paste', function(e) {
+                if (e.clipboardData && e.clipboardData.files.length > 0) {
+                    const file = e.clipboardData.files[0];
+                    if (file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('application/')) {
+                        const dataTransfer = new DataTransfer(); dataTransfer.items.add(file); document.getElementById('media-upload-admin').files = dataTransfer.files; uploadMediaAdmin(); e.preventDefault();
+                    }
+                }
+            });
+        }
+        const internalInput = document.getElementById('internal-input');
+        if (internalInput) {
+            internalInput.addEventListener('paste', function(e) {
+                if (e.clipboardData && e.clipboardData.files.length > 0) {
+                    const file = e.clipboardData.files[0];
+                    if (file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('application/')) {
+                        const dataTransfer = new DataTransfer(); dataTransfer.items.add(file); document.getElementById('media-upload-internal').files = dataTransfer.files; uploadInternalMedia(); e.preventDefault();
+                    }
+                }
+            });
+        }
+    }
+    function cleanPhone(phoneStr) { if (!phoneStr) return ""; return phoneStr.replace(/@c\.us|@s\.whatsapp\.net|@lid/g, ''); }
+    function jsArg(value) { return JSON.stringify(value ?? '').replace(/</g, '\\u003c'); }
+    function updateClock() { const now = new Date(); document.getElementById('sys-clock').innerText = now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); setTimeout(updateClock, 10000); }
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); document.getElementById('sidebar').classList.toggle('open'); }
+    function auditMobileView(view) {
+        if(!isMobile) return; document.querySelectorAll('#tab-auditoria .panel').forEach(el => el.classList.remove('active-mobile')); document.getElementById('audit-' + view + '-col').classList.add('active-mobile');
+    }
+    function internalMobileView(view) {
+        if(!isMobile) return; document.querySelectorAll('#tab-internal .panel').forEach(el => el.classList.remove('active-mobile')); document.getElementById('int-' + view + '-col').classList.add('active-mobile');
+    }
+    /** Retorna a última aba administrativa salva, validando se ela ainda existe na tela atual. */
+    function storedAdminTab() {
+        const saved = localStorage.getItem(ADMIN_TAB_STORAGE_KEY);
+        return ADMIN_VALID_TABS.includes(saved) && document.getElementById(saved) ? saved : ADMIN_DEFAULT_TAB;
+    }
+    /** Restaura a aba ativa após reload sem sobrescrever a preferência já gravada. */
+    function restoreAdminActiveTab() {
+        switchMainTab(storedAdminTab(), {persist: false});
+    }
+    /** Alterna a seção principal e persiste a escolha para manter o usuário na mesma aba após F5. */
+    function switchMainTab(tabId, options = {}) {
+        if (!ADMIN_VALID_TABS.includes(tabId) || !document.getElementById(tabId)) tabId = ADMIN_DEFAULT_TAB;
+        const shouldPersist = options.persist !== false;
+        if (shouldPersist) localStorage.setItem(ADMIN_TAB_STORAGE_KEY, tabId);
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active')); document.querySelectorAll('.main-tab-btn').forEach(el => el.classList.remove('active'));
+        const targetTab = document.getElementById(tabId); if (targetTab) targetTab.classList.add('active');
+        document.querySelectorAll(`.main-tab-btn[onclick*="${tabId}"]`).forEach(el => el.classList.add('active'));
+        if(isMobile) { const sb = document.getElementById('sidebar'); if (sb) sb.classList.remove('open'); }
+        if(tabId === 'tab-internal') { clearInternalUnread(currentInternalTarget); loadInternalChat(); } if(tabId === 'tab-agenda') { renderCalendar(); scheduleTeamThermometerRefresh('tab-open', true); } if(tabId === 'tab-logs') { clearAuditLogsPending(); loadAuditLogs(true); }
+    }
+    /** Atualiza o contador visual de logs recebidos enquanto a aba Logs está fechada. */
+    function updateAuditLogUnreadBadge() {
+        document.querySelectorAll('.audit-log-unread-badge').forEach(el => {
+            el.textContent = auditLogUnreadCount > 99 ? '99+' : auditLogUnreadCount;
+            el.style.display = auditLogUnreadCount > 0 ? 'inline-block' : 'none';
+        });
+    }
+    /** Marca que existem registros novos para conferir quando o usuário voltar para Logs. */
+    function markAuditLogsPending() {
+        auditLogUnreadCount += 1;
+        updateAuditLogUnreadBadge();
+        showAuditLogPendingToast();
+    }
+    /** Limpa o aviso de logs pendentes ao abrir ou restaurar a aba Logs. */
+    function clearAuditLogsPending() {
+        auditLogUnreadCount = 0;
+        updateAuditLogUnreadBadge();
+    }
+    function formatMessage(text) {
+        if (!text) return "";
+        if (text.includes("Mídia do histórico")) return `<div style="padding:10px 16px; background:rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(8px); border-radius:12px; font-size:0.8rem; color:var(--text-muted); display:inline-flex; align-items:center; gap:8px;"><span class="material-symbols-outlined" style="font-size:18px;">cloud_sync</span> <span>Mídia em nuvem</span></div>`;
+        if (text.startsWith("[IMAGE] ")) { const url = text.replace("[IMAGE] ", ""); return `<a href="${url}" target="_blank"><img src="${url}" style="max-width:100%; max-height:200px; border-radius:8px; cursor:pointer; margin-top:4px;"></a>`; }
+        if (text.startsWith("[VIDEO] ")) { const url = text.replace("[VIDEO] ", ""); return `<video src="${url}" controls style="max-width:100%; max-height:200px; border-radius:8px; margin-top:4px;"></video>`; }
+        if (text.startsWith("[AUDIO] ") || text.startsWith("[PTT] ")) { const url = text.replace("[AUDIO] ", "").replace("[PTT] ", ""); return `<audio src="${url}" controls preload="metadata" style="max-width:250px; margin-top:4px; height:40px;"></audio>`; }
+        if (text.startsWith("[DOCUMENT] ")) { const url = text.replace("[DOCUMENT] ", ""); return `<a href="${url}" target="_blank" style="color:var(--primary); text-decoration:none; display:flex; align-items:center; gap:4px; margin-top:4px;"><span class="material-symbols-outlined">description</span> Abrir Documento</a>`; }
+        return text;
+    }
+    let notificationAudioCtx = null;
+    let lastDesktopNotificationAt = 0;
+
+    function notificationSetting(key, fallback = 'on') {
+        return localStorage.getItem(key) || fallback;
+    }
+
+    function setupNotificationPreferences() {
+        if (!localStorage.getItem('continnumOS:soundNotifications')) localStorage.setItem('continnumOS:soundNotifications', 'on');
+        if (!localStorage.getItem('continnumOS:desktopNotifications')) localStorage.setItem('continnumOS:desktopNotifications', 'on');
+        updateNotificationButtons();
+        document.addEventListener('click', unlockNotificationAudio, {once:true});
+    }
+
+    function updateNotificationButtons() {
+        const desktopBtn = document.getElementById('btn-desktop-notify');
+        const soundBtn = document.getElementById('btn-sound-notify');
+        if (desktopBtn) desktopBtn.classList.toggle('btn-primary', notificationSetting('continnumOS:desktopNotifications') === 'on');
+        if (soundBtn) soundBtn.classList.toggle('btn-primary', notificationSetting('continnumOS:soundNotifications') === 'on');
+    }
+
+    function toggleSettingsSection(id) {
+        const section = document.getElementById(id);
+        if (section) section.classList.toggle('active');
+    }
+
+    async function unlockNotificationAudio() {
+        try {
+            notificationAudioCtx = notificationAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            if (notificationAudioCtx.state === 'suspended') await notificationAudioCtx.resume();
+        } catch(e) {}
+        if (notificationSetting('continnumOS:desktopNotifications') === 'on' && 'Notification' in window && Notification.permission === 'default') {
+            await Notification.requestPermission();
+            updateNotificationButtons();
+        }
+    }
+
+    async function toggleDesktopNotifications() {
+        if (notificationSetting('continnumOS:desktopNotifications') === 'on' && 'Notification' in window && Notification.permission === 'default') {
+            await Notification.requestPermission();
+            updateNotificationButtons();
+            notifyToast(Notification.permission === 'granted' ? 'Notificações da área de trabalho autorizadas.' : 'Permissão de notificação não autorizada.', Notification.permission !== 'granted');
+            return;
+        }
+        const enabled = notificationSetting('continnumOS:desktopNotifications') !== 'on';
+        localStorage.setItem('continnumOS:desktopNotifications', enabled ? 'on' : 'off');
+        if (enabled && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+        updateNotificationButtons();
+        notifyToast(enabled ? 'Notificações da área de trabalho ativadas.' : 'Notificações da área de trabalho desativadas.');
+    }
+
+    function toggleSoundNotifications() {
+        const enabled = notificationSetting('continnumOS:soundNotifications') !== 'on';
+        localStorage.setItem('continnumOS:soundNotifications', enabled ? 'on' : 'off');
+        updateNotificationButtons();
+        if (enabled) playMsnSound();
+        notifyToast(enabled ? 'Som MSN ativado.' : 'Som de notificação desativado.');
+    }
+
+    function playMsnSound() {
+        if (notificationSetting('continnumOS:soundNotifications') !== 'on') return;
+        try {
+            const ctx = notificationAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            notificationAudioCtx = ctx;
+            const now = ctx.currentTime;
+            const notes = [{freq: 988, start: 0, end: 0.11}, {freq: 1318, start: 0.12, end: 0.25}, {freq: 988, start: 0.27, end: 0.38}];
+            notes.forEach(note => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(note.freq, now + note.start);
+                gain.gain.setValueAtTime(0.0001, now + note.start);
+                gain.gain.exponentialRampToValueAtTime(0.42, now + note.start + 0.015);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + note.end);
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.start(now + note.start);
+                osc.stop(now + note.end + 0.02);
+            });
+        } catch(e) {}
+    }
+
+    function showDesktopNotification(title, body, phoneToOpen = null, internalTarget = null) {
+        if (!document.hidden || notificationSetting('continnumOS:desktopNotifications') !== 'on' || !('Notification' in window) || Notification.permission !== 'granted') return;
+        const now = Date.now();
+        if (now - lastDesktopNotificationAt < 1200) return;
+        lastDesktopNotificationAt = now;
+        const note = new Notification(title, {body: body, icon: '/static/logo.png', badge: '/static/logo.png', tag: phoneToOpen || internalTarget || title, renotify: true});
+        note.onclick = function() {
+            window.focus();
+            if (internalTarget) {
+                openInternalTargetFromToast(internalTarget);
+            } else if (phoneToOpen) {
+                const card = document.getElementById('audit-contact-' + phoneToOpen);
+                if (card) { switchMainTab('tab-auditoria'); card.click(); if(window.innerWidth <= 1024) auditMobileView('chat'); }
+            }
+            note.close();
+        };
+    }
+
+    function playBeep(title, body, phoneToOpen = null) {
+        playMsnSound();
+        showDesktopNotification(title, body, phoneToOpen);
+        Toastify({
+            text: phoneToOpen ? `💬 ${title}\n${body}\n👉 Clique para abrir` : `💬 ${title}\n${body}`,
+            duration: 5000, close: true, gravity: "top", position: "right", stopOnFocus: true,
+            style: { background: "#F4EFF4", color: "#1D192B", borderRadius: "16px", boxShadow: "0 4px 14px rgba(0,0,0,0.08)", fontFamily: "'JetBrains Mono', monospace", border: "1px solid #EADDFF", padding: "12px 24px", fontWeight: "500", display: "flex", alignItems: "center", gap: "8px", whiteSpace: "pre-wrap", cursor: phoneToOpen ? "pointer" : "default" },
+            onClick: function() {
+                if (phoneToOpen) {
+                    const card = document.getElementById('audit-contact-' + phoneToOpen);
+                    if (card) { switchMainTab('tab-auditoria'); card.click(); if(window.innerWidth <= 1024) auditMobileView('chat'); }
+                }
+            }
+        }).showToast();
+    }
+
+    const activeInternalChatToasts = {};
+    const internalUnreadStorageKey = 'continnumOS:internalUnread:' + {{ user.name|tojson }};
+    const internalLastIdStorageKey = 'continnumOS:internalLastId:' + {{ user.name|tojson }};
+    const INTERNAL_TOAST_MAX_AGE_MS = 5 * 60 * 1000;
+    const INTERNAL_TOAST_LOCK_TTL_MS = 4000;
+    const internalTabId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const internalToastLockPrefix = 'continnumOS:internalToastLock:' + {{ user.name|tojson }} + ':';
+    const internalBroadcastChannelName = 'continnumOS:internalChat:' + {{ user.name|tojson }};
+    const internalSeenEventIds = new Set();
+    const internalToastClaims = new Map();
+    let internalBroadcastChannel = null;
+    let internalUnreadState = loadInternalUnreadState();
+    let internalLastMessageId = loadInternalLastMessageId();
+    let internalSyncRunning = false;
+    setupInternalNotificationChannel();
+

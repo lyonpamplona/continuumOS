@@ -1,0 +1,254 @@
+/* ==========================================================================
+   continnumOS CRM — Liquid Glass Theme (reskin)
+   Camada de tema aplicada SOBRE os dashboards existentes.
+   Nao altera estrutura/DOM nem JS: apenas redefine tokens de design e aplica
+   superficies de vidro (translucido + blur), cantos arredondados e realces.
+   Carregada APOS o <style> inline, portanto vence a cascata por ordem de fonte.
+   ========================================================================== */
+
+:root {
+  /* Paleta preservada (laranja / verde WhatsApp / JetBrains Mono) */
+  --bg-base: #05080a;
+  --primary: #ff6600;
+  --primary-hover: #e65c00;
+  --wa-green: #00a884;
+  --text-main: #e9edef;
+  --text-muted: #8696a0;
+  --danger: #f15c6d;
+  --warning: #ffd166;
+  --blue: #63b3ff;
+
+  /* Superficies de vidro */
+  --surface: rgba(17, 27, 33, .55);
+  --surface-hover: rgba(32, 44, 51, .78);
+  --border: rgba(255, 255, 255, .07);
+
+  --glass-blur: blur(20px);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, .40);
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --radius-sm: 10px;
+}
+
+/* Fundo com gradientes radiais (identidade do prototipo) */
+body {
+  background-color: var(--bg-base) !important;
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(255, 102, 0, .08), transparent 30%),
+    radial-gradient(circle at 90% 80%, rgba(0, 168, 132, .05), transparent 30%) !important;
+  background-attachment: fixed;
+}
+
+/* Barras de rolagem */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 102, 0, .45); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+/* --------------------------------------------------------------------------
+   Superficies principais (vidro + blur)
+   -------------------------------------------------------------------------- */
+.panel,
+.workspace > .panel,
+.sidebar,
+.top-bar,
+.topbar,
+.app-header,
+.header-bar,
+.bottom-nav,
+.nav-drawer,
+.side-nav {
+  background: var(--surface) !important;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-color: var(--border) !important;
+}
+
+.panel { border-radius: 0 !important; }
+
+/* Cartoes / blocos / metricas */
+.stat-card,
+.mini-metric,
+.ops-badge,
+.card,
+.contact-card,
+.block,
+.accordion-item,
+.notice-body,
+.info-section,
+.settings-fold,
+.breakdown-item,
+.agenda-card,
+.tool-card {
+  background: var(--surface) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.stat-card:hover,
+.contact-card:hover,
+.accordion-item:hover { border-color: rgba(255, 102, 0, .28) !important; }
+
+.stat-val, .stat-num, .mini-metric strong { color: var(--primary) !important; }
+
+/* --------------------------------------------------------------------------
+   Navegacao
+   -------------------------------------------------------------------------- */
+.nav-item {
+  border-radius: var(--radius-sm) !important;
+  transition: .2s ease;
+}
+.nav-item:hover { color: var(--primary) !important; background: rgba(255, 102, 0, .08) !important; }
+.nav-item.active {
+  color: var(--primary) !important;
+  background: rgba(255, 102, 0, .12) !important;
+  border-color: rgba(255, 102, 0, .30) !important;
+}
+.nav-badge, .badge {
+  background: var(--primary) !important;
+  color: #050505 !important;
+  border-radius: 999px !important;
+  font-weight: 700;
+}
+
+.realtime-status,
+.profile-trigger {
+  background: rgba(0, 0, 0, .28) !important;
+  border-color: var(--border) !important;
+  border-radius: 999px !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.profile-trigger:hover { border-color: rgba(255, 102, 0, .5) !important; }
+
+.avatar {
+  background: var(--bg-base) !important;
+  color: var(--primary) !important;
+  border: 1px solid rgba(255, 102, 0, .35) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Botoes
+   -------------------------------------------------------------------------- */
+.btn {
+  background: rgba(255, 255, 255, .05) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-main) !important;
+  border-radius: var(--radius-sm) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: .2s ease;
+}
+.btn:hover { background: var(--surface-hover) !important; border-color: rgba(255, 102, 0, .30) !important; }
+
+.btn-primary,
+.main-tab-btn.active,
+.bucket-chip.active {
+  background: var(--primary) !important;
+  color: #050505 !important;
+  border: 1px solid transparent !important;
+  font-weight: 700 !important;
+  box-shadow: 0 6px 18px rgba(255, 102, 0, .25);
+}
+.btn-primary:hover { background: var(--primary-hover) !important; }
+
+.btn-danger {
+  background: rgba(241, 92, 109, .12) !important;
+  color: var(--danger) !important;
+  border: 1px solid rgba(241, 92, 109, .35) !important;
+}
+.btn-danger:hover { background: rgba(241, 92, 109, .2) !important; }
+
+.act-icon,
+.contacts-action-btn,
+.menu-toggle,
+.btn-back-mobile {
+  border-radius: 50% !important;
+  transition: .2s ease;
+}
+.act-icon:hover,
+.contacts-action-btn:hover { color: var(--primary) !important; }
+
+/* Chips / tokens / pills */
+.bucket-chip,
+.filter-token,
+.tag-pill,
+.contact-mini-pill,
+.agenda-status-pill,
+.main-tab-btn,
+.log-period-btn {
+  border-radius: 999px !important;
+  border: 1px solid var(--border) !important;
+  background: rgba(0, 0, 0, .22) !important;
+  transition: .2s ease;
+}
+
+/* --------------------------------------------------------------------------
+   Campos de formulario
+   -------------------------------------------------------------------------- */
+.input-text,
+.contact-search-field,
+input[type="text"], input[type="password"], input[type="search"],
+input[type="number"], input[type="time"], input[type="date"],
+textarea, select {
+  background: rgba(0, 0, 0, .38) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text-main) !important;
+}
+.input-text:focus,
+.contact-search-field:focus-within,
+input:focus, textarea:focus, select:focus {
+  border-color: rgba(255, 102, 0, .55) !important;
+  box-shadow: 0 0 0 3px rgba(255, 102, 0, .10) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Modais
+   -------------------------------------------------------------------------- */
+.modal { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.modal-content {
+  background: rgba(17, 27, 33, .82) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--glass-shadow) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Chat (bolhas)
+   -------------------------------------------------------------------------- */
+.msg-bubble {
+  border-radius: var(--radius-md) !important;
+  border: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.msg-bubble.sent, .msg-bubble.out, .msg-bubble-out, .msg-me {
+  background: rgba(255, 102, 0, .15) !important;
+  border: 1px solid rgba(255, 102, 0, .22) !important;
+  border-bottom-right-radius: 4px !important;
+}
+.msg-bubble.received, .msg-bubble.in, .msg-bubble-in, .msg-them {
+  background: rgba(255, 255, 255, .05) !important;
+  border-bottom-left-radius: 4px !important;
+}
+
+/* Titulos de bloco / secao */
+.block-title,
+.log-title,
+.card-title,
+.overview-section-title,
+.accordion-title,
+.section-title { color: var(--primary) !important; }
+
+/* Painel header translucido */
+.panel-header {
+  background: rgba(0, 0, 0, .12) !important;
+  border-color: var(--border) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}

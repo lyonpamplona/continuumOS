@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>continnumOS Offline</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #070707; --bg-1: #0d0d0f; --bg-2: #141417;
+      --primary: #ff6a00; --text-main: #f2ede6; --text-muted: #9a9188;
+      --border: #2a2a30; --border-2: #3a3a42; --grid: rgba(255,106,0,.05);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      background-color: var(--bg-base);
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 34px 34px; background-attachment: fixed;
+      color: var(--text-main); font-family: 'JetBrains Mono', monospace; text-align: center; padding: 24px;
+    }
+    .offline-card {
+      background: var(--bg-1); border: 1px solid var(--border-2);
+      clip-path: polygon(0 16px, 16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%);
+      box-shadow: 0 20px 60px rgba(0,0,0,.55);
+      padding: 42px 34px; max-width: 460px; position: relative;
+    }
+    .offline-card::before {
+      content: "// SISTEMA OFFLINE"; display: block; font-size: .6rem; letter-spacing: .3em; color: var(--primary); margin-bottom: 20px;
+    }
+    .offline-icon {
+      width: 72px; height: 72px; margin: 0 auto 20px; display: grid; place-items: center;
+      background: var(--bg-2); border: 1px solid var(--border-2); color: var(--primary);
+      clip-path: polygon(0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+    }
+    .offline-icon .material-symbols-outlined { font-size: 38px; }
+    h1 { font-family: 'Space Grotesk', monospace; color: var(--text-main); font-size: 1.15rem; margin: 0 0 12px; letter-spacing: .01em; }
+    p { color: var(--text-muted); max-width: 420px; line-height: 1.6; margin: 0 auto; font-size: .86rem; }
+    .retry {
+      margin-top: 24px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+      background: var(--primary); color: #0a0705; border: 0; font-family: 'JetBrains Mono', monospace;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .08em; font-size: .74rem; padding: 12px 20px;
+      clip-path: polygon(0 7px, 7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
+    }
+  </style>
+</head>
+<body>
+  <main class="offline-card">
+    <div class="offline-icon"><span class="material-symbols-outlined">wifi_off</span></div>
+    <h1>Sem conexão com o servidor</h1>
+    <p>O painel precisa de internet para carregar atendimentos, contatos e mensagens em tempo real. Verifique a conexão e tente novamente.</p>
+    <button class="retry" onclick="location.reload()"><span class="material-symbols-outlined" style="font-size:16px">refresh</span> Tentar novamente</button>
+  </main>
+</body>
+</html>

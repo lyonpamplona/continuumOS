@@ -1,0 +1,14 @@
+#ignorar pastas do banco de bados
+pg_data/
+postgres_data/
+bot-data/
+evolution_instances/
+
+#ignorar arquivos cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+#ignorar .env
+.env

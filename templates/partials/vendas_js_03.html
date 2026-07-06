@@ -1,0 +1,691 @@
+    async function createNewContactList() {
+        const name = document.getElementById('new-list-name').value.trim();
+        if(!name) return Toastify({text: "Digite o nome da lista.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast();
+        await fetch('/api/contact_lists', {method: 'POST', body: JSON.stringify({name: name, color: document.getElementById('new-list-color').value})});
+        document.getElementById('new-list-name').value = '';
+        Toastify({text: "Lista criada.", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
+        await loadContactLists();
+        await loadContactBuckets();
+        renderListsUI(currentClientLists.map(list => `${list.id}|${list.name}|${list.color}`).join(','));
+    }
+    
+    async function createNewTag() { 
+        const name = document.getElementById('new-tag-name').value;
+        if(!name) return Toastify({text: "⚠️ Digite o nome da tag", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast();
+        await fetch('/api/tags', {method: 'POST', body: JSON.stringify({name: name, color: document.getElementById('new-tag-color').value})}); 
+        document.getElementById('new-tag-name').value = ''; document.getElementById('manageTagsModal').style.display='none';
+        Toastify({text: "✅ Tag Criada!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
+        await loadTags(); renderTagsUI(); 
+    }
+
+    async function loadSnippets() {
+        const res = await fetch('/api/snippets'); const data = await res.json();
+        const box = document.getElementById('snippets-container'); box.innerHTML = '<button class="btn-macro" onclick="openTransfer()">🔄 Transferir</button>';
+        data.forEach(s => { const btn = document.createElement('button'); btn.className = 'btn-macro'; btn.innerText = `⚡ ${s.shortcut}`; btn.onclick = () => sendMacro(s.content); box.appendChild(btn); });
+    }
+    async function loadManageSnippets() {
+        const res = await fetch('/api/snippets'); const data = await res.json();
+        const box = document.getElementById('snippets-manage-list'); box.innerHTML = '';
+        data.forEach(s => { box.innerHTML += `<div style="background:var(--bg-base); padding:12px; border-radius:8px; margin-bottom:8px; border:1px solid var(--border);"><strong>${s.shortcut}</strong><br><span style="font-size:0.8rem; color:var(--text-muted);">${s.content}</span></div>`; });
+    }
+    async function addSnippet() { await fetch('/api/snippets', {method: 'POST', body: JSON.stringify({shortcut: document.getElementById('new-snip-title').value, content: document.getElementById('new-snip-text').value})}); document.getElementById('new-snip-title').value = ''; document.getElementById('new-snip-text').value = ''; loadSnippets(); loadManageSnippets(); }
+
+    async function updateStatus(val) { 
+        await fetch('/api/update_status', {method: 'POST', body: JSON.stringify({status: val})}); 
+        const dot = document.getElementById('hdr-status-dot');
+        if(val === 'online') dot.style.background = 'var(--wa-green)'; else if(val === 'ausente') dot.style.background = '#ffcc00'; else dot.style.background = '#ff5252';
+        document.getElementById('dropdown').classList.remove('active');
+    }
+    
+    async function openWaWeb() { 
+        if(currentPhone) {
+            await fetch('/api/log_external_access', {method: 'POST', body: JSON.stringify({phone: currentPhone})});
+            window.open('https://wa.me/' + cleanPhone(currentPhone), '_blank'); 
+        }
+    }
+    
+    function applyPreset(bg, primary, text) {
+        document.getElementById('prof-bg').value = bg;
+        document.getElementById('prof-primary').value = primary;
+        document.getElementById('prof-text').value = text;
+        previewColor();
+    }
+
+    function previewColor() {
+        const bg = document.getElementById('prof-bg').value;
+        const primary = document.getElementById('prof-primary').value;
+        const text = document.getElementById('prof-text').value;
+        document.documentElement.style.setProperty('--bg-base', bg, 'important');
+        document.documentElement.style.setProperty('--primary', primary, 'important');
+        document.documentElement.style.setProperty('--text-main', text, 'important');
+    }
+
+    async function saveProfile() { 
+        let currentAvatar = '';
+        const imgElement = document.querySelector('#preview-avatar img');
+        if (imgElement) currentAvatar = imgElement.getAttribute('src');
+        
+        const payload = {
+            name: document.getElementById('prof-name').value, 
+            bio: '', 
+            avatar: currentAvatar,
+            bg_color: document.getElementById('prof-bg').value,
+            primary_color: document.getElementById('prof-primary').value,
+            text_color: document.getElementById('prof-text').value
+        };
+
+        await fetch('/api/profile/update', {
+            method: 'POST', 
+            body: JSON.stringify(payload)
+        }); 
+        Toastify({text: "✅ Perfil Salvo!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
+    }
+    
+    async function saveNewContact() { 
+        const phone = document.getElementById('new-phone').value;
+        const name = document.getElementById('new-name').value;
+        if(!phone) return Toastify({text: "⚠️ Digite o celular.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast();
+        try {
+            await fetch('/api/contacts/new', {method: 'POST', body: JSON.stringify({phone, name})}); 
+            document.getElementById('newContactModal').style.display='none';
+            document.getElementById('new-phone').value = ''; document.getElementById('new-name').value = '';
+            Toastify({text: "✅ Contato Salvo!", duration: 3000, style: {background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--border)", borderRadius: "8px"}}).showToast();
+            resetContactsList(); lastActiveListState = null; loadMoreContacts(); loadContactBuckets(); buildDashboard();
+        } catch(e) { Toastify({text: "❌ Erro ao salvar.", duration: 3000, style: {background: "#ff5252", color: "#fff", borderRadius: "8px"}}).showToast(); }
+    }
+    
+    async function selectChat(phone, name, notes, extra, stage, tagsData = '', listData = '') {
+        // RESET DE SEGURANÇA IMEDIATO: Impede o histórico cruzado
+        currentPhone = phone; 
+        currentMessageCount = 0; 
+        currentReplyId = null;
+        currentReactionMsgId = null;
+        currentForwardMsgId = null;
+        currentEditMsgId = null;
+        document.getElementById('reply-bar').style.display = 'none';
+        document.getElementById('reactionModal').style.display = 'none';
+        document.getElementById('forwardModal').style.display = 'none';
+        document.getElementById('editModal').style.display = 'none';
+        document.getElementById('chat-input').value = '';
+        document.getElementById('chat-history').innerHTML = '<div style="display:flex; height:100%; align-items:center; justify-content:center; color:var(--text-muted);">Sincronizando mensagens...</div>';
+        
+        // Interface
+        document.getElementById('no-chat').style.display = 'none';
+        document.getElementById('chat-header').style.display = 'flex';
+        document.getElementById('chat-controls').style.display = 'flex';
+        
+        let nomeVisual = (name && name !== 'None' && name !== '') ? name : cleanPhone(phone);
+        document.getElementById('chat-title-bar').innerText = getCleanName(nomeVisual);
+        document.getElementById('chat-hdr-avatar').innerText = getCleanName(nomeVisual).charAt(0).toUpperCase();
+        
+        // Preenche campos de info
+        document.getElementById('info-phone').value = cleanPhone(phone);
+        document.getElementById('info-name').value = (name !== 'None') ? name : '';
+        document.getElementById('info-notes').value = (notes !== 'None') ? notes : '';
+        document.getElementById('info-extra').value = (extra !== 'None') ? extra : '';
+
+        // Lógica de botões (assumir chat)
+        if(stage === 'pendente_assumir' || stage === 'carteira') {
+            document.getElementById('assumir-box').style.display = 'block';
+            document.getElementById('active-box').style.display = 'none';
+        } else {
+            document.getElementById('assumir-box').style.display = 'none';
+            document.getElementById('active-box').style.display = 'flex';
+        }
+
+        renderTagsUI(tagsData);
+        renderListsUI(listData);
+        await loadChatHistory(true); // O 'true' limpa o contador e força novo desenho
+        fetchProfilePic(phone);
+        if(isMobile) mobileView('chat');
+    }
+
+    function getAckIcon(ackLevel) { return ackLevel === 0 ? 'schedule' : (ackLevel === 1 ? 'done' : 'done_all'); }
+    
+    function setReply(msgId, b64Text) {
+        currentReplyId = msgId;
+        let decoded = decodeURIComponent(escape(atob(b64Text)));
+        document.getElementById('reply-preview-text').innerText = decoded;
+        document.getElementById('reply-bar').style.display = 'flex';
+        document.getElementById('chat-input').focus();
+    }
+
+    function cancelReply() {
+        currentReplyId = null;
+        document.getElementById('reply-bar').style.display = 'none';
+    }
+
+    function openReactionModal(msgId) {
+        currentReactionMsgId = msgId;
+        document.getElementById('reactionModal').style.display = 'flex';
+    }
+
+    async function submitReaction(emoji) {
+        document.getElementById('reactionModal').style.display = 'none';
+        if (!currentReactionMsgId || !currentPhone) return;
+        try {
+            await fetch('/api/chat/react', {
+                method: 'POST',
+                body: JSON.stringify({phone: currentPhone, message_id: currentReactionMsgId, emoji: emoji})
+            });
+        } catch(e) {}
+        currentReactionMsgId = null;
+    }
+    
+    async function pinMessage(phone, b64Text) {
+        let decoded = decodeURIComponent(escape(atob(b64Text)));
+        await fetch('/api/chat/pin', {method: 'POST', body: JSON.stringify({phone: phone, text: decoded})});
+        const pinRes = await fetch('/api/chat/' + currentPhone + '/pinned');
+        const pinData = await pinRes.json();
+        if (pinData.pinned_message) {
+            document.getElementById('pinned-text-content').innerText = pinData.pinned_message;
+            document.getElementById('pinned-message-banner').style.display = 'flex';
+        }
+    }
+
+    async function unpinMessage() {
+        await fetch('/api/chat/unpin', {method: 'POST', body: JSON.stringify({phone: currentPhone})});
+        document.getElementById('pinned-message-banner').style.display = 'none';
+    }
+
+    async function openForwardModal(msgId) {
+        currentForwardMsgId = msgId;
+        const res = await fetch('/api/poll_updates');
+        const data = await res.json();
+        const select = document.getElementById('forward-target');
+        select.innerHTML = '';
+        data.clientes.forEach(c => {
+            let opt = document.createElement('option');
+            opt.value = c.phone;
+            opt.text = c.name && c.name !== 'None' ? c.name : c.phone.replace('@s.whatsapp.net', '');
+            select.appendChild(opt);
+        });
+        document.getElementById('forwardModal').style.display = 'flex';
+    }
+
+    async function submitForward() {
+        const target = document.getElementById('forward-target').value;
+        if(!target || !currentForwardMsgId) return;
+        document.getElementById('forwardModal').style.display = 'none';
+        Toastify({text: "Encaminhando...", style: {background: "var(--surface)", color: "var(--primary)"}}).showToast();
+        try {
+            const res = await fetch('/api/chat/forward', {
+                method: 'POST',
+                body: JSON.stringify({message_id: currentForwardMsgId, target_phone: target})
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                Toastify({text: "Mensagem encaminhada.", style: {background: "var(--surface)", color: "var(--primary)"}}).showToast();
+            } else {
+                Toastify({text: `Falha ao encaminhar: ${data.message || 'sem confirmação da Evolution'}`, duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+            }
+        } catch(e) {
+            Toastify({text: "Falha de conexão ao encaminhar.", duration: 5000, style: {background: "#2A1114", color: "#F15C6D", border: "1px solid #4A1C22", borderRadius: "8px"}}).showToast();
+        }
+    }
+
+    function openEditModal(msgId, b64Text) {
+        currentEditMsgId = msgId;
+        let decoded = decodeURIComponent(escape(atob(b64Text)));
+        document.getElementById('edit-text-input').value = decoded;
+        document.getElementById('editModal').style.display = 'flex';
+    }
+
+    const EDIT_MESSAGE_WINDOW_MS = 15 * 60 * 1000;
+    const DELETE_MESSAGE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+    function hasRemoteMessageId(m) {
+        const id = String(m.waha_id || '');
+        return id && !id.startsWith('local_') && !id.startsWith('sys_');
+    }
+
+    function messageAgeMs(m) {
+        const sentAt = parseLocalTimestamp(m.timestamp);
+        return sentAt ? Date.now() - sentAt.getTime() : Number.POSITIVE_INFINITY;
+    }
+
+    function canEditRemoteMessage(m, phoneAtRequest) {
+        return m.msg_type === 'text' && m.sender !== phoneAtRequest && m.sender !== 'sistema' && hasRemoteMessageId(m) && messageAgeMs(m) <= EDIT_MESSAGE_WINDOW_MS;
+    }
+
+    function canDeleteRemoteMessage(m, phoneAtRequest) {
+        return m.msg_type !== 'deleted' && m.sender !== phoneAtRequest && m.sender !== 'sistema' && hasRemoteMessageId(m) && messageAgeMs(m) <= DELETE_MESSAGE_WINDOW_MS;
+    }
+
+    function notifyToast(text, isError = false, duration = 3000) {
+        Toastify({
+            text,
+            duration,
+            gravity: "top",
+            position: "right",
+            style: {
+                background: isError ? "#2A1114" : "var(--surface)",
+                color: isError ? "#F15C6D" : "var(--primary)",
+                border: isError ? "1px solid #4A1C22" : "1px solid var(--border)",
+                borderRadius: "8px",
+                fontFamily: "var(--font-main)"
+            }
+        }).showToast();
+    }
+    /** Atualiza o indicador visual da conexão realtime no topo do painel. */
+    function setRealtimeStatus(state) {
+        const el = document.getElementById('realtime-status');
+        if (!el) return;
+        const label = state === 'online' ? 'Tempo real online' : state === 'offline' ? 'Tempo real offline' : 'Reconectando';
+        el.classList.remove('reconnecting', 'offline');
+        if (state !== 'online') el.classList.add(state);
+        el.title = label;
+        const text = el.querySelector('span');
+        if (text) text.textContent = label;
+    }
+
+    function showPanelNoticeToast(sender, text) {
+        Toastify({
+            text: `📣 Comunicado de ${sender || 'Admin'}\n${text || 'Novo comunicado.'}`,
+            duration: 7000,
+            close: true,
+            gravity: "top",
+            position: "right",
+            stopOnFocus: true,
+            style: {
+                background: "var(--surface)",
+                color: "var(--primary)",
+                border: "1px solid var(--border)",
+                borderRadius: "12px",
+                fontFamily: "var(--font-main)",
+                whiteSpace: "pre-wrap",
+                maxWidth: "min(440px, calc(100vw - 28px))",
+                padding: "14px 18px",
+                boxShadow: "0 10px 26px rgba(0,0,0,0.35)"
+            }
+        }).showToast();
+    }
+
+    const activeInternalChatToasts = {};
+    const internalUnreadStorageKey = 'continnumOS:internalUnread:' + {{ user.name|tojson }};
+    const internalLastIdStorageKey = 'continnumOS:internalLastId:' + {{ user.name|tojson }};
+    const INTERNAL_TOAST_MAX_AGE_MS = 5 * 60 * 1000;
+    const INTERNAL_TOAST_LOCK_TTL_MS = 4000;
+    const internalTabId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const internalToastLockPrefix = 'continnumOS:internalToastLock:' + {{ user.name|tojson }} + ':';
+    const internalBroadcastChannelName = 'continnumOS:internalChat:' + {{ user.name|tojson }};
+    const internalSeenEventIds = new Set();
+    const internalToastClaims = new Map();
+    let internalBroadcastChannel = null;
+    let internalUnreadState = loadInternalUnreadState();
+    let internalLastMessageId = loadInternalLastMessageId();
+    let internalSyncRunning = false;
+    setupInternalNotificationChannel();
+
+    function loadInternalUnreadState() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(internalUnreadStorageKey) || '{}') || {};
+            const normalized = {};
+            Object.entries(raw).forEach(([target, value]) => {
+                if (!value || typeof value !== 'object') return;
+                const unreadIds = Array.isArray(value.unread_ids) ? value.unread_ids.map(Number).filter(Boolean) : [];
+                normalized[target] = {
+                    last_seen_id: Number(value.last_seen_id || 0) || 0,
+                    latest_id: Number(value.latest_id || 0) || 0,
+                    unread_ids: Array.from(new Set(unreadIds)).sort((a, b) => a - b)
+                };
+            });
+            return normalized;
+        } catch(e) { return {}; }
+    }
+    function saveInternalUnreadState() {
+        localStorage.setItem(internalUnreadStorageKey, JSON.stringify(internalUnreadState));
+    }
+    function loadInternalLastMessageId() {
+        return Number(localStorage.getItem(internalLastIdStorageKey) || '0') || 0;
+    }
+    function updateInternalLastMessageId(messageId) {
+        const numericId = Number(messageId || 0);
+        if (!numericId || numericId <= internalLastMessageId) return;
+        internalLastMessageId = numericId;
+        localStorage.setItem(internalLastIdStorageKey, String(internalLastMessageId));
+    }
+    function internalConversationState(target) {
+        if (!internalUnreadState[target] || typeof internalUnreadState[target] !== 'object') {
+            internalUnreadState[target] = {last_seen_id: 0, latest_id: 0, unread_ids: []};
+        }
+        if (!Array.isArray(internalUnreadState[target].unread_ids)) internalUnreadState[target].unread_ids = [];
+        internalUnreadState[target].last_seen_id = Number(internalUnreadState[target].last_seen_id || 0) || 0;
+        internalUnreadState[target].latest_id = Number(internalUnreadState[target].latest_id || 0) || 0;
+        return internalUnreadState[target];
+    }
+    function rememberInternalConversationLatest(target, messageId) {
+        const numericId = Number(messageId || 0);
+        if (!target || !numericId) return;
+        const state = internalConversationState(target);
+        state.latest_id = Math.max(Number(state.latest_id || 0), numericId);
+        saveInternalUnreadState();
+    }
+    function internalUnreadTotal() {
+        return Object.values(internalUnreadState).reduce((sum, value) => sum + ((value && Array.isArray(value.unread_ids)) ? value.unread_ids.length : 0), 0);
+    }
+    function updateInternalUnreadBadges() {
+        const total = internalUnreadTotal();
+        document.querySelectorAll('.internal-unread-badge').forEach(el => {
+            el.innerText = total > 99 ? '99+' : String(total);
+            el.style.display = total > 0 ? 'inline-flex' : 'none';
+        });
+        document.querySelectorAll('[data-internal-badge-target]').forEach(el => {
+            const target = el.dataset.internalBadgeTarget || '';
+            const state = internalUnreadState[target];
+            const count = state && Array.isArray(state.unread_ids) ? state.unread_ids.length : 0;
+            el.innerText = count > 99 ? '99+' : String(count);
+            el.style.display = count > 0 ? 'inline-flex' : 'none';
+        });
+    }
+    function incrementInternalUnread(target, payload) {
+        const messageId = Number(payload?.message_id || 0);
+        if (!target || !messageId) return;
+        const state = internalConversationState(target);
+        state.latest_id = Math.max(Number(state.latest_id || 0), messageId);
+        if (messageId <= Number(state.last_seen_id || 0)) {
+            saveInternalUnreadState();
+            updateInternalUnreadBadges();
+            return;
+        }
+        if (!state.unread_ids.includes(messageId)) state.unread_ids.push(messageId);
+        state.unread_ids = Array.from(new Set(state.unread_ids)).sort((a, b) => a - b);
+        saveInternalUnreadState();
+        updateInternalUnreadBadges();
+    }
+    function clearInternalUnread(target, seenId = 0) {
+        if (!target) return;
+        const state = internalConversationState(target);
+        const unreadMax = state.unread_ids.length ? Math.max(...state.unread_ids) : 0;
+        state.latest_id = Math.max(Number(state.latest_id || 0), Number(seenId || 0), unreadMax);
+        state.last_seen_id = Math.max(Number(state.last_seen_id || 0), state.latest_id);
+        state.unread_ids = [];
+        saveInternalUnreadState();
+        updateInternalUnreadBadges();
+    }
+    function internalEventIdentity(payload) {
+        return payload.event_id || (payload.message_id ? `internal_message:${payload.message_id}` : '');
+    }
+    function rememberInternalEvent(eventId) {
+        if (!eventId) return;
+        internalSeenEventIds.add(eventId);
+        while (internalSeenEventIds.size > 300) {
+            const oldest = internalSeenEventIds.values().next().value;
+            internalSeenEventIds.delete(oldest);
+        }
+    }
+    function shouldProcessInternalEvent(payload) {
+        const eventId = internalEventIdentity(payload);
+        if (eventId && internalSeenEventIds.has(eventId)) return false;
+        const createdAt = Date.parse(payload.created_at || '');
+        if (Number.isFinite(createdAt) && Date.now() - createdAt > INTERNAL_TOAST_MAX_AGE_MS) {
+            payload.internal_late_event = true;
+            console.warn('Mensagem interna antiga sincronizada sem toast', {eventId, created_at: payload.created_at, target: payload.target, sender: payload.sender});
+        }
+        rememberInternalEvent(eventId);
+        updateInternalLastMessageId(payload.message_id);
+        return true;
+    }
+    function setupInternalNotificationChannel() {
+        if (!('BroadcastChannel' in window)) return;
+        try {
+            internalBroadcastChannel = new BroadcastChannel(internalBroadcastChannelName);
+            internalBroadcastChannel.onmessage = (event) => {
+                const data = event.data || {};
+                if (data.type !== 'internal_toast_claimed' || data.tab_id === internalTabId || !data.event_id) return;
+                internalToastClaims.set(data.event_id, Date.now() + INTERNAL_TOAST_LOCK_TTL_MS);
+            };
+        } catch(e) {
+            internalBroadcastChannel = null;
+        }
+    }
+    function hasInternalToastClaim(eventId) {
+        if (!eventId) return false;
+        const expiresAt = Number(internalToastClaims.get(eventId) || 0);
+        if (!expiresAt) return false;
+        if (expiresAt <= Date.now()) {
+            internalToastClaims.delete(eventId);
+            return false;
+        }
+        return true;
+    }
+    function broadcastInternalToastClaim(eventId, conversationTarget) {
+        if (!internalBroadcastChannel || !eventId) return;
+        try {
+            internalBroadcastChannel.postMessage({
+                type: 'internal_toast_claimed',
+                event_id: eventId,
+                conversation_target: conversationTarget,
+                tab_id: internalTabId,
+                claimed_at: new Date().toISOString()
+            });
+        } catch(e) {}
+    }
+    function cleanupInternalToastLocks(now) {
+        try {
+            Object.keys(localStorage).forEach(key => {
+                if (!key.startsWith(internalToastLockPrefix)) return;
+                const value = JSON.parse(localStorage.getItem(key) || '{}');
+                if (Number(value.expires_at || 0) <= now) localStorage.removeItem(key);
+            });
+        } catch(e) {}
+    }
+    function claimInternalToast(payload, conversationTarget) {
+        if (payload.internal_late_event) return false;
+        const eventId = internalEventIdentity(payload);
+        if (!eventId) return true;
+        if (hasInternalToastClaim(eventId)) return false;
+        const now = Date.now();
+        const lockKey = internalToastLockPrefix + eventId;
+        try {
+            cleanupInternalToastLocks(now);
+            const current = JSON.parse(localStorage.getItem(lockKey) || 'null');
+            if (current && current.tab_id !== internalTabId && Number(current.expires_at || 0) > now) return false;
+            const claim = {event_id: eventId, tab_id: internalTabId, conversation_target: conversationTarget, expires_at: now + INTERNAL_TOAST_LOCK_TTL_MS};
+            localStorage.setItem(lockKey, JSON.stringify(claim));
+            const stored = JSON.parse(localStorage.getItem(lockKey) || '{}');
+            if (stored.tab_id !== internalTabId) return false;
+            internalToastClaims.set(eventId, now + INTERNAL_TOAST_LOCK_TTL_MS);
+            broadcastInternalToastClaim(eventId, conversationTarget);
+            return true;
+        } catch(e) {
+            return true;
+        }
+    }
+    async function syncInternalUnreadSince(reason = 'manual') {
+        if (internalSyncRunning) return;
+        internalSyncRunning = true;
+        try {
+            let guard = 0;
+            while (guard < 4) {
+                const currentLastId = internalLastMessageId;
+                const res = await fetch(`/api/internal_chat/unread_since?last_id=${encodeURIComponent(currentLastId)}&limit=80`);
+                if (!res.ok) throw new Error(`sync ${res.status}`);
+                const data = await res.json();
+                const messages = Array.isArray(data.messages) ? data.messages : [];
+                if (!currentLastId && Number(data.latest_id || 0)) {
+                    updateInternalLastMessageId(data.latest_id);
+                    break;
+                }
+                for (const payload of messages) {
+                    await handleInternalChatEvent(payload);
+                }
+                if (messages.length) {
+                    updateInternalLastMessageId(Math.max(...messages.map(item => Number(item.message_id || 0))));
+                } else if (Number(data.latest_id || 0) > internalLastMessageId) {
+                    updateInternalLastMessageId(data.latest_id);
+                }
+                if (!data.has_more) break;
+                guard += 1;
+            }
+        } catch(e) {
+            console.warn('Falha ao sincronizar chat interno', {reason, error: e});
+        } finally {
+            internalSyncRunning = false;
+        }
+    }
+
+    function internalToastStyle(role) {
+        const styles = {
+            admin: {background: "#1D1238", color: "#EADDFF", border: "#7C4DFF"},
+            vendas_1: {background: "#102A24", color: "#C9F7E8", border: "#00A884"},
+            vendas_2: {background: "#102A24", color: "#C9F7E8", border: "#00A884"},
+            financeiro: {background: "#2A2410", color: "#FFE8A3", border: "#D6A700"},
+            engenharia: {background: "#102134", color: "#D6ECFF", border: "#4DA3FF"}
+        };
+        return styles[role] || {background: "var(--surface)", color: "var(--primary)", border: "var(--border)"};
+    }
+
+    function findInternalContactCard(target) {
+        const title = target === 'geral' ? 'Comunicação Interna' : target;
+        return Array.from(document.querySelectorAll('#int-col-list .contact-card')).find(card => {
+            return (card.querySelector('.card-title')?.innerText || '').trim() === title;
+        });
+    }
+
+    function openInternalTargetFromToast(target, toast) {
+        switchMainTab('tab-internal');
+        const card = findInternalContactCard(target);
+        openInternalChat(target, card);
+        if (toast && toast.hideToast) toast.hideToast();
+    }
+
+    function showInternalChatToast(payload, conversationTarget) {
+        if (!claimInternalToast(payload, conversationTarget)) return;
+        const style = internalToastStyle(payload.sender_role);
+        const senderName = payload.sender || 'Equipe';
+        const scopeLabel = payload.mentioned_me ? 'Mencionou você' : (conversationTarget === 'geral' ? 'Chat geral' : 'Mensagem individual');
+        const preview = payload.preview || 'Nova mensagem interna.';
+        playMsnSound();
+        showDesktopNotification(`Chat interno - ${senderName}`, `${scopeLabel}: ${preview}`, null, conversationTarget);
+        if (activeInternalChatToasts[conversationTarget]?.hideToast) {
+            activeInternalChatToasts[conversationTarget].hideToast();
+        }
+        const toast = Toastify({
+            text: `💬 ${senderName}\n${scopeLabel}\n${preview}\nClique para abrir`,
+            duration: -1,
+            close: false,
+            gravity: "top",
+            position: "right",
+            stopOnFocus: false,
+            style: {
+                background: style.background,
+                color: style.color,
+                border: `1px solid ${style.border}`,
+                borderRadius: "12px",
+                fontFamily: "var(--font-main)",
+                whiteSpace: "pre-wrap",
+                cursor: "pointer",
+                width: "min(440px, calc(100vw - 28px))",
+                maxWidth: "calc(100vw - 28px)",
+                padding: "16px 20px",
+                fontSize: "0.95rem",
+                lineHeight: "1.45",
+                boxShadow: "0 10px 26px rgba(0,0,0,0.35)"
+            },
+            onClick: function() {
+                delete activeInternalChatToasts[conversationTarget];
+                openInternalTargetFromToast(conversationTarget, toast);
+            }
+        });
+        activeInternalChatToasts[conversationTarget] = toast;
+        toast.showToast();
+    }
+
+    async function handleInternalChatEvent(payload) {
+        const myName = '{{ user.name }}';
+        const target = payload.target || 'geral';
+        const sender = payload.sender || '';
+        const myRole = '{{ user.role }}';
+        const mentions = Array.isArray(payload.mentions) ? payload.mentions : [];
+        payload.mentioned_me = mentions.includes(myName) || mentions.includes(myRole);
+        const isRelevant = target === 'geral' || target === myName || sender === myName;
+        if (!isRelevant) return;
+        if (!shouldProcessInternalEvent(payload)) return;
+
+        const conversationTarget = target === 'geral' ? 'geral' : (sender === myName ? (payload.conversation_target || target) : sender);
+        const isInternalOpen = document.getElementById('tab-internal')?.classList.contains('active');
+        const isSameConversation = typeof currentInternalTarget !== 'undefined' && currentInternalTarget === conversationTarget;
+
+        if (isSameConversation) await loadInternalChat();
+        rememberInternalConversationLatest(conversationTarget, payload.message_id);
+        if (sender !== myName) {
+            if (!(isInternalOpen && isSameConversation)) incrementInternalUnread(conversationTarget, payload);
+            if (!payload.internal_late_event) showInternalChatToast(payload, conversationTarget);
+        }
+    }
+
+    function confirmDeleteToast(onConfirm) {
+        const node = document.createElement('div');
+        node.style.display = 'flex';
+        node.style.flexDirection = 'column';
+        node.style.gap = '10px';
+        node.innerHTML = `
+            <div style="font-weight:700;">Apagar mensagem para todos?</div>
+            <div style="font-size:0.8rem; color:var(--text-muted);">Essa ação segue a janela permitida pelo WhatsApp.</div>
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <button type="button" data-action="cancel" style="padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text-main); cursor:pointer;">Cancelar</button>
+                <button type="button" data-action="confirm" style="padding:6px 10px; border-radius:6px; border:1px solid #4A1C22; background:#2A1114; color:#F15C6D; cursor:pointer;">Apagar</button>
+            </div>
+        `;
+        const toast = Toastify({
+            node,
+            duration: -1,
+            gravity: "top",
+            position: "right",
+            close: false,
+            style: {
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                boxShadow: "0 12px 30px rgba(0,0,0,0.35)"
+            }
+        });
+        node.querySelector('[data-action="cancel"]').onclick = () => toast.hideToast();
+        node.querySelector('[data-action="confirm"]').onclick = async () => {
+            toast.hideToast();
+            await onConfirm();
+        };
+        toast.showToast();
+    }
+
+    async function submitEdit() {
+        const newText = document.getElementById('edit-text-input').value;
+        if (!newText.trim() || !currentEditMsgId) return;
+        document.getElementById('editModal').style.display = 'none';
+        try {
+            const res = await fetch('/api/chat/edit', {
+                method: 'POST',
+                body: JSON.stringify({phone: currentPhone, message_id: currentEditMsgId, new_text: newText})
+            });
+            const data = await res.json();
+            if (data.status !== 'ok') {
+                notifyToast(`Erro: ${data.message}`, true);
+            } else {
+                notifyToast("Mensagem editada com sucesso.", false, 2000);
+            }
+        } catch(e) {
+            notifyToast("Falha de conexão ao editar mensagem.", true);
+        }
+        currentEditMsgId = null;
+    }
+
+    async function confirmDelete(msgId) {
+        confirmDeleteToast(async () => {
+            try {
+                const res = await fetch('/api/chat/delete', {
+                    method: 'POST',
+                    body: JSON.stringify({phone: currentPhone, message_id: msgId})
+                });
+                const data = await res.json();
+                if (data.status !== 'ok') {
+                    notifyToast(`Erro: ${data.message}`, true);
+                } else {
+                    notifyToast("Mensagem apagada para todos.", false, 2000);
+                }
+            } catch(e) {
+                notifyToast("Falha de conexão ao apagar mensagem.", true);
+            }
+        });
+    }
+

@@ -1,0 +1,90 @@
+services:
+  evolution_api:
+    image: evoapicloud/evolution-api
+    container_name: evolution_api
+    restart: always
+    mem_limit: ${EVOLUTION_API_MEM_LIMIT:-1024m}
+    mem_reservation: ${EVOLUTION_API_MEM_RESERVATION:-512m}
+    memswap_limit: ${EVOLUTION_API_MEMSWAP_LIMIT:-1024m}
+    ports:
+      - "8080:8080"
+    environment:
+      - TZ=America/Sao_Paulo
+      - SERVER_URL=http://evolution_api:8080
+      - DOCKER_ENV=true
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=${EVO_API_KEY}
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}?schema=evolution
+      - DATABASE_CLIENT_VERSION=v4
+      - CACHE_REDIS_ENABLED=false
+      - REDIS_ENABLED=true
+      - REDIS_URI=redis://redis:6379/1
+      - REDIS_PREFIX_KEY=evo_queue
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_GLOBAL_URL=http://bot:8000/webhook
+      - WEBHOOK_GLOBAL_EVENTS=APPLICATION_STARTUP,MESSAGES_UPSERT,MESSAGES_UPDATE
+      - WEBHOOK_GLOBAL_BASE64=true
+      - WEBHOOK_GLOBAL_AUTHORIZATION=Bearer ${WEBHOOK_SECRET}
+    depends_on:
+      - postgres_db
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: redis_crm
+    restart: always
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    mem_reservation: ${REDIS_MEM_RESERVATION:-128m}
+    memswap_limit: ${REDIS_MEMSWAP_LIMIT:-256m}
+    environment:
+      - TZ=America/Sao_Paulo
+
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: postgres_crm
+    restart: always
+    mem_limit: ${POSTGRES_MEM_LIMIT:-768m}
+    mem_reservation: ${POSTGRES_MEM_RESERVATION:-384m}
+    memswap_limit: ${POSTGRES_MEMSWAP_LIMIT:-768m}
+    environment:
+      - TZ=America/Sao_Paulo
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  bot:
+    build: .
+    container_name: bot
+    restart: always
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+    mem_limit: ${BOT_MEM_LIMIT:-768m}
+    mem_reservation: ${BOT_MEM_RESERVATION:-384m}
+    memswap_limit: ${BOT_MEMSWAP_LIMIT:-768m}
+    environment:
+      - TZ=America/Sao_Paulo
+    depends_on:
+      - evolution_api
+      - redis
+      - postgres_db
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - bot_data:/data
+      - ./static:/app/static
+      - ./templates:/app/templates
+      - ./logs:/app/logs
+    ports:
+      - "8000:8000"
+
+volumes:
+  pg_data:
+  bot_data:
