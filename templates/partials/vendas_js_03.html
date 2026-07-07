@@ -55,10 +55,54 @@
         const bg = document.getElementById('prof-bg').value;
         const primary = document.getElementById('prof-primary').value;
         const text = document.getElementById('prof-text').value;
-        document.documentElement.style.setProperty('--bg-base', bg, 'important');
-        document.documentElement.style.setProperty('--primary', primary, 'important');
-        document.documentElement.style.setProperty('--text-main', text, 'important');
+        const r = document.documentElement.style;
+        r.setProperty('--bg-base', bg, 'important');
+        r.setProperty('--primary', primary, 'important');
+        r.setProperty('--text-main', text, 'important');
+        if (window.ConsoleTheme) {
+            ConsoleTheme.setVar('--bg-0', bg);
+            ConsoleTheme.setVar('--bg-1', bg);
+            ConsoleTheme.setVar('--acc', primary);
+            ConsoleTheme.setVar('--txt', text);
+        }
     }
+
+    function cnnMarkTheme() {
+        const cur = (window.ConsoleTheme ? ConsoleTheme.current() : 'reator');
+        document.querySelectorAll('.cnn-theme-btn').forEach(function(b){
+            b.classList.toggle('active', b.getAttribute('data-theme') === cur);
+        });
+    }
+    function cnnSelectTheme(name) {
+        if (window.ConsoleTheme) { ConsoleTheme.reset(); ConsoleTheme.set(name); }
+        cnnMarkTheme();
+    }
+    function cnnResetTheme() {
+        if (window.ConsoleTheme) { ConsoleTheme.reset(); }
+        cnnMarkTheme();
+    }
+    function cnnBuildThemePicker() {
+        const fold = document.getElementById('settings-theme-fold');
+        if (!fold || document.getElementById('cnn-theme-picker')) return;
+        const body = fold.querySelector('.settings-fold-body') || fold;
+        const grid = body.querySelector('.preset-grid');
+        const names = [['reator','Reator'],['circuito','Circuito'],['cobre','Cobre'],['claro','Claro']];
+        const wrap = document.createElement('div');
+        wrap.id = 'cnn-theme-picker';
+        wrap.style.cssText = 'display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;';
+        names.forEach(function(n){
+            const b = document.createElement('button');
+            b.type = 'button'; b.className = 'btn cnn-theme-btn';
+            b.setAttribute('data-theme', n[0]);
+            b.style.cssText = 'flex:1; min-width:64px; padding:8px; font-size:0.72rem;';
+            b.textContent = n[1];
+            b.addEventListener('click', function(){ cnnSelectTheme(n[0]); });
+            wrap.appendChild(b);
+        });
+        if (grid) { body.insertBefore(wrap, grid); } else { body.insertBefore(wrap, body.firstChild); }
+        cnnMarkTheme();
+    }
+    document.addEventListener('DOMContentLoaded', cnnBuildThemePicker);
 
     async function saveProfile() { 
         let currentAvatar = '';

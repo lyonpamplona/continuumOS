@@ -1,0 +1,167 @@
+/* console-shell.css (R1) - Adota a casca do prototipo (rail + topbar + stage) sobre
+   a estrutura ativa SEM alterar hooks: reestiliza .topbar/.sidebar/.nav-item/.workspace
+   /.tab-content e faz a ponte de tokens para os 4 temas se aplicarem ao app inteiro.
+   Carregado por ultimo para vencer o CSS legado. */
+
+/* ---- Ponte de tokens: o app legado passa a herdar as cores do tema ativo ---- */
+:root {
+  --bg-base: var(--bg-0);
+  --bg-1: var(--bg-1); --bg-2: var(--bg-2); --bg-3: var(--bg-3);
+  --primary: var(--acc);
+  --primary-2: var(--acc-2);
+  --primary-hover: var(--acc-2);
+  --wa-green: var(--ok);
+  --text-main: var(--txt);
+  --text-muted: var(--txt-dim);
+  --danger: var(--bad);
+  --border: var(--line);
+  --border-2: var(--line-2);
+  --surface: var(--bg-2);
+  --surface-hover: var(--bg-3);
+  --font-main: var(--font-mono);
+  --font-disp: var(--font-disp);
+}
+
+/* garante fundo/grade do console mesmo com data-theme claro */
+body { background-color: var(--bg-0); color: var(--txt); }
+
+/* ---- Topbar (reaproveita <header class=topbar>) ---- */
+header.topbar {
+  height: 58px; background: var(--bg-1); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 14px; padding: 0 18px;
+}
+header.topbar .sys-clock { color: var(--txt-dim); letter-spacing: .08em; font-size: 13px; }
+header.topbar .brand-box { gap: 10px; }
+
+/* ---- Rail lateral (reaproveita .sidebar/.nav-menu/.nav-item) ---- */
+.layout { display: flex; min-height: 0; }
+.sidebar, .sidebar.collapsed {
+  background: var(--bg-1); border-right: 1px solid var(--line);
+  width: 74px; min-width: 74px; flex: 0 0 74px;
+  display: flex; flex-direction: column; align-items: center; padding: 14px 0;
+}
+.sidebar .nav-menu { display: flex; flex-direction: column; gap: 6px; width: 100%; align-items: center; }
+.sidebar .nav-item {
+  position: relative; width: 56px; height: 52px; display: grid; place-items: center;
+  color: var(--txt-mut); border-radius: 0; transition: color .2s var(--ease, ease);
+}
+.sidebar .nav-item:hover { color: var(--txt); background: transparent; }
+.sidebar .nav-item.active { color: var(--acc); background: transparent; }
+.sidebar .nav-item.active::before {
+  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+  background: var(--acc); box-shadow: 0 0 12px var(--glow);
+}
+/* label vira tooltip flutuante como no prototipo */
+.sidebar .nav-item .nav-lbl {
+  position: absolute; left: 70px; white-space: nowrap; background: var(--bg-3);
+  border: 1px solid var(--line-2); padding: 5px 9px; font-size: 11px;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--txt);
+  opacity: 0; transform: translateX(-6px); pointer-events: none;
+  transition: .2s var(--ease, ease); z-index: 40; border-radius: 2px;
+}
+.sidebar .nav-item:hover .nav-lbl { opacity: 1; transform: translateX(0); }
+.sidebar .nav-item .nav-badge {
+  position: absolute; top: 8px; right: 10px; min-width: 16px; height: 16px;
+  padding: 0 4px; border-radius: 8px; background: var(--acc); color: var(--acc-ink);
+  font-size: 10px; font-weight: 800; display: grid; place-items: center;
+}
+
+/* ---- Stage (reaproveita .workspace / .tab-content) ---- */
+.workspace { flex: 1; min-width: 0; min-height: 0; position: relative; background: var(--bg-0); }
+
+/* ---- Componentes: bisel e cores do console sobre classes legadas ---- */
+.panel, .settings-card {
+  background: var(--bg-1); border: 1px solid var(--line);
+}
+.panel-header {
+  background: var(--bg-1); border-bottom: 1px solid var(--line); color: var(--txt);
+}
+.btn {
+  background: var(--bg-2); border: 1px solid var(--line-2); color: var(--txt);
+  border-radius: 2px;
+}
+.btn:hover { border-color: var(--acc); color: var(--txt); }
+.btn-primary, .btn.btn-primary {
+  background: var(--acc); color: var(--acc-ink); border-color: var(--acc); font-weight: 700;
+}
+.btn-primary:hover { background: var(--acc-2); border-color: var(--acc-2); }
+.input-text, input.input-text, textarea.input-text, select.input-text {
+  background: var(--bg-2); border: 1px solid var(--line-2); color: var(--txt);
+}
+.input-text:focus { border-color: var(--acc); outline: none; }
+.avatar { background: var(--bg-3); color: var(--acc); }
+.dropdown { background: var(--bg-2); border: 1px solid var(--line-2); }
+.drop-item:hover { background: var(--bg-3); }
+.chip.active, .bucket-chip.active, .alpha-chip.active { border-color: var(--acc); color: var(--acc); }
+
+/* bolhas de chat no tom do console */
+.chat-area .bubble.out, .msg.out .bubble { background: var(--acc); color: var(--acc-ink); }
+
+/* svg do sprite acompanha o texto */
+svg.ic { vertical-align: middle; }
+
+/* ---- Command palette (Ctrl+K) ---- */
+.cmdk-overlay {
+  position: fixed; inset: 0; z-index: 9000; display: none;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
+  align-items: flex-start; justify-content: center; padding-top: 12vh;
+}
+.cmdk-overlay.on { display: flex; }
+.cmdk {
+  width: min(560px, 92vw); background: var(--bg-1); border: 1px solid var(--line-2);
+  clip-path: polygon(0 var(--bevel,12px), var(--bevel,12px) 0, 100% 0, 100% calc(100% - var(--bevel,12px)), calc(100% - var(--bevel,12px)) 100%, 0 100%);
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.cmdk-input {
+  width: 100%; background: transparent; border: 0; border-bottom: 1px solid var(--line);
+  padding: 16px 18px; font-size: 15px; color: var(--txt); font-family: var(--font-mono);
+}
+.cmdk-input:focus { outline: none; }
+.cmdk-list { max-height: 320px; overflow-y: auto; padding: 6px; }
+.cmdk-item {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer;
+  color: var(--txt-dim); border-radius: 2px;
+}
+.cmdk-item .k { font-size: 13px; color: var(--txt); }
+.cmdk-item .h { font-size: 11px; color: var(--txt-mut); margin-left: auto; text-transform: uppercase; letter-spacing: .06em; }
+.cmdk-item.sel, .cmdk-item:hover { background: var(--bg-3); color: var(--txt); }
+.cmdk-item.sel { box-shadow: inset 3px 0 0 var(--acc); }
+.cmdk-empty { padding: 18px; color: var(--txt-mut); font-size: 13px; text-align: center; }
+
+/* ===== R2: componentes base ===== */
+/* Modais nativos (.modal/.modal-content) adotam o bisel do console */
+.modal { background: rgba(0,0,0,.6); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.modal-content {
+  background: var(--bg-1); border: 1px solid var(--line-2); border-radius: 0;
+  clip-path: polygon(0 var(--bevel,12px), var(--bevel,12px) 0, 100% 0, 100% calc(100% - var(--bevel,12px)), calc(100% - var(--bevel,12px)) 100%, 0 100%);
+}
+/* Selects nativos no visual do console */
+select.input-text, select.contacts-list-select, select.bulk-control {
+  background: var(--bg-2); border: 1px solid var(--line-2); color: var(--txt);
+  height: 40px; padding: 0 12px; appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--txt-mut) 50%), linear-gradient(135deg, var(--txt-mut) 50%, transparent 50%);
+  background-position: calc(100% - 16px) center, calc(100% - 11px) center; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+select.input-text:focus { border-color: var(--acc); outline: none; }
+select.input-text option { background: var(--bg-2); color: var(--txt); }
+/* Botao icone do modal do prototipo */
+.icbtn { width: 34px; height: 34px; display: grid; place-items: center; color: var(--txt-mut); border: 1px solid transparent; }
+.icbtn:hover { color: var(--txt); border-color: var(--line-2); }
+/* variantes de botao do prototipo, caso ainda nao existam */
+.btn.pri { background: var(--acc); color: var(--acc-ink); border-color: var(--acc); font-weight: 700; }
+.btn.pri:hover { background: var(--acc-2); border-color: var(--acc-2); }
+.btn.bad { background: var(--bad); color: #fff; border-color: var(--bad); font-weight: 700; }
+
+/* ===== R7: seletor de tema nomeado (aba Perfil) ===== */
+.cnn-theme-btn { transition: border-color .18s, color .18s, box-shadow .18s; }
+.cnn-theme-btn.active { border-color: var(--acc) !important; color: var(--acc) !important; box-shadow: inset 0 0 0 1px var(--acc); }
+
+
+/* ===== FIX expansao do menu lateral (toggleSidebar) ===== */
+.sidebar.open { width: 214px; min-width: 214px; flex: 0 0 214px; align-items: stretch; }
+.sidebar.open .nav-menu { align-items: stretch; padding: 0 8px; gap: 4px; }
+.sidebar.open .nav-item { width: 100%; height: 44px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 0 14px; border-radius: 4px; }
+.sidebar.open .nav-item.active { background: color-mix(in srgb, var(--acc) 12%, transparent); }
+.sidebar.open .nav-item .nav-lbl { position: static; opacity: 1; transform: none; background: transparent; border: 0; padding: 0; margin: 0; text-transform: none; letter-spacing: .02em; font-size: 13px; pointer-events: auto; color: inherit; z-index: auto; white-space: nowrap; }
+.sidebar.open .nav-item .nav-badge { position: static; top: auto; right: auto; margin-left: auto; }
+.sidebar.open #cdock-nav svg { flex: 0 0 auto; }

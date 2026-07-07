@@ -1,0 +1,127 @@
+/* ===== R3: Tela de Atendimentos (Blueprint Console) =====
+   Reskin escopado em #tab-atendimentos. Preserva todos os IDs e handlers.
+   IDs preservados: col-list, col-chat, col-info, ativos-list, search-input,
+   chat-header, chat-history, chat-controls, chat-input, client-tags-box, etc. */
+
+/* Layout de 3 colunas (lista / chat / info) */
+#tab-atendimentos.tab-content.active {
+  display: grid; grid-template-columns: 340px 1fr 300px; gap: 12px; padding: 12px;
+  min-height: 0; height: 100%; box-sizing: border-box;
+}
+#tab-atendimentos .panel-list,
+#tab-atendimentos .panel-chat,
+#tab-atendimentos .panel-info {
+  width: auto; flex: initial; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* ---- Coluna: lista de ativos ---- */
+#tab-atendimentos .active-search-header {
+  padding: 12px 14px; border-bottom: 1px solid var(--line); gap: 8px; align-items: center;
+}
+#tab-atendimentos .active-search-box { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+#tab-atendimentos #search-input {
+  flex: 1; min-width: 0; height: 40px; background: var(--bg-2); border: 1px solid var(--line);
+  color: var(--txt); padding: 0 12px; font-size: 13px; border-radius: 0;
+}
+#tab-atendimentos #search-input:focus { border-color: var(--acc); outline: none; }
+#tab-atendimentos #ativos-list { flex: 1; overflow-y: auto; padding: 8px; min-height: 0; }
+
+/* Cabecalhos de secao/dia da fila */
+#tab-atendimentos .queue-section-header {
+  position: sticky; top: 0; z-index: 12; padding: 10px 12px; background: var(--bg-1);
+  border-bottom: 1px solid var(--line); color: var(--acc);
+  font-family: var(--font-disp); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+}
+#tab-atendimentos .queue-section-title .material-symbols-outlined,
+#tab-atendimentos .queue-section-title svg.ic { color: var(--acc); }
+#tab-atendimentos .queue-day-header {
+  padding: 7px 12px; background: transparent; border-bottom: 1px solid var(--line);
+  color: var(--txt-mut); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+}
+
+/* Linhas de contato (.contact-card.contact-item) no visual .lrow */
+#tab-atendimentos .contact-card {
+  background: transparent; border: 1px solid transparent; border-bottom: 1px solid transparent;
+  border-radius: 0; padding: 11px 12px; margin: 2px 0; gap: 12px; transition: var(--dur);
+}
+#tab-atendimentos .contact-card:hover { background: var(--bg-2); border-color: var(--line); }
+#tab-atendimentos .contact-card.active {
+  background: var(--bg-2); border-color: var(--acc); border-left: 1px solid var(--acc); padding-left: 12px;
+}
+#tab-atendimentos .contact-card.pendente {
+  border-left: 2px solid var(--ok); padding-left: 11px;
+}
+#tab-atendimentos .contact-card .card-title { font-size: 13px; font-weight: 700; color: var(--txt); }
+#tab-atendimentos .contact-card .card-meta { font-size: 11px; color: var(--txt-mut); }
+
+/* ---- Coluna: chat ---- */
+#tab-atendimentos #chat-header {
+  padding: 12px 16px; border-bottom: 1px solid var(--line); gap: 12px;
+}
+#tab-atendimentos #chat-title-bar { font-family: var(--font-disp); font-weight: 700; font-size: 15px; color: var(--txt); }
+#tab-atendimentos #chat-history {
+  flex: 1; overflow-y: auto; padding: 20px; gap: 12px; background: var(--bg-1); background-image: none;
+}
+#tab-atendimentos .empty-state { color: var(--txt-mut); }
+
+/* Bolhas */
+#tab-atendimentos .msg-bubble {
+  max-width: 74%; padding: 11px 14px; font-size: 13px; line-height: 1.5; border-radius: 0; position: relative;
+}
+/* Entrada: cliente / bot / sistema */
+#tab-atendimentos .msg-bubble.msg-client,
+#tab-atendimentos .msg-bubble.msg-bot,
+#tab-atendimentos .msg-bubble.msg-system {
+  align-self: flex-start; background: var(--bg-2); border: 1px solid var(--line); color: var(--txt);
+  clip-path: polygon(0 8px, 8px 0, 100% 0, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+#tab-atendimentos .msg-bubble.msg-system {
+  align-self: center; background: transparent; border: 1px dashed var(--line-2); color: var(--txt-mut); font-size: 11px;
+}
+#tab-atendimentos .msg-bubble.msg-bot { border-left: 2px solid var(--info); }
+/* Saida: vendedor */
+#tab-atendimentos .msg-bubble.msg-seller {
+  align-self: flex-end; color: var(--txt);
+  background: color-mix(in srgb, var(--acc) 16%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--acc) 40%, var(--line));
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+/* Composer */
+#tab-atendimentos .input-area { border-top: 1px solid var(--line); padding: 12px; background: var(--bg-1); }
+#tab-atendimentos .chat-input-box { display: flex; gap: 8px; align-items: center; }
+#tab-atendimentos #chat-input {
+  flex: 1; height: 44px; background: var(--bg-2); border: 1px solid var(--line); color: var(--txt);
+  padding: 0 14px; font-size: 13px; border-radius: 0 !important;
+}
+#tab-atendimentos #chat-input:focus { border-color: var(--acc); outline: none; }
+#tab-atendimentos .chat-input-box .btn {
+  border-radius: 0 !important; width: 40px !important; height: 44px !important;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--txt-dim);
+}
+#tab-atendimentos .chat-input-box .btn:hover { color: var(--acc); border-color: var(--line-2); }
+#tab-atendimentos .btn-send {
+  width: 44px; height: 44px; background: var(--acc); color: var(--acc-ink); border: none; border-radius: 0;
+  clip-path: polygon(0 6px, 6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);
+}
+#tab-atendimentos .btn-send:hover { background: var(--acc-2); }
+#tab-atendimentos .macros { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+
+/* ---- Coluna: info ---- */
+#tab-atendimentos .panel-info .panel-header { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+#tab-atendimentos .panel-info .form-group { margin-bottom: 14px; }
+#tab-atendimentos .panel-info .form-group > label {
+  display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--txt-mut); margin-bottom: 6px;
+}
+#tab-atendimentos .tag-box {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 0; padding: 10px; min-height: 40px;
+}
+#tab-atendimentos #info-phone { color: var(--acc) !important; }
+
+/* Responsivo: some com a coluna de info em telas menores */
+@media (max-width: 1200px) {
+  #tab-atendimentos.tab-content.active { grid-template-columns: 300px 1fr; }
+  #tab-atendimentos .panel-info { display: none; }
+}

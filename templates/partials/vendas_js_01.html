@@ -10,7 +10,7 @@
     const OPEN_ATTENDANCE_ALERT_ENABLED = {{ 'true' if user.role.startswith('vendas') else 'false' }};
     let allTags = []; let currentClientTags = []; let allContactLists = []; let currentClientLists = []; let lastActiveListState = null; let currentMessageCount = 0;
     let isMobile = window.innerWidth <= 1024; let currentInternalTarget = 'geral'; let currentInternalReplyId = null; let internalMessageCache = {};
-    let calDate = new Date(); let selectedDateStr = null; let monthEvents = [];
+    let calDate = new Date(); let selectedDateStr = null; let monthEvents = []; let calView = 'month'; let monthEventsAll = []; let agStatusFilter = '';
     let currentReplyId = null; let currentReactionMsgId = null; let currentForwardMsgId = null;
     let currentEditMsgId = null;
     const PANEL_TAB_STORAGE_KEY = 'continnumOS:panelActiveTab:{{ user.role }}';
@@ -294,6 +294,7 @@
             loadStatusHistory(false);
         }
         if(tabId === 'tab-tools') loadManageSnippets();
+        if(tabId === 'tab-agenda') renderCalendar();
     }
 
     function filterList(val) {

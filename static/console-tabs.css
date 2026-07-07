@@ -1,0 +1,151 @@
+/* ===== R4: Contatos, Chat interno, Agenda/Atalhos e Perfil =====
+   Reskin escopado por aba. CSS-only: preserva todos os IDs e handlers. */
+
+/* ---------- TAB CONTATOS (#tab-carteira) ---------- */
+#tab-carteira.tab-content.active { display: flex; flex-direction: column; padding: 0; min-height: 0; height: 100%; }
+#tab-carteira .contacts-toolbar-header { border-bottom: 1px solid var(--line); padding: 12px 16px; }
+#tab-carteira .contacts-title { font-family: var(--font-disp); font-weight: 700; font-size: 15px; color: var(--txt); display: flex; align-items: center; gap: 8px; }
+#tab-carteira .contacts-title .material-symbols-outlined, #tab-carteira .contacts-title svg.ic { color: var(--acc); }
+#tab-carteira .contacts-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+#tab-carteira .contacts-action-btn { font-size: 12px; }
+#tab-carteira .contacts-filter-row { display: flex; gap: 8px; margin-top: 12px; }
+#tab-carteira .contact-search-field {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+  background: var(--bg-2); border: 1px solid var(--line); height: 40px; padding: 0 12px;
+}
+#tab-carteira .contact-search-field:focus-within { border-color: var(--acc); }
+#tab-carteira .contact-search-field .material-symbols-outlined, #tab-carteira .contact-search-field svg.ic { color: var(--txt-mut); }
+#tab-carteira #search-contact-input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--txt); font-size: 13px; }
+/* Chips de bucket / alfabeto */
+#tab-carteira .contact-bucket-bar { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+#tab-carteira .bucket-chip {
+  font-size: 12px; background: var(--bg-2); border: 1px solid var(--line); color: var(--txt-dim); border-radius: 0;
+}
+#tab-carteira .bucket-chip:hover { border-color: var(--line-2); color: var(--txt); }
+#tab-carteira .bucket-chip.active { background: color-mix(in srgb, var(--acc) 18%, var(--bg-2)); border-color: var(--acc); color: var(--txt); }
+#tab-carteira .contact-alpha-bar { display: flex; gap: 4px; flex-wrap: wrap; padding: 6px 16px; }
+#tab-carteira .contact-bulk-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+#tab-carteira .bulk-count-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--acc); border: 1px solid var(--line); padding: 5px 10px; background: var(--bg-2); }
+/* Cartoes de contato */
+#tab-carteira .contact-card-advanced {
+  background: var(--bg-1); border: 1px solid var(--line); border-radius: 0; padding: 12px;
+  clip-path: polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+  transition: var(--dur);
+}
+#tab-carteira .contact-card-advanced:hover { border-color: var(--acc); }
+#tab-carteira .contact-card-advanced .card-title { font-size: 13px; font-weight: 700; color: var(--txt); }
+#tab-carteira .contact-card-advanced .card-meta { font-size: 11px; color: var(--txt-mut); }
+#tab-carteira .floating-btn {
+  background: var(--acc); color: var(--acc-ink); border: none;
+  clip-path: polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+}
+
+/* ---------- TAB CHAT INTERNO (#tab-internal) ---------- */
+#tab-internal.tab-content.active { display: grid; grid-template-columns: 300px 1fr; gap: 12px; padding: 12px; min-height: 0; height: 100%; box-sizing: border-box; }
+#tab-internal .panel-list, #tab-internal .panel-chat { width: auto; flex: initial; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#tab-internal .contact-card { background: transparent; border: 1px solid transparent; border-bottom: 1px solid transparent; border-radius: 0; padding: 11px 12px; margin: 2px 6px; gap: 12px; transition: var(--dur); }
+#tab-internal .contact-card:hover { background: var(--bg-2); border-color: var(--line); }
+#tab-internal .contact-card.active { background: var(--bg-2); border-color: var(--acc); }
+#tab-internal .contact-card .card-title { font-size: 13px; font-weight: 700; color: var(--txt); }
+#tab-internal #internal-chat-history { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: var(--bg-1); background-image: none; }
+#tab-internal .msg-bubble { max-width: 74%; padding: 11px 14px; font-size: 13px; line-height: 1.5; border-radius: 0; position: relative; }
+#tab-internal .msg-bubble.msg-client, #tab-internal .msg-bubble.msg-bot { align-self: flex-start; background: var(--bg-2); border: 1px solid var(--line); color: var(--txt); clip-path: polygon(0 8px, 8px 0, 100% 0, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+#tab-internal .msg-bubble.msg-system { align-self: center; background: transparent; border: 1px dashed var(--line-2); color: var(--txt-mut); font-size: 11px; }
+#tab-internal .msg-bubble.msg-seller { align-self: flex-end; color: var(--txt); background: color-mix(in srgb, var(--acc) 16%, var(--bg-2)); border: 1px solid color-mix(in srgb, var(--acc) 40%, var(--line)); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+#tab-internal .internal-chat-input { border-top: 1px solid var(--line); padding: 12px; display: flex; gap: 8px; align-items: center; background: var(--bg-1); }
+#tab-internal #internal-input { flex: 1; height: 44px; background: var(--bg-2); border: 1px solid var(--line); color: var(--txt); padding: 0 14px; font-size: 13px; border-radius: 0 !important; }
+#tab-internal #internal-input:focus { border-color: var(--acc); outline: none; }
+#tab-internal .internal-chat-input .btn { border-radius: 0 !important; width: 40px !important; height: 44px !important; background: var(--bg-2); border: 1px solid var(--line); color: var(--txt-dim); }
+#tab-internal .internal-chat-input .btn:hover { color: var(--acc); border-color: var(--line-2); }
+#tab-internal .btn-send { width: 44px; height: 44px; background: var(--acc); color: var(--acc-ink); border: none; border-radius: 0; clip-path: polygon(0 6px, 6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%); }
+#tab-internal .btn-send:hover { background: var(--acc-2); }
+
+/* ---------- TAB AGENDA / ATALHOS (#tab-tools) ---------- */
+#tab-tools.tab-content.active { display: grid; grid-template-columns: 1fr 340px; gap: 12px; padding: 12px; min-height: 0; height: 100%; box-sizing: border-box; }
+#tab-tools .panel-chat, #tab-tools .panel-info { width: auto; flex: initial; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#tab-tools .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
+#tab-tools #cal-days .cal-cell, #tab-tools #cal-days > div {
+  aspect-ratio: 1; display: grid; place-items: center; font-size: 13px; border: 1px solid var(--line); background: var(--bg-2); cursor: pointer; transition: var(--dur);
+}
+#tab-tools #cal-days > div:hover { border-color: var(--acc); }
+#tab-tools #cal-days .today, #tab-tools #cal-days .selected, #tab-tools #cal-days .active { background: color-mix(in srgb, var(--acc) 20%, var(--bg-2)); border-color: var(--acc); color: var(--txt); }
+#tab-tools #cal-days .has-event::after { content: ""; width: 4px; height: 4px; background: var(--acc); border-radius: 50%; margin-top: 2px; }
+#tab-tools #cal-month-label { font-family: var(--font-disp); font-weight: 700; color: var(--txt); }
+
+/* ---------- TAB PERFIL (#tab-settings) ---------- */
+#tab-settings .settings-card { background: var(--bg-1); border: 1px solid var(--line-2); border-radius: 0; clip-path: polygon(0 12px, 12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); }
+#tab-settings .settings-avatar-block { display: flex; flex-direction: column; align-items: center; padding: 20px 0 8px; }
+#tab-settings .settings-avatar-block .avatar { box-shadow: 0 0 0 2px var(--line-2) !important; }
+#tab-settings .settings-fold { border: 1px solid var(--line); background: var(--bg-2); margin-bottom: 12px; }
+#tab-settings .settings-fold-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: none; border: 0; color: var(--txt); font-family: var(--font-disp); font-weight: 600; font-size: 13px; cursor: pointer; }
+#tab-settings .settings-fold-header .material-symbols-outlined:first-child, #tab-settings .settings-fold-header svg.ic { color: var(--acc); }
+#tab-settings .settings-fold-body { padding: 0 14px 14px; }
+#tab-settings .preset-grid .btn, #tab-settings .settings-notify-grid .btn { font-size: 12px; }
+#tab-settings input[type="color"].input-text { padding: 4px; height: 44px; background: var(--bg-2); border: 1px solid var(--line); }
+
+
+/* ===== FIX chat interno wrapper-2col espremido no canto (dashboard admin) ===== */
+#tab-internal.tab-content.active { grid-template-rows: minmax(0, 1fr); }
+#tab-internal .wrapper-2col { grid-column: 1 / -1; display: grid; grid-template-columns: 300px 1fr; gap: 12px; height: 100%; min-height: 0; box-sizing: border-box; }
+#tab-internal .wrapper-2col > .panel-list,
+#tab-internal .wrapper-2col > .panel-chat { width: auto; min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+
+
+/* r10: menu "Mais" da barra de Contatos (declutter) */
+.contacts-more-menu{ position:relative; display:inline-block; }
+.contacts-more-menu > summary{ list-style:none; cursor:pointer; }
+.contacts-more-menu > summary::-webkit-details-marker{ display:none; }
+.contacts-more-menu > summary::marker{ content:""; }
+.contacts-more-pop{ position:absolute; right:0; top:calc(100% + 6px); background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:6px; min-width:210px; z-index:60; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+.contacts-more-pop .btn{ justify-content:flex-start; width:100%; }
+
+
+/* ===== r11: EVOLUCAO DA AGENDA (visoes mes/semana/dia + aba dedicada vendas) ===== */
+/* Aba Agenda dedicada no painel de vendas (movida de Ajustes) */
+#tab-agenda.vendas-agenda.tab-content.active { display: flex; flex-direction: column; padding: 12px; min-height: 0; height: 100%; box-sizing: border-box; }
+#tab-agenda.vendas-agenda .panel-chat { width: auto; flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#tab-agenda.vendas-agenda .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
+#tab-agenda.vendas-agenda #cal-days .cal-day, #tab-agenda.vendas-agenda #cal-days > div { aspect-ratio: 1; display: grid; place-items: center; font-size: 13px; border: 1px solid var(--line, var(--border)); background: var(--bg-2, var(--surface)); cursor: pointer; }
+#tab-agenda.vendas-agenda #cal-days > div:hover { border-color: var(--acc, var(--primary)); }
+#tab-agenda.vendas-agenda #cal-days .today, #tab-agenda.vendas-agenda #cal-days .active { background: color-mix(in srgb, var(--acc, var(--primary)) 20%, transparent); border-color: var(--acc, var(--primary)); }
+#tab-agenda.vendas-agenda #cal-days .has-event::after { content: ""; width: 4px; height: 4px; background: var(--acc, var(--primary)); border-radius: 50%; margin-top: 2px; }
+#tab-agenda.vendas-agenda #cal-month-label { font-family: var(--font-disp, inherit); font-weight: 700; }
+
+/* Seletor de visao (compartilhado admin + vendas) */
+.agenda-view-switch { display: flex; gap: 6px; margin-bottom: 12px; }
+.agenda-view-btn { padding: 5px 14px; font-size: 0.8rem; }
+.agenda-view-btn.active { background: var(--primary, var(--acc)); color: #fff; border-color: var(--primary, var(--acc)); }
+
+/* Visoes de lista semana/dia (compartilhado) */
+#agenda-list-view { display: block; }
+.agenda-day-section { border: 1px solid var(--border, var(--line)); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.agenda-day-section.today { border-color: var(--primary, var(--acc)); }
+.agenda-day-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--surface, var(--bg-2)); cursor: pointer; font-weight: 700; font-size: 0.85rem; }
+.agenda-day-head:hover { background: color-mix(in srgb, var(--primary, var(--acc)) 15%, transparent); }
+.agenda-day-name { text-transform: capitalize; }
+.agenda-day-count { font-size: 0.72rem; color: var(--text-muted, var(--txt-dim)); font-weight: 400; }
+.agenda-day-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* ===== r12: grade de horarios (agenda dia/semana) ===== */
+.agenda-hourgrid { display: grid; grid-template-columns: 52px repeat(var(--ag-cols,1), minmax(96px,1fr)); gap: 1px; background: var(--border, var(--line, #262626)); border: 1px solid var(--border, var(--line, #262626)); border-radius: 8px; overflow: auto; max-height: 540px; margin-top: 8px; }
+.agenda-hg-corner, .agenda-hg-dayhead, .agenda-hg-hour, .agenda-hg-cell { background: var(--surface, var(--bg-2, #111)); }
+.agenda-hg-corner { position: sticky; top: 0; left: 0; z-index: 3; }
+.agenda-hg-dayhead { padding: 6px 4px; text-align: center; font-size: 0.72rem; font-weight: 700; line-height: 1.15; text-transform: capitalize; position: sticky; top: 0; z-index: 2; }
+.agenda-hg-dayhead.today { color: var(--primary, var(--acc, #ff6a00)); }
+.agenda-hg-hour { padding: 4px 6px; font-size: 0.68rem; color: var(--text-muted, var(--txt-dim, #888)); text-align: right; white-space: nowrap; }
+.agenda-hg-cell { min-height: 36px; padding: 3px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.agenda-hg-cell:hover { background: color-mix(in srgb, var(--primary, var(--acc, #ff6a00)) 8%, var(--surface, var(--bg-2, #111))); }
+.agenda-hg-chip { font-size: 0.68rem; line-height: 1.25; padding: 2px 5px; border-radius: 4px; background: color-mix(in srgb, var(--primary, var(--acc, #ff6a00)) 20%, transparent); border-left: 2px solid var(--primary, var(--acc, #ff6a00)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.agenda-hg-chip.status-contatado { background: color-mix(in srgb, #22c55e 20%, transparent); border-left-color: #22c55e; opacity: 0.85; }
+.agenda-hg-chip.status-cancelado { text-decoration: line-through; opacity: 0.6; }
+.agenda-hg-chip-time { font-weight: 700; }
+
+/* ===== r13: reagendamento por arrastar (drag-and-drop) ===== */
+.agenda-hg-chip { cursor: grab; }
+.agenda-hg-chip:active { cursor: grabbing; }
+.agenda-hg-cell.ag-drop-hot { outline: 2px dashed var(--primary, var(--acc, #ff6a00)); outline-offset: -2px; }
+
+/* ===== r14: agenda de equipe (filtro por responsavel) ===== */
+.agenda-hg-chip-who { display: inline-block; font-weight: 700; color: var(--primary, var(--acc, #ff6a00)); margin-right: 3px; }
+.agenda-team-filter-row { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; flex-wrap: wrap; }
+.agenda-team-select { background: var(--surface, var(--bg-2, #111)); color: var(--text, #eee); border: 1px solid var(--border, var(--line, #262626)); border-radius: 6px; padding: 4px 8px; font-size: 0.78rem; }

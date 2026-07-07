@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-theme="reator">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Central de Ajuda - continnumOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #070707;
+  --bg-1: #0d0d0f;
+  --bg-2: #141417;
+  --bg-3: #1c1c20;
+  --primary: #ff6a00;
+  --primary-2: #ffb020;
+  --text: #f2ede6;
+  --muted: #9a9188;
+  --border: #2a2a30;
+  --border-2: #3a3a42;
+  --ok: #2ecc71;
+  --warn: #ffb020;
+  --bad: #ff4d5e;
+  --font: 'JetBrains Mono', ui-monospace, monospace;
+  --disp: 'Space Grotesk', 'JetBrains Mono', sans-serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image: linear-gradient(rgba(255,106,0,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,106,0,.04) 1px, transparent 1px);
+  background-size: 34px 34px;
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.65;
+  font-size: 14px;
+}
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 22px; background: rgba(10,10,12,.92); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark {
+  width: 34px; height: 34px; display: grid; place-items: center;
+  background: var(--primary); color: #0a0705; font-weight: 800; font-size: 1.1rem;
+  clip-path: polygon(0 6px, 6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);
+}
+.brand-name { font-family: var(--disp); font-weight: 700; font-size: 1.05rem; }
+.brand-sub { color: var(--muted); font-size: .62rem; letter-spacing: .1em; text-transform: uppercase; }
+.topbar-actions a {
+  font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+  border: 1px solid var(--border-2); padding: 8px 14px; color: var(--text);
+}
+.topbar-actions a:hover { border-color: var(--primary); text-decoration: none; }
+.hero {
+  padding: 48px 22px 30px; max-width: 1120px; margin: 0 auto;
+}
+.hero .kicker { color: var(--primary); font-size: .66rem; letter-spacing: .3em; text-transform: uppercase; }
+.hero h1 { font-family: var(--disp); font-size: 2rem; margin: 10px 0 8px; }
+.hero p { color: var(--muted); max-width: 720px; }
+.layout {
+  max-width: 1120px; margin: 0 auto; padding: 0 22px 80px;
+  display: grid; grid-template-columns: 240px 1fr; gap: 34px; align-items: start;
+}
+#toc {
+  position: sticky; top: 74px; align-self: start;
+  border: 1px solid var(--border); background: var(--bg-1); padding: 14px;
+}
+#toc h4 { margin: 0 0 10px; font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+#toc a { display: block; padding: 6px 8px; color: var(--text); font-size: .78rem; border-left: 2px solid transparent; }
+#toc a:hover { border-left-color: var(--primary); background: var(--bg-2); text-decoration: none; }
+.toc-toggle { display: none; }
+.content section {
+  border: 1px solid var(--border); background: var(--bg-1);
+  padding: 24px 26px; margin-bottom: 22px;
+}
+.content h2 { font-family: var(--disp); font-size: 1.32rem; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+.content h2 .num { color: var(--primary); font-size: .9rem; border: 1px solid var(--primary); width: 26px; height: 26px; display: grid; place-items: center; }
+.content h3 { font-size: 1rem; margin: 22px 0 6px; color: var(--primary-2); }
+.content p, .content li { color: #d8d2ca; }
+.content strong { color: var(--text); }
+.lead { color: var(--muted) !important; margin-top: 0; }
+.step-list { counter-reset: step; list-style: none; padding: 0; }
+.step-list li { position: relative; padding: 8px 0 8px 40px; border-bottom: 1px dashed var(--border); }
+.step-list li:last-child { border-bottom: 0; }
+.step-list li::before {
+  counter-increment: step; content: counter(step);
+  position: absolute; left: 0; top: 8px; width: 26px; height: 26px;
+  background: var(--bg-3); border: 1px solid var(--border-2); color: var(--primary);
+  display: grid; place-items: center; font-size: .74rem; font-weight: 700;
+}
+.tool-card {
+  border: 1px solid var(--border); border-left: 3px solid var(--primary);
+  background: var(--bg-2); padding: 14px 16px; margin: 12px 0;
+}
+.tool-card .tt { font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.tool-card .role { font-size: .58rem; letter-spacing: .12em; text-transform: uppercase; color: #0a0705; background: var(--primary-2); padding: 2px 7px; }
+.tool-card p { margin: 8px 0 0; font-size: .84rem; }
+.note {
+  border: 1px solid var(--border-2); border-left: 3px solid var(--primary-2);
+  background: rgba(255,176,32,.06); padding: 12px 14px; margin: 14px 0; font-size: .84rem;
+}
+.note.ok { border-left-color: var(--ok); background: rgba(46,204,113,.07); }
+.note.warn { border-left-color: var(--warn); }
+table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: .82rem; }
+th, td { border: 1px solid var(--border); padding: 9px 11px; text-align: left; vertical-align: top; }
+th { background: var(--bg-3); color: var(--muted); text-transform: uppercase; font-size: .64rem; letter-spacing: .1em; }
+.faq { border-bottom: 1px dashed var(--border); padding: 12px 0; }
+.faq:last-child { border-bottom: 0; }
+.faq .q { font-weight: 700; color: var(--primary-2); }
+.faq .a { color: #d8d2ca; margin-top: 5px; font-size: .86rem; }
+.pill { display: inline-block; font-size: .6rem; letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; border: 1px solid var(--border-2); color: var(--muted); margin-left: 6px; }
+footer { max-width: 1120px; margin: 0 auto; padding: 24px 22px 60px; color: var(--muted); font-size: .74rem; border-top: 1px solid var(--border); }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .toc-toggle { display: inline-block; background: var(--bg-2); border: 1px solid var(--border-2); color: var(--text); padding: 10px 14px; width: 100%; text-align: left; font-family: var(--font); }
+  #toc { position: static; display: none; }
+  #toc.open { display: block; }
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">C</div>
+    <div>
+      <div class="brand-name">continnumOS</div>
+      <div class="brand-sub">Central de Ajuda</div>
+    </div>
+  </div>
+  <div class="topbar-actions"><a href="/login">Entrar no sistema</a></div>
+</div>
+
+<div class="hero">
+  <div class="kicker">// documentacao do cliente</div>
+  <h1>Como usar o continnumOS</h1>
+  <p>Guia completo e didatico do CRM de atendimento via WhatsApp: passo a passo de uso, o que cada funcao e ferramenta faz e como resolver os problemas mais comuns. Use o indice ao lado para navegar.</p>
+</div>
+
+<div class="layout">
+  <button class="toc-toggle" id="toc-toggle">Indice - toque para abrir</button>
+  <nav id="toc">
+    <h4>Indice</h4>
+    <a href="#primeiros-passos">1. Primeiros passos</a>
+    <a href="#paineis">2. Os dois paineis</a>
+    <a href="#atendimento">3. Atendimento ao cliente</a>
+    <a href="#chat-interno">4. Chat interno da equipe</a>
+    <a href="#menu-ferramentas">5. Menu Ferramentas</a>
+    <a href="#organizar-contatos">6. Organizar Contatos</a>
+    <a href="#limpeza">7. Limpeza</a>
+    <a href="#usuarios">8. Usuarios, papeis e permissoes</a>
+    <a href="#vendas-tools">9. Ferramentas do vendedor</a>
+    <a href="#problemas">10. Solucao de problemas</a>
+    <a href="#glossario">11. Glossario rapido</a>
+  </nav>
+
+  <div class="content">
+
+    <section id="primeiros-passos">
+      <h2><span class="num">1</span> Primeiros passos</h2>
+      <p class="lead">Acesso ao sistema e primeira configuracao.</p>
+      <ol class="step-list">
+        <li><strong>Entrar:</strong> acesse a tela de login, informe usuario e senha fornecidos pelo administrador e clique em Entrar.</li>
+        <li><strong>Painel inicial:</strong> apos entrar voce cai no painel correspondente ao seu perfil (atendimento ou administracao).</li>
+        <li><strong>Menu lateral:</strong> a barra da esquerda concentra a navegacao. Clique no botao de menu para expandir e ver os rotulos; clique de novo para recolher e ganhar espaco.</li>
+        <li><strong>Tema e perfil:</strong> em Ferramentas voce ajusta foto, tema de cores e notificacoes (som e aviso na area de trabalho).</li>
+      </ol>
+      <div class="note">Dica: se voce acabou de receber uma atualizacao do sistema, faca um recarregamento forcado (Ctrl + Shift + R) para limpar o cache e carregar a versao nova de tela e menus.</div>
+    </section>
+
+    <section id="paineis">
+      <h2><span class="num">2</span> Os dois paineis</h2>
+      <p>O sistema tem dois ambientes, escolhidos automaticamente pelo seu perfil:</p>
+      <div class="tool-card">
+        <div class="tt">Painel de Atendimento <span class="role">Vendas / Financeiro / Engenharia</span></div>
+        <p>Foco no dia a dia: conversas de WhatsApp, contatos, chat interno da equipe, agenda de tarefas e respostas rapidas. E o ambiente do operador.</p>
+      </div>
+      <div class="tool-card">
+        <div class="tt">Console de Administracao <span class="role">Admin</span></div>
+        <p>Alem do atendimento, da acesso a gestao de usuarios, papeis e permissoes, conexoes de WhatsApp por setor, comunicados, scripts do bot e manutencao do sistema.</p>
+      </div>
+      <div class="note ok">Cada usuario ve apenas o que o seu papel permite. Criar um usuario de Vendas, Financeiro ou Engenharia abre o painel de atendimento - nao o console de administracao.</div>
+    </section>
+
+    <section id="atendimento">
+      <h2><span class="num">3</span> Atendimento ao cliente</h2>
+      <p class="lead">Aba Atendimentos - onde as conversas de WhatsApp acontecem.</p>
+      <ol class="step-list">
+        <li><strong>Lista de conversas:</strong> a coluna da esquerda mostra os atendimentos. Clique em um para abrir o historico completo do cliente.</li>
+        <li><strong>Responder:</strong> digite na caixa inferior e envie. E possivel anexar midia (imagem, documento, audio).</li>
+        <li><strong>Contato 360:</strong> a coluna da direita traz dados do cliente, etiquetas, historico e acoes rapidas.</li>
+        <li><strong>Assumir / transferir:</strong> use as acoes do topo da conversa para assumir o atendimento ou encaminhar para outro setor.</li>
+        <li><strong>Apoio de IA:</strong> recursos de sugestao de resposta, resumo da conversa, tom e traducao ajudam a agilizar o atendimento.</li>
+      </ol>
+    </section>
+
+    <section id="chat-interno">
+      <h2><span class="num">4</span> Chat interno da equipe</h2>
+      <p>A aba Chat Interno e a conversa privada entre os membros da equipe (nao vai para o cliente). Use para alinhar atendimentos, pedir apoio e avisos rapidos.</p>
+      <ol class="step-list">
+        <li>Abra a aba Chat Interno no menu.</li>
+        <li>A lista de colegas fica a esquerda; a conversa ocupa a area principal.</li>
+        <li>Digite a mensagem e envie. As mensagens ficam organizadas em baloes, com as suas alinhadas de um lado e as dos colegas do outro.</li>
+      </ol>
+      <div class="note ok">O chat interno agora carrega ocupando a tela inteira, com a conversa alinhada corretamente (correcao aplicada na ultima versao).</div>
+    </section>
+
+    <section id="menu-ferramentas">
+      <h2><span class="num">5</span> Menu Ferramentas</h2>
+      <p class="lead">O antigo botao flutuante virou um item fixo no menu lateral: Ferramentas. Reune ajustes de sistema, perfil e manutencao. O que aparece depende do seu papel.</p>
+
+      <h3>Comunicacao <span class="pill">admin</span></h3>
+      <div class="tool-card">
+        <div class="tt">Comunicado em Tela</div>
+        <p>Publica um aviso que aparece para todos os operadores nos paineis. Util para recados urgentes (ex.: instabilidade, meta do dia).</p>
+      </div>
+      <div class="tool-card">
+        <div class="tt">Chat da Equipe (envio rapido)</div>
+        <p>Dispara uma mensagem no chat interno sem sair de Ferramentas.</p>
+      </div>
+
+      <h3>Gestao de Usuarios <span class="pill">admin</span></h3>
+      <div class="tool-card">
+        <div class="tt">Novo Usuario / Editar / Liberar Sessao</div>
+        <p>Cria e edita operadores. Ao criar, escolha o <strong>Setor/Papel</strong> (Vendas, Financeiro, Engenharia ou Admin) - e esse papel que define o acesso da pessoa. Liberar Sessao desconecta um usuario preso em outra sessao.</p>
+      </div>
+      <div class="note ok">Correcao aplicada: o papel escolhido no cadastro passa a valer de verdade. Criar Vendas/Financeiro/Engenharia nao concede mais acesso de administrador.</div>
+
+      <h3>Papeis e Permissoes <span class="pill">admin</span></h3>
+      <div class="tool-card">
+        <div class="tt">Novo Papel / Editar Papel</div>
+        <p>Cria papeis personalizados marcando exatamente quais permissoes cada um tem (por grupo: comunicacao, contatos, relatorios, usuarios, sessoes, conexoes, ajustes, manutencao). Assim voce monta perfis sob medida sem dar acesso total.</p>
+      </div>
+
+      <h3>continnumOS Scripts <span class="pill">admin</span></h3>
+      <div class="tool-card">
+        <div class="tt">Configuracao do bot</div>
+        <p>Ajusta as respostas automaticas e o comportamento do assistente. Clique em Salvar para aplicar.</p>
+      </div>
+
+      <h3>Conexoes do Sistema <span class="pill">admin</span></h3>
+      <div class="tool-card">
+        <div class="tt">Ler QR / Desconectar (por setor)</div>
+        <p>Conecta o WhatsApp de cada setor (Vendas, Financeiro, Engenharia). Clique em Ler QR e escaneie com o celular do setor; use Desconectar para encerrar a sessao daquele numero.</p>
+      </div>
+
+      <h3>Perfil, Tema e Notificacoes <span class="pill">todos</span></h3>
+      <div class="tool-card">
+        <div class="tt">Foto, tema de cores e alertas</div>
+        <p>Troque a foto de perfil, escolha um tema (continnum, Rosa, Cypher, Light) e ative notificacoes com som e aviso na area de trabalho. Use o botao de teste para conferir o som.</p>
+      </div>
+    </section>
+
+    <section id="organizar-contatos">
+      <h2><span class="num">6</span> Organizar Contatos</h2>
+      <p class="lead">Ferramenta de manutencao de base de contatos (Ferramentas, perfil admin). Serve para arrumar e distribuir a carteira de contatos.</p>
+      <h3>O que ela faz</h3>
+      <ul>
+        <li><strong>Listas por prefixo:</strong> agrupa contatos automaticamente por prefixo de numero/DDD, criando listas organizadas.</li>
+        <li><strong>Sincronizacao com o WhatsApp:</strong> traz e atualiza contatos a partir do WhatsApp conectado.</li>
+        <li><strong>Redistribuir excedentes:</strong> reequilibra contatos que ficaram acima do limite de uma carteira, corrigindo donos.</li>
+      </ul>
+      <h3>Passo a passo seguro</h3>
+      <ol class="step-list">
+        <li><strong>Varrer Prefixos:</strong> o sistema analisa a base e identifica os prefixos.</li>
+        <li><strong>Simular Listas / Previa:</strong> mostra o resultado <em>antes</em> de aplicar - nada e alterado ainda.</li>
+        <li><strong>Aplicar:</strong> confirma e grava as mudancas (criar listas, sincronizar ou redistribuir).</li>
+      </ol>
+      <div class="note warn">Sempre use a Previa/Simular antes de Aplicar. Os botoes de aplicar em vermelho fazem alteracoes definitivas na base.</div>
+    </section>
+
+    <section id="limpeza">
+      <h2><span class="num">7</span> Limpeza</h2>
+      <p class="lead">Manutencao de espaco (Ferramentas, perfil admin).</p>
+      <p>Remove <strong>midias antigas e pesadas</strong> (imagens, audios, documentos trocados nas conversas) para liberar espaco de armazenamento e reduzir custo. Voce escolhe os tipos de midia e o sistema apaga os arquivos antigos correspondentes.</p>
+      <ol class="step-list">
+        <li>Marque os tipos de midia que deseja limpar.</li>
+        <li>Clique em Executar Limpeza.</li>
+        <li>O resultado aparece na tela: quantidade e espaco liberado - ou uma mensagem clara se nada foi selecionado ou se ocorreu falha.</li>
+      </ol>
+      <div class="note warn">A limpeza apaga arquivos de midia de forma definitiva. O historico de texto das conversas e preservado; apenas os arquivos de midia antigos sao removidos.</div>
+    </section>
+
+    <section id="usuarios">
+      <h2><span class="num">8</span> Usuarios, papeis e permissoes</h2>
+      <p>Cada pessoa tem um <strong>papel</strong>, e o papel define o que ela ve e pode fazer. Resumo dos papeis padrao:</p>
+      <table>
+        <tr><th>Papel</th><th>Ambiente</th><th>O que acessa</th></tr>
+        <tr><td>Admin</td><td>Console de Administracao</td><td>Tudo: atendimento, usuarios, papeis, conexoes, comunicados, scripts, manutencao.</td></tr>
+        <tr><td>Vendas</td><td>Painel de Atendimento</td><td>Conversas, contatos, chat interno, agenda, respostas rapidas.</td></tr>
+        <tr><td>Financeiro</td><td>Painel de Atendimento</td><td>Atendimento com foco financeiro + relatorios e metricas conforme permissao.</td></tr>
+        <tr><td>Engenharia</td><td>Painel de Atendimento</td><td>Atendimento e chat da equipe.</td></tr>
+        <tr><td>Papel personalizado</td><td>Depende</td><td>Exatamente as permissoes marcadas em Papeis e Permissoes.</td></tr>
+      </table>
+      <div class="note ok">Somente Admin (e papeis personalizados com permissao real de gestao) abrem o console de administracao. Isso evita que um operador comum receba acesso administrativo por engano.</div>
+    </section>
+
+    <section id="vendas-tools">
+      <h2><span class="num">9</span> Ferramentas do vendedor</h2>
+      <div class="tool-card">
+        <div class="tt">Agenda e Tarefas</div>
+        <p>Calendario para agendar lembretes e tarefas vinculadas a um numero/cliente. Escolha o dia, defina horario e descricao e salve.</p>
+      </div>
+      <div class="tool-card">
+        <div class="tt">Respostas Rapidas (snippets)</div>
+        <p>Salve frases e mensagens que voce usa com frequencia para inserir com um clique durante o atendimento.</p>
+      </div>
+      <div class="tool-card">
+        <div class="tt">Perfil, Tema e Notificacoes</div>
+        <p>Mesma configuracao de foto, tema e alertas descrita no Menu Ferramentas.</p>
+      </div>
+    </section>
+
+    <section id="problemas">
+      <h2><span class="num">10</span> Solucao de problemas</h2>
+      <div class="faq">
+        <div class="q">Criei um usuario de Vendas/Financeiro/Engenharia e ele abriu como administrador.</div>
+        <div class="a">Corrigido na versao atual: o papel escolhido no cadastro agora define o acesso. Se ainda aparecer errado, faca Ctrl + Shift + R, confirme o Setor no cadastro e edite o usuario se necessario.</div>
+      </div>
+      <div class="faq">
+        <div class="q">O chat interno nao carrega e as mensagens ficam amontoadas no canto.</div>
+        <div class="a">Corrigido: o chat interno agora ocupa a tela inteira. Se persistir, recarregue com Ctrl + Shift + R para limpar o cache antigo de tela.</div>
+      </div>
+      <div class="faq">
+        <div class="q">Aparecia um menu Ferramentas flutuando no canto, por cima do conteudo.</div>
+        <div class="a">O menu flutuante foi removido do canto e integrado ao menu lateral, como item Ferramentas. Nao atrapalha mais a tela.</div>
+      </div>
+      <div class="faq">
+        <div class="q">O menu lateral nao expande quando clico.</div>
+        <div class="a">Corrigido: ao clicar no botao de menu a barra expande mostrando os rotulos e recolhe novamente. Recarregue a pagina caso ainda esteja usando a versao em cache.</div>
+      </div>
+      <div class="faq">
+        <div class="q">Nao consigo entrar: Conta suspensa.</div>
+        <div class="a">O acesso da empresa esta suspenso (normalmente por pendencia de pagamento). Fale com o suporte para reativar.</div>
+      </div>
+      <div class="faq">
+        <div class="q">Credenciais invalidas ou Muitas tentativas.</div>
+        <div class="a">Confira usuario e senha. Apos varias tentativas o sistema bloqueia por instantes por seguranca - aguarde um minuto e tente de novo.</div>
+      </div>
+      <div class="faq">
+        <div class="q">O WhatsApp do setor nao conecta pelo QR.</div>
+        <div class="a">Em Ferramentas > Conexoes do Sistema, clique em Ler QR do setor e escaneie rapidamente (o codigo expira). Se falhar, use Desconectar e gere um novo QR.</div>
+      </div>
+      <div class="faq">
+        <div class="q">Nao recebo notificacoes.</div>
+        <div class="a">Em Ferramentas > Perfil, ative Som e Notificacao. O navegador tambem precisa autorizar notificacoes para o site. Use o botao de teste de som para conferir.</div>
+      </div>
+      <div class="faq">
+        <div class="q">Quero verificar se o sistema esta no ar.</div>
+        <div class="a">Acesse a pagina de status em <a href="/status">/status</a> para ver a saude de banco, cache e armazenamento.</div>
+      </div>
+    </section>
+
+    <section id="glossario">
+      <h2><span class="num">11</span> Glossario rapido</h2>
+      <table>
+        <tr><th>Termo</th><th>O que e</th></tr>
+        <tr><td>Painel de Atendimento</td><td>Ambiente do operador: conversas, contatos, chat interno.</td></tr>
+        <tr><td>Console de Administracao</td><td>Ambiente do admin: gestao, conexoes e manutencao.</td></tr>
+        <tr><td>Papel</td><td>Perfil de acesso (Admin, Vendas, Financeiro, Engenharia ou personalizado).</td></tr>
+        <tr><td>Permissao</td><td>Acao especifica liberada para um papel.</td></tr>
+        <tr><td>Snippet</td><td>Resposta rapida salva para reuso.</td></tr>
+        <tr><td>Comunicado em Tela</td><td>Aviso exibido para todos os operadores.</td></tr>
+        <tr><td>Organizar Contatos</td><td>Ferramenta que agrupa, sincroniza e redistribui contatos.</td></tr>
+        <tr><td>Limpeza</td><td>Remocao de midias antigas para liberar espaco.</td></tr>
+        <tr><td>Liberar Sessao</td><td>Desconecta um usuario preso em outra sessao.</td></tr>
+      </table>
+    </section>
+
+  </div>
+</div>
+
+<footer>
+  continnumOS - CRM de Atendimento WhatsApp. Central de Ajuda. Em caso de duvida nao resolvida aqui, contate o suporte do seu plano.
+</footer>
+
+<script>
+(function () {
+  var t = document.getElementById('toc-toggle');
+  var n = document.getElementById('toc');
+  if (t && n) { t.addEventListener('click', function () { n.classList.toggle('open'); }); }
+  var links = document.querySelectorAll('#toc a');
+  links.forEach(function (a) { a.addEventListener('click', function () { if (n) n.classList.remove('open'); }); });
+})();
+</script>
+</body>
+</html>

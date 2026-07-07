@@ -1,37 +1,27 @@
 /*
- * continnumOS - Dock unificado de ferramentas.
- * Consolida os FABs flutuantes (Copiloto, Caixa unificada, Campanhas, Vendas,
- * Equipe, Ferramentas e IA & Automacao) em uma unica barra lateral organizada,
- * com "um painel por vez" e camadas de z-index consistentes.
- * Aditivo: nao altera a logica interna dos partials, apenas os reposiciona.
+ * Dock de ferramentas ancorado a aba "Ajustes".
+ * Recolhe os lancadores flutuantes (Copiloto, Caixa unificada, Campanhas,
+ * Vendas, Equipe, IA & Automacao, Ferramentas de atendimento) e os posiciona
+ * dentro do container #tools-launchers, na aba Ajustes do menu.
+ * - Sem painel flutuante, sem backdrop, sem item extra no menu lateral.
+ * - Aditivo: nao altera a logica dos partials, apenas reposiciona os botoes.
  */
 (function () {
   "use strict";
 
-  var PRES_SELECTOR = ".tm-pres";
-  var FAB_SELECTORS = [".aia-fab", ".om-fab", ".cmp-fab", ".sl-fab", ".ai-fab", ".qw-fab", ".tm-fab"];
-  var SIDE_PANELS = [".ai-panel", ".qw-panel"];
+  var PRES = ".tm-pres";
+  var FABS = [".aia-fab", ".om-fab", ".cmp-fab", ".sl-fab", ".ai-fab", ".qw-fab", ".tm-fab"];
 
   function injectCss() {
     if (document.getElementById("cdock-style")) return;
     var rules = [
-      "#cdock{position:fixed;right:12px;top:50%;transform:translateY(-50%);z-index:9990;display:flex;flex-direction:column;gap:8px;align-items:stretch;padding:8px;width:196px;background:rgba(20,20,23,.74);border:1px solid #2a2a30;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.5);max-height:calc(100vh - 130px);overflow-y:auto;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:opacity .18s ease,transform .18s ease}",
-      "#cdock.hidden{opacity:0;pointer-events:none;transform:translateY(-50%) translateX(24px)}",
-      "#cdock>button,#cdock>.tm-pres{position:static!important;top:auto!important;right:auto!important;left:auto!important;bottom:auto!important;inset:auto!important;margin:0!important;width:100%!important;min-height:38px!important;height:auto!important;padding:9px 12px!important;font-family:'Space Grotesk',system-ui,sans-serif!important;font-weight:600!important;font-size:11.5px!important;letter-spacing:.01em!important;text-transform:uppercase!important;border:1px solid #2a2a30!important;border-radius:10px!important;color:var(--text,#f2ede6)!important;background:rgba(255,255,255,.03)!important;box-shadow:none!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;white-space:nowrap!important;text-overflow:ellipsis!important;overflow:hidden!important;cursor:pointer;transition:border-color .15s ease,background .15s ease}",
-      "#cdock>button:hover,#cdock>.tm-pres:hover{border-color:#ff6a00!important;background:rgba(255,106,0,.08)!important}",
-      "#cdock>.tm-pres select,#cdock>.tm-pres{font-family:'Space Grotesk',system-ui,sans-serif!important;font-size:11px!important;color:var(--text,#f2ede6)!important}",
-      "#cdock-title{font:700 10px 'JetBrains Mono',monospace;color:#ff6a00;text-transform:uppercase;letter-spacing:.12em;text-align:center;padding:2px 0 6px;border-bottom:1px solid #2a2a30;margin-bottom:2px}",
-      "#cdock-tab{position:fixed;right:12px;bottom:18px;z-index:9991;width:48px;height:48px;border-radius:14px;border:1px solid #2a2a30;background:#ff6a00;color:#0a0a0a;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(0,0,0,.55)}",
-      "#cdock-tab:hover{filter:brightness(1.05)}",
-      ".ai-panel{left:auto!important;right:216px!important;bottom:24px!important}",
-      ".qw-panel{right:216px!important;bottom:24px!important}",
-      ".qw-head{flex-wrap:nowrap!important;overflow-x:auto!important}",
-      ".ai-head{flex-wrap:nowrap!important;overflow-x:auto!important}",
-      "#cdock::-webkit-scrollbar,.qw-head::-webkit-scrollbar,.ai-head::-webkit-scrollbar{width:6px;height:6px}",
-      "#cdock::-webkit-scrollbar-thumb{background:#2a2a30;border-radius:4px}",
-      ".ai-badge.cdock-empty{opacity:.4}",
-      "#internal-chat-history:empty::after{content:'Nenhuma mensagem por aqui ainda. Selecione um contato na lista ou escreva a primeira mensagem para a equipe.';display:flex;height:100%;min-height:220px;align-items:center;justify-content:center;text-align:center;color:var(--text-muted,#9a9aa0);font-size:.86rem;line-height:1.55;padding:32px;opacity:.72}",
-      "@media(max-width:820px){#cdock{display:none}.ai-panel,.qw-panel{right:16px!important;left:16px!important;width:auto!important}}"
+      ".aia-fab,.om-fab,.cmp-fab,.sl-fab,.ai-fab,.qw-fab,.tm-fab,.tm-pres{display:none!important}",
+      ".tools-launchers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}",
+      ".tools-launchers-grid:empty::after{content:'Nenhuma ferramenta disponivel para o seu perfil.';color:var(--text-muted,#9a9aa0);font-size:.82rem}",
+      ".tools-launchers-grid>*{display:flex!important;position:static!important;top:auto!important;right:auto!important;left:auto!important;bottom:auto!important;inset:auto!important;margin:0!important;width:100%!important;min-height:46px!important;height:auto!important;padding:12px 14px!important;font-family:'Space Grotesk',system-ui,sans-serif!important;font-weight:600!important;font-size:12px!important;letter-spacing:.02em!important;text-transform:uppercase!important;border:1px solid var(--border,#2a2a30)!important;border-radius:10px!important;color:var(--text,#f2ede6)!important;background:var(--surface,rgba(255,255,255,.03))!important;box-shadow:none!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:8px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;cursor:pointer;transition:border-color .15s ease,background .15s ease}",
+      ".tools-launchers-grid>*:hover{border-color:var(--primary,#ff6a00)!important;background:rgba(255,106,0,.08)!important}",
+      ".tools-launchers-grid>.tm-pres select{background:transparent!important;color:var(--text,#f2ede6)!important;border:0!important;font:inherit!important;cursor:pointer}",
+      "#internal-chat-history:empty::after{content:'Nenhuma mensagem por aqui ainda. Selecione um contato na lista ou escreva a primeira mensagem para a equipe.';display:flex;height:100%;min-height:220px;align-items:center;justify-content:center;text-align:center;color:var(--text-muted,#9a9aa0);font-size:.86rem;line-height:1.55;padding:32px;opacity:.72}"
     ];
     var s = document.createElement("style");
     s.id = "cdock-style";
@@ -39,97 +29,35 @@
     document.head.appendChild(s);
   }
 
-  function collect(dock) {
+  function collect(box) {
     var moved = 0;
-    var order = [PRES_SELECTOR].concat(FAB_SELECTORS);
+    var order = [PRES].concat(FABS);
     for (var s = 0; s < order.length; s++) {
       var els = document.querySelectorAll(order[s]);
       for (var i = 0; i < els.length; i++) {
         if (els[i].getAttribute("data-cdock") === "1") continue;
         els[i].setAttribute("data-cdock", "1");
-        dock.appendChild(els[i]);
+        box.appendChild(els[i]);
         moved++;
       }
     }
     return moved;
   }
 
-  function enforceSinglePanel() {
-    var panels = [];
-    for (var i = 0; i < SIDE_PANELS.length; i++) {
-      var p = document.querySelector(SIDE_PANELS[i]);
-      if (p) panels.push(p);
-    }
-    if (panels.length < 2) return;
-    panels.forEach(function (panel) {
-      var obs = new MutationObserver(function () {
-        if (panel.classList.contains("open")) {
-          panels.forEach(function (other) {
-            if (other !== panel) other.classList.remove("open");
-          });
-        }
-      });
-      obs.observe(panel, { attributes: true, attributeFilter: ["class"] });
-    });
-  }
-
-  function dimBadges() {
-    var host = document.querySelector(".ai-panel");
-    if (!host) return;
-    var obs = new MutationObserver(function () {
-      ["ai-sent", "ai-lead"].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        var empty = /:\s*-\s*$/.test((el.textContent || "").trim());
-        el.classList.toggle("cdock-empty", empty);
-      });
-    });
-    obs.observe(host, { subtree: true, childList: true, characterData: true });
-  }
-
-  function build() {
-    if (document.getElementById("cdock")) {
-      collect(document.getElementById("cdock"));
-      return true;
-    }
-    var dock = document.createElement("div");
-    dock.id = "cdock";
-    var title = document.createElement("div");
-    title.id = "cdock-title";
-    title.textContent = "Ferramentas";
-    dock.appendChild(title);
-    document.body.appendChild(dock);
-
-    if (collect(dock) === 0) {
-      dock.remove();
-      return false;
-    }
-
-    var tab = document.createElement("button");
-    tab.id = "cdock-tab";
-    tab.title = "Mostrar/ocultar ferramentas";
-    tab.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>';
-    tab.onclick = function () { dock.classList.toggle("hidden"); };
-    document.body.appendChild(tab);
-
-    enforceSinglePanel();
-    dimBadges();
-
-    var tries = 0;
-    var iv = setInterval(function () {
-      collect(dock);
-      if (++tries >= 8) clearInterval(iv);
-    }, 500);
-    return true;
-  }
-
   function init() {
     injectCss();
-    if (build()) return;
+    var box = document.getElementById("tools-launchers");
+    if (!box) return;
+    collect(box);
     var tries = 0;
     var iv = setInterval(function () {
-      if (build() || ++tries >= 16) clearInterval(iv);
-    }, 250);
+      collect(box);
+      if (++tries >= 12) clearInterval(iv);
+    }, 400);
+    try {
+      var mo = new MutationObserver(function () { collect(box); });
+      mo.observe(document.body, { childList: true });
+    } catch (e) {}
   }
 
   if (document.readyState === "loading") {

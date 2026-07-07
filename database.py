@@ -43,6 +43,7 @@ TENANT_TABLES = {
     "status_posts": "status_id",
     "status_targets": "status_id",
     "status_views": "status_id",
+    "custom_roles": "role_key",
 }
 
 
@@ -1170,6 +1171,7 @@ async def init_db():
             await db.execute("ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente'")
             await db.execute("ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS repeat_until_done BOOLEAN DEFAULT TRUE")
             await db.execute("ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP")
+            await db.execute("ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS remind_before_minutes INT DEFAULT 0")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_calendar_events_due_status ON calendar_events (status, due_at)")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_calendar_events_assigned_due ON calendar_events (assigned_to, due_at)")
             await db.execute("CREATE TABLE IF NOT EXISTS tags (id SERIAL PRIMARY KEY, name TEXT, color TEXT)")
@@ -1205,9 +1207,12 @@ async def init_db():
 
             # Fase 1 — Multi-tenancy: aplica tenants + tenant_id + RLS ao final,
             # sob o mesmo advisory lock, garantindo backfill do tenant padrão.
+            # Fase 8 (roles dinamicas): papeis customizados por tenant com permissoes granulares.
+            await db.execute("CREATE TABLE IF NOT EXISTS custom_roles (id SERIAL PRIMARY KEY, role_key TEXT, label TEXT, permissions TEXT DEFAULT '[]', base_role TEXT DEFAULT '', is_active INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
             await _migrate_multitenant(db)
             # Fase 9: tabelas globais de diferenciais (após tenants existir).
             await create_phase9_tables(db)
+            await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_custom_roles_tenant_key ON custom_roles (tenant_id, role_key)")
         finally:
             await db.execute("SELECT pg_advisory_unlock($1)", SCHEMA_LOCK_ID)
 
@@ -1374,7 +1379,7 @@ async def get_clients(role: str, user_name: str, tab: str = 'home', search: str 
         params.append(list_id)
         idx += 1
     if bucket:
-        base_query += contact_bucket_condition(bucket)
+        base_query += " " + contact_bucket_condition(bucket)
     initial = (initial or "").strip().upper()[:1]
     clean_initial_expr = """
         LEFT(
@@ -2836,12 +2841,13 @@ async def add_calendar_event(
     assigned_to: str = "",
     due_at: datetime | None = None,
     repeat_until_done: bool = True,
+    remind_before_minutes: int = 0,
 ):
     """Cria tarefa de agenda com horário, responsável e repetição opcional."""
     await pool.execute(
         """
-        INSERT INTO calendar_events (user_name, event_date, note, phone, assigned_to, due_at, status, repeat_until_done)
-        VALUES ($1, $2, $3, $4, $5, $6, 'pendente', $7)
+        INSERT INTO calendar_events (user_name, event_date, note, phone, assigned_to, due_at, status, repeat_until_done, remind_before_minutes)
+        VALUES ($1, $2, $3, $4, $5, $6, 'pendente', $7, $8)
         """,
         user_name,
         date,
@@ -2850,6 +2856,7 @@ async def add_calendar_event(
         assigned_to or user_name,
         due_at,
         repeat_until_done,
+        max(0, int(remind_before_minutes or 0)),
     )
 
 async def get_calendar_event(event_id: int):
@@ -2881,6 +2888,22 @@ async def delete_calendar_event(event_id: int):
     """Cancela uma tarefa de agenda sem apagar o histórico."""
     await pool.execute("UPDATE calendar_events SET status = 'cancelado' WHERE id = $1", event_id)
 
+async def update_calendar_event(event_id: int, note: str | None = None, phone: str | None = None, assigned_to: str | None = None):
+    """Edita campos de uma tarefa de agenda sem recriar o registro."""
+    await pool.execute(
+        """
+        UPDATE calendar_events
+        SET note = COALESCE($2, note),
+            phone = COALESCE($3, phone),
+            assigned_to = COALESCE($4, assigned_to)
+        WHERE id = $1
+        """,
+        event_id,
+        note,
+        phone,
+        assigned_to,
+    )
+
 async def get_due_calendar_events(limit: int = 50):
     """Lista tarefas vencidas que ainda devem notificar o responsável."""
     rows = await pool.fetch(
@@ -2890,7 +2913,7 @@ async def get_due_calendar_events(limit: int = 50):
         WHERE COALESCE(status, 'pendente') IN ('pendente', 'remarcado')
           AND repeat_until_done IS TRUE
           AND due_at IS NOT NULL
-          AND due_at <= CURRENT_TIMESTAMP
+          AND (due_at - (COALESCE(remind_before_minutes, 0) * INTERVAL '1 minute')) <= CURRENT_TIMESTAMP
         ORDER BY due_at ASC
         LIMIT $1
         """,
@@ -2911,7 +2934,7 @@ async def get_due_calendar_events_for_user(user_name: str, role: str, limit: int
         LEFT JOIN users u ON u.phone = ce.phone
         WHERE COALESCE(ce.status, 'pendente') IN ('pendente', 'remarcado')
           AND ce.due_at IS NOT NULL
-          AND ce.due_at <= CURRENT_TIMESTAMP
+          AND (ce.due_at - (COALESCE(ce.remind_before_minutes, 0) * INTERVAL '1 minute')) <= CURRENT_TIMESTAMP
           {scope_sql}
         ORDER BY ce.due_at ASC
         LIMIT {limit_param}
@@ -5494,3 +5517,58 @@ async def create_all_phase_tables():
             await create_phase13_tables()
         finally:
             await conn.execute("SELECT pg_advisory_unlock($1)", SCHEMA_LOCK_ID)
+
+
+# ---------------------------------------------------------------------------
+# Fase 8 (roles dinamicas): CRUD de papeis customizados por tenant.
+# permissions e armazenado como JSON (lista de strings de capacidade).
+# ---------------------------------------------------------------------------
+async def get_custom_roles():
+    """Lista papeis customizados do tenant atual (com permissoes desserializadas)."""
+    rows = await pool.fetch("SELECT role_key, label, permissions, base_role, is_active FROM custom_roles ORDER BY LOWER(label), role_key")
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["permissions"] = json.loads(d.get("permissions") or "[]")
+        except Exception:
+            d["permissions"] = []
+        out.append(d)
+    return out
+
+async def get_custom_roles_map():
+    """Retorna {role_key: set(permissoes)} apenas dos papeis ativos do tenant."""
+    rows = await pool.fetch("SELECT role_key, permissions FROM custom_roles WHERE COALESCE(is_active,1)=1")
+    result = {}
+    for r in rows:
+        try:
+            perms = json.loads(r["permissions"] or "[]")
+        except Exception:
+            perms = []
+        result[r["role_key"]] = set(perms)
+    return result
+
+async def get_custom_role(role_key: str):
+    """Busca um papel customizado pelo identificador."""
+    row = await pool.fetchrow("SELECT role_key, label, permissions, base_role, is_active FROM custom_roles WHERE role_key = $1", role_key)
+    if not row:
+        return None
+    d = dict(row)
+    try:
+        d["permissions"] = json.loads(d.get("permissions") or "[]")
+    except Exception:
+        d["permissions"] = []
+    return d
+
+async def upsert_custom_role(role_key: str, label: str, permissions: list, base_role: str = "", is_active: int = 1):
+    """Cria ou atualiza um papel customizado do tenant atual."""
+    perms_json = json.dumps(sorted({str(p) for p in (permissions or [])}))
+    await pool.execute(
+        "INSERT INTO custom_roles (role_key, label, permissions, base_role, is_active) VALUES ($1,$2,$3,$4,$5) "
+        "ON CONFLICT (tenant_id, role_key) DO UPDATE SET label=EXCLUDED.label, permissions=EXCLUDED.permissions, base_role=EXCLUDED.base_role, is_active=EXCLUDED.is_active",
+        role_key, label, perms_json, base_role, int(is_active),
+    )
+
+async def delete_custom_role(role_key: str):
+    """Remove um papel customizado do tenant atual."""
+    await pool.execute("DELETE FROM custom_roles WHERE role_key = $1", role_key)

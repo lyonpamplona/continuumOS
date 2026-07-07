@@ -288,3 +288,66 @@ input:focus, textarea:focus, select:focus {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+
+/* ==========================================================================
+   Redesign - elementos visuais do prototipo "Blueprint Console" que faltavam
+   ========================================================================== */
+
+/* Fundo: grid blueprint + brilho de acento + vinheta (compositado no fundo,
+   sem camadas sobrepostas -> zero risco de bloquear cliques) */
+body {
+  background-image:
+    radial-gradient(circle at 26% 10%, rgba(255, 106, 0, .06), transparent 58%),
+    radial-gradient(circle at 50% 42%, transparent 52%, rgba(0, 0, 0, .55) 100%),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px) !important;
+  background-size: 100% 100%, 100% 100%, 34px 34px, 34px 34px !important;
+  background-attachment: fixed !important;
+}
+
+/* Marcas de canto (tick) nos blocos - assinatura do prototipo */
+.block { position: relative; }
+.block::before,
+.block::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--primary);
+  opacity: .45;
+  pointer-events: none;
+  z-index: 2;
+}
+.block::before { top: 7px; right: 7px; border-left: 0; border-bottom: 0; }
+.block::after { bottom: 7px; left: 7px; border-right: 0; border-top: 0; }
+
+/* Barra de acento nos titulos de secao/bloco */
+.block-title,
+.overview-section-title,
+.card-title,
+.log-title {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+.block-title::before,
+.overview-section-title::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 3px;
+  height: 1em;
+  background: var(--primary);
+  box-shadow: 0 0 10px var(--glow);
+}
+
+/* Brilho tecnico nos valores de metrica */
+.stat-val, .stat-num, .met b, .metric-value {
+  text-shadow: 0 0 18px rgba(255, 106, 0, .22);
+}
+
+/* Realce de canto ao passar o mouse nos blocos */
+.block:hover::before,
+.block:hover::after { opacity: .85; }
+
+/* Item "Ferramentas" no menu lateral acompanha o tema */
+#cdock-nav.active { color: var(--primary) !important; }

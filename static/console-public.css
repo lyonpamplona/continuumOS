@@ -1,0 +1,32 @@
+/* ===== R6: telas satelite standalone (signup/billing/status/pay) =====
+   Escopado em .console-public. Usa tokens do console-blueprint.css. */
+body.console-public {
+  background: var(--bg-0) !important; color: var(--txt) !important;
+  font-family: var(--font-mono) !important;
+  background-image: linear-gradient(var(--grid, rgba(255,106,0,.05)) 1px, transparent 1px), linear-gradient(90deg, var(--grid, rgba(255,106,0,.05)) 1px, transparent 1px) !important;
+  background-size: 34px 34px !important; background-attachment: fixed !important;
+}
+body.console-public h1, body.console-public h3 { font-family: var(--font-disp) !important; color: var(--txt) !important; }
+body.console-public h1 { color: var(--acc) !important; letter-spacing: .02em; }
+body.console-public small, body.console-public .mut { color: var(--txt-dim) !important; }
+body.console-public .card, body.console-public .panel {
+  background: var(--bg-2) !important; border: 1px solid var(--line) !important; border-radius: 0 !important;
+  clip-path: polygon(0 12px, 12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+}
+body.console-public input, body.console-public select, body.console-public textarea {
+  background: var(--bg-2) !important; color: var(--txt) !important; border: 1px solid var(--line) !important; border-radius: 0 !important;
+  font-family: var(--font-mono) !important;
+}
+body.console-public input:focus, body.console-public select:focus, body.console-public textarea:focus { outline: none !important; border-color: var(--acc) !important; }
+body.console-public button {
+  background: var(--acc) !important; color: var(--acc-ink) !important; border: 1px solid var(--acc) !important; border-radius: 0 !important;
+  font-family: var(--font-mono) !important; font-weight: 700; cursor: pointer;
+  clip-path: polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+}
+body.console-public button:hover { background: var(--acc-2) !important; border-color: var(--acc-2) !important; }
+body.console-public table { border-collapse: collapse; width: 100%; }
+body.console-public th { font-family: var(--font-disp) !important; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--txt-mut) !important; border-bottom: 1px solid var(--line-2) !important; }
+body.console-public td { border-bottom: 1px solid var(--line) !important; color: var(--txt) !important; }
+body.console-public .row { border-bottom: 1px solid var(--line) !important; }
+body.console-public .pill, body.console-public .paid { border-radius: 0 !important; background: color-mix(in srgb, var(--ok) 18%, var(--bg-2)) !important; color: var(--ok) !important; }
+body.console-public a { color: var(--acc) !important; }

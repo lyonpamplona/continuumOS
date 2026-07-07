@@ -266,14 +266,180 @@
             notifyToast("Falha de conexão ao enviar comunicado.", true);
         }
     }
-    function changeMonth(dir) { calDate.setMonth(calDate.getMonth() + dir); renderCalendar(); }
+    function changeMonth(dir) { navAgenda(dir); }
+    function navAgenda(dir) {
+        const view = (typeof calView !== 'undefined' && calView) ? calView : 'month';
+        if (view === 'week') calDate.setDate(calDate.getDate() + 7 * dir);
+        else if (view === 'day') calDate.setDate(calDate.getDate() + dir);
+        else calDate.setMonth(calDate.getMonth() + dir);
+        renderCalendar();
+    }
+    function setAgendaView(v) {
+        calView = v;
+        document.querySelectorAll('.agenda-view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+        renderCalendar();
+    }
+    function _agYm(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+    function _agDstr(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+    async function _agFetchEvents(dates) {
+        const months = Array.from(new Set(dates.map(_agYm)));
+        let all = [];
+        for (const ym of months) { try { const r = await fetch('/api/calendar/' + ym); const j = await r.json(); if (Array.isArray(j)) all = all.concat(j); } catch (e) {} }
+        return all;
+    }
+    function _agResponsible(e) { return String((e && (e.assigned_to || e.user_name)) || '').trim(); }
+    function _agTeamFiltered(list) { if (!agTeamFilter) return list || []; return (list || []).filter(e => _agResponsible(e) === agTeamFilter); }
+    function _agStatusPass(e) { if (!agStatusFilter) return true; return (e.status || 'pendente') === agStatusFilter; }
+    function _agApplyFilters(list) { return _agTeamFiltered(list).filter(_agStatusPass); }
+    function setAgendaStatusFilter(v) { agStatusFilter = v || ''; renderCalendar(); }
+    async function _agLoad(dates) { monthEventsAll = await _agFetchEvents(dates); _agRefreshTeamFilter(); return _agApplyFilters(monthEventsAll); }
+    function _agRefreshTeamFilter() {
+        const sel = document.getElementById('agenda-team-filter');
+        if (!sel) return;
+        const names = Array.from(new Set((monthEventsAll || []).map(_agResponsible).filter(Boolean))).sort((a,b) => a.localeCompare(b));
+        if (agTeamFilter && !names.includes(agTeamFilter)) agTeamFilter = '';
+        let opts = '<option value="">Toda a equipe (' + (monthEventsAll || []).length + ')</option>';
+        names.forEach(n => { const c = (monthEventsAll || []).filter(e => _agResponsible(e) === n).length; opts += `<option value="${escapeHtml(n)}"${n === agTeamFilter ? ' selected' : ''}>${escapeHtml(n)} (${c})</option>`; });
+        sel.innerHTML = opts;
+        sel.value = agTeamFilter;
+    }
+    function setAgendaTeamFilter(v) { agTeamFilter = v || ''; renderCalendar(); }
+    function _agWeekStart(d) { const s = new Date(d.getFullYear(), d.getMonth(), d.getDate()); s.setDate(s.getDate() - s.getDay()); return s; }
+    function _agEventHour(e) { if (!e || !e.due_at) return null; const d = parseLocalTimestamp(e.due_at); if (!d || isNaN(d.getTime())) return null; return d.getHours(); }
+    function _agEventMin(e) { const d = (e && e.due_at) ? parseLocalTimestamp(e.due_at) : null; return (d && !isNaN(d.getTime())) ? d.getMinutes() : 0; }
+    function _agChip(e) {
+        const status = (e.status || 'pendente');
+        const eh = _agEventHour(e);
+        const t = (eh === null) ? '' : (String(eh).padStart(2,'0') + ':' + String(_agEventMin(e)).padStart(2,'0'));
+        const lbl = (typeof agendaContactLabel === 'function') ? agendaContactLabel(e) : '';
+        const resp = (typeof _agResponsible === 'function') ? _agResponsible(e) : '';
+        const who = (!agTeamFilter && resp) ? `<span class="agenda-hg-chip-who">${escapeHtml(resp)}</span> ` : '';
+        const note = (e.note || '').slice(0, 40);
+        return `<div class="agenda-hg-chip status-${escapeHtml(status)}" draggable="true" data-eid="${escapeHtml(String(e.id))}" ondragstart="agendaDragStart(event, '${e.id}')" title="${escapeHtml((t?t+' ':'') + (e.note||''))}" onclick="event.stopPropagation(); selectDate('${e.event_date}', null, {openModal:false});">${who}<span class="agenda-hg-chip-time">${escapeHtml(t)}</span> ${escapeHtml(note)}${lbl?(' · ' + escapeHtml(lbl)):''}</div>`;
+    }
+    function _agHourGrid(days) {
+        const HS = 7, HE = 21;
+        const clampH = (h) => (h < HS ? HS : (h >= HE ? HE - 1 : h));
+        const dayStrs = days.map(_agDstr);
+        const byKey = {}, untimed = {};
+        (monthEvents || []).forEach(e => {
+            if (!dayStrs.includes(e.event_date)) return;
+            const eh = _agEventHour(e);
+            if (eh === null) { (untimed[e.event_date] = untimed[e.event_date] || []).push(e); return; }
+            const key = e.event_date + ':' + clampH(eh);
+            (byKey[key] = byKey[key] || []).push(e);
+        });
+        const todayStr = _agDstr(new Date());
+        let head = '<div class="agenda-hg-corner"></div>';
+        days.forEach(d => {
+            const isT = (_agDstr(d) === todayStr);
+            const wd = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+            const dm = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            head += `<div class="agenda-hg-dayhead${isT?' today':''}">${escapeHtml(wd)}<br>${escapeHtml(dm)}</div>`;
+        });
+        let allday = '';
+        const hasUntimed = days.some(d => (untimed[_agDstr(d)] || []).length);
+        if (hasUntimed) {
+            allday += '<div class="agenda-hg-hour">s/ hora</div>';
+            days.forEach(d => {
+                const ds = _agDstr(d);
+                const evs = untimed[ds] || [];
+                allday += `<div class="agenda-hg-cell" ondragover="agendaDragOver(event)" ondrop="agendaDrop(event, '${ds}', null)" onclick="agendaSlotClick('${ds}', null)">${evs.map(_agChip).join('')}</div>`;
+            });
+        }
+        let rows = '';
+        for (let h = HS; h < HE; h++) {
+            rows += `<div class="agenda-hg-hour">${String(h).padStart(2,'0')}:00</div>`;
+            days.forEach(d => {
+                const ds = _agDstr(d);
+                const evs = byKey[ds + ':' + h] || [];
+                rows += `<div class="agenda-hg-cell" ondragover="agendaDragOver(event)" ondrop="agendaDrop(event, '${ds}', ${h})" onclick="agendaSlotClick('${ds}', ${h})">${evs.map(_agChip).join('')}</div>`;
+            });
+        }
+        return `<div class="agenda-hourgrid" style="--ag-cols:${days.length};">${head}${allday}${rows}</div>`;
+    }
+    let _agDragId = null;
+    function agendaDragStart(ev, id) { _agDragId = String(id); if (ev.dataTransfer) { ev.dataTransfer.effectAllowed = 'move'; try { ev.dataTransfer.setData('text/plain', String(id)); } catch (e) {} } }
+    function agendaDragOver(ev) { ev.preventDefault(); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'; }
+    async function agendaDrop(ev, ds, hour) {
+        ev.preventDefault();
+        const id = _agDragId || (ev.dataTransfer ? ev.dataTransfer.getData('text/plain') : '');
+        _agDragId = null;
+        if (!id) return;
+        const time = (hour === null || hour === undefined) ? '09:00' : (String(hour).padStart(2,'0') + ':00');
+        try {
+            const r = await fetch('/api/calendar/' + id + '/reschedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: ds, time: time }) });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || data.status === 'error') throw new Error(data.message || 'falha');
+            if (typeof Toastify === 'function') Toastify({ text: 'Tarefa reagendada para ' + ds + ' ' + time, duration: 2500, style: { background: 'var(--surface)', color: 'var(--primary)', border: '1px solid var(--border)', borderRadius: '8px' } }).showToast();
+            renderCalendar();
+        } catch (e) {
+            if (typeof Toastify === 'function') Toastify({ text: 'Nao foi possivel reagendar: ' + (e.message || ''), duration: 3500, style: { background: '#2A1114', color: '#F15C6D', border: '1px solid #4A1C22', borderRadius: '8px' } }).showToast();
+        }
+    }
+    function agendaSlotClick(ds, hour) {
+        selectedDateStr = ds;
+        const timeInp = document.getElementById('agenda-time');
+        if (timeInp && hour !== null && hour !== undefined) timeInp.value = String(hour).padStart(2,'0') + ':00';
+        if (typeof renderAgendaDayDetails === 'function') renderAgendaDayDetails();
+        const inp = document.getElementById('agenda-input');
+        if (inp) inp.focus();
+    }
+    function _agDaySection(d) {
+        const dStr = _agDstr(d);
+        const evs = monthEvents.filter(e => e.event_date === dStr);
+        const weekday = d.toLocaleDateString('pt-BR', {weekday:'short'});
+        const dayLabel = d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'});
+        const isToday = dStr === _agDstr(new Date());
+        const body = evs.length ? evs.map(e => agendaCardHtml(e)).join('') : '<div style="color:var(--text-muted); font-size:0.8rem; padding:6px 0;">Livre</div>';
+        return `<div class="agenda-day-section${isToday ? ' today' : ''}"><div class="agenda-day-head" onclick="selectDate('${dStr}', null, {openModal:false})"><span class="agenda-day-name">${escapeHtml(weekday)} ${escapeHtml(dayLabel)}</span><span class="agenda-day-count">${evs.length ? evs.length + ' tarefa(s)' : 'sem tarefas'}</span></div><div class="agenda-day-body">${body}</div></div>`;
+    }
     async function renderCalendar() {
-        const y = calDate.getFullYear(); const m = calDate.getMonth(); document.getElementById('cal-month-label').innerText = new Date(y, m, 1).toLocaleDateString('pt-BR', {month:'short', year:'numeric'}).toUpperCase();
-        const ymStr = `${y}-${String(m+1).padStart(2,'0')}`; const res = await fetch('/api/calendar/' + ymStr); monthEvents = await res.json();
-        await loadDueCalendarTasks();
-        const firstDay = new Date(y, m, 1).getDay(); const daysInMonth = new Date(y, m+1, 0).getDate(); const box = document.getElementById('cal-days'); box.innerHTML = '';
-        for(let i=0; i<firstDay; i++) box.innerHTML += '<div></div>';
-        for(let i=1; i<=daysInMonth; i++) { let dStr = `${ymStr}-${String(i).padStart(2,'0')}`; let hasEv = monthEvents.some(e => e.event_date === dStr) ? 'has-event' : ''; box.insertAdjacentHTML('beforeend', `<div class="cal-day ${hasEv}" data-date="${dStr}" onclick="selectDate('${dStr}', this)">${i}</div>`); }
+        const view = (typeof calView !== 'undefined' && calView) ? calView : 'month';
+        const box = document.getElementById('cal-days');
+        if (!box) return;
+        const header = box.previousElementSibling;
+        const listBox = document.getElementById('agenda-list-view');
+        const label = document.getElementById('cal-month-label');
+        if (view === 'month') {
+            const y = calDate.getFullYear(); const m = calDate.getMonth();
+            if (label) label.innerText = new Date(y, m, 1).toLocaleDateString('pt-BR', {month:'short', year:'numeric'}).toUpperCase();
+            const ymStr = `${y}-${String(m+1).padStart(2,'0')}`;
+            monthEvents = await _agLoad([calDate]);
+            await loadDueCalendarTasks();
+            if (header && header.classList.contains('cal-grid')) header.style.display = '';
+            box.style.display = '';
+            if (listBox) listBox.style.display = 'none';
+            box.innerHTML = '';
+            const firstDay = new Date(y, m, 1).getDay(); const daysInMonth = new Date(y, m+1, 0).getDate();
+            const todayStr = _agDstr(new Date());
+            for (let i = 0; i < firstDay; i++) box.innerHTML += '<div></div>';
+            for (let i = 1; i <= daysInMonth; i++) {
+                let dStr = `${ymStr}-${String(i).padStart(2,'0')}`;
+                let cls = monthEvents.some(e => e.event_date === dStr) ? ' has-event' : '';
+                if (dStr === todayStr) cls += ' today';
+                box.insertAdjacentHTML('beforeend', `<div class="cal-day${cls}" data-date="${dStr}" onclick="selectDate('${dStr}', this)">${i}</div>`);
+            }
+        } else {
+            let days;
+            if (view === 'week') {
+                const start = _agWeekStart(calDate);
+                days = []; for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
+                if (label) label.innerText = 'Semana ' + start.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ' a ' + days[6].toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'});
+            } else {
+                const base = selectedDateStr ? new Date(selectedDateStr + 'T00:00:00') : new Date(calDate);
+                calDate = new Date(base);
+                selectedDateStr = _agDstr(base);
+                days = [base];
+                if (label) label.innerText = base.toLocaleDateString('pt-BR', {weekday:'long', day:'2-digit', month:'long'});
+            }
+            monthEvents = await _agLoad(days);
+            await loadDueCalendarTasks();
+            if (header && header.classList.contains('cal-grid')) header.style.display = 'none';
+            box.style.display = 'none';
+            if (listBox) { listBox.style.display = 'block'; listBox.innerHTML = _agHourGrid(days); }
+            if (view === 'day' && typeof renderAgendaDayDetails === 'function') renderAgendaDayDetails();
+        }
     }
     function agendaDateLabel(dStr) {
         return dStr ? dStr.split('-').reverse().join('/') : 'Selecione';
@@ -294,7 +460,7 @@
         return `<div style="background:var(--surface); padding:12px; border-radius:8px; border:1px solid var(--border); display:flex; gap:10px; align-items:flex-start; justify-content:space-between;">
             <div style="flex:1; min-width:0;">
                 <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
-                    <span style="font-size:0.7rem; color:var(--primary);">${escapeHtml(e.user_name || '-')}</span>
+                    <span style="font-size:0.7rem; color:var(--primary);">${escapeHtml(e.assigned_to || e.user_name || '-')}</span>
                     <span style="font-size:0.7rem; color:var(--text-muted);">${escapeHtml(agendaDueLabel(e))}</span>
                     <span style="font-size:0.7rem; color:var(--text-muted);">${escapeHtml(agendaStatusLabel(status))}</span>
                 </div>
@@ -302,7 +468,7 @@
                 ${e.phone ? `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:6px;">${escapeHtml(e.phone)}</div>` : ''}
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-                ${canAct ? `<button class="btn btn-primary" style="padding:5px 8px; font-size:0.72rem;" onclick="completeAgendaNote(${e.id})">Contatado</button><button class="btn" style="padding:5px 8px; font-size:0.72rem;" onclick="rescheduleAgendaNote(${e.id})">Remarcar</button>` : ''}
+                ${canAct ? `<button class="btn btn-primary" style="padding:5px 8px; font-size:0.72rem;" onclick="completeAgendaNote(${e.id})">Contatado</button><button class="btn" style="padding:5px 8px; font-size:0.72rem;" onclick="rescheduleAgendaNote(${e.id})">Remarcar</button><button class="btn" style="padding:5px 8px; font-size:0.72rem;" onclick="editAgendaNote(${e.id})">Editar</button>` : ''}
                 <button class="btn" style="padding:5px 8px; color:#ff5252; border-color:#4A1C22;" onclick="delAgendaNote(${e.id})"><span class="material-symbols-outlined" style="font-size:16px;">delete</span></button>
             </div>
         </div>`;
@@ -360,8 +526,9 @@
         const inp = document.getElementById(fromModal ? 'agenda-modal-input' : 'agenda-input');
         const timeInp = document.getElementById(fromModal ? 'agenda-modal-time' : 'agenda-time');
         const phoneInp = document.getElementById(fromModal ? 'agenda-modal-phone' : 'agenda-phone');
+        const remindInp = document.getElementById(fromModal ? 'agenda-modal-remind' : 'agenda-remind');
         if(!inp.value.trim() || !selectedDateStr) return notifyToast('Selecione uma data e informe a tarefa.', true);
-        const res = await fetch('/api/calendar', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({date: selectedDateStr, time: timeInp?.value || '09:00', note: inp.value.trim(), phone: phoneInp?.value || '', repeat_until_done: true})});
+        const res = await fetch('/api/calendar', {method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({date: selectedDateStr, time: timeInp?.value || '09:00', note: inp.value.trim(), phone: phoneInp?.value || '', remind_before_minutes: parseInt(remindInp?.value || '0', 10) || 0, repeat_until_done: true})});
         const data = await res.json();
         if (data.status !== 'ok') return notifyToast(data.message || 'Falha ao salvar agenda.', true);
         inp.value = '';
@@ -386,6 +553,21 @@
         refreshSelectedAgendaDate();
     }
     async function delAgendaNote(id) { await fetch('/api/calendar/' + id, {method: 'DELETE'}); await renderCalendar(); refreshSelectedAgendaDate(); }
+    async function editAgendaNote(id) {
+        const ev = (monthEventsAll || []).find(e => String(e.id) === String(id)) || {};
+        const note = await window.uiPrompt('Editar tarefa:', ev.note || '');
+        if (note === null) return;
+        const phone = await window.uiPrompt('Celular vinculado (vazio para remover):', ev.phone || '');
+        const resp = await window.uiPrompt('Responsável (vazio para manter):', ev.assigned_to || ev.user_name || '');
+        const body = { note: note };
+        if (phone !== null) body.phone = phone;
+        if (resp !== null && resp.trim()) body.assigned_to = resp.trim();
+        const res = await fetch('/api/calendar/' + id + '/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        const data = await res.json();
+        if (data.status !== 'ok') return notifyToast(data.message || 'Falha ao editar tarefa.', true);
+        await renderCalendar();
+        refreshSelectedAgendaDate();
+    }
     function openUserModal(user='', name='', role='vendas_1', status='1') { document.getElementById('u-title').innerText = user ? 'Editar Usuário' : 'Novo Usuário'; document.getElementById('u-username').value = user; document.getElementById('u-username').disabled = !!user; document.getElementById('u-name').value = name; document.getElementById('u-role').value = role; document.getElementById('u-status').value = status; document.getElementById('u-password').value = ''; document.getElementById('userModal').style.display = 'flex'; }
     async function saveUser() { await fetch('/api/admin/users', {method:'POST', body:JSON.stringify({username: document.getElementById('u-username').value, password: document.getElementById('u-password').value, name: document.getElementById('u-name').value, role: document.getElementById('u-role').value, is_active: document.getElementById('u-status').value})}); window.location.reload(); }
     async function clearUserSession(username) {
@@ -396,8 +578,8 @@
     async function executeCleanup() {
         const resultDiv = document.getElementById('cleanup-result'); resultDiv.innerHTML = "Processando..."; const types = []; const checkboxes = document.querySelectorAll('#tab-tools .cleanup-media-type:checked');
         checkboxes.forEach((cb) => { if(['image','audio','video','document'].includes(cb.value)) types.push(cb.value); }); const days = parseInt(document.getElementById('cleanup-days').value);
-        if (types.length === 0) return;
-        try { const response = await fetch('/api/admin/cleanup-media', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_types: types, days_old: days }) }); const data = await response.json(); if (data.status === 'success') { resultDiv.innerHTML = data.message; } } catch (error) {}
+        if (types.length === 0) { resultDiv.innerHTML = 'Selecione ao menos um tipo de midia.'; return; }
+        try { const response = await fetch('/api/admin/cleanup-media', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_types: types, days_old: days }) }); const data = await response.json(); if (data.status === 'success') { resultDiv.innerHTML = data.message; } else { resultDiv.innerHTML = (data && data.message) ? data.message : 'Falha ao executar limpeza.'; } } catch (error) { resultDiv.innerHTML = 'Falha ao executar limpeza. Tente novamente.'; }
     }
     function getSelectedPrefixes() {
         return Array.from(document.querySelectorAll('.prefix-option:checked')).map(input => input.value);
@@ -617,7 +799,58 @@
         }
     }
     function applyPreset(bg, primary, text) { document.getElementById('prof-bg').value = bg; document.getElementById('prof-primary').value = primary; document.getElementById('prof-text').value = text; previewColor(); }
-    function previewColor() { const bg = document.getElementById('prof-bg').value; const primary = document.getElementById('prof-primary').value; const text = document.getElementById('prof-text').value; document.documentElement.style.setProperty('--bg-base', bg, 'important'); document.documentElement.style.setProperty('--primary', primary, 'important'); document.documentElement.style.setProperty('--text-main', text, 'important'); }
+    function previewColor() {
+        const bg = document.getElementById('prof-bg').value;
+        const primary = document.getElementById('prof-primary').value;
+        const text = document.getElementById('prof-text').value;
+        const r = document.documentElement.style;
+        r.setProperty('--bg-base', bg, 'important');
+        r.setProperty('--primary', primary, 'important');
+        r.setProperty('--text-main', text, 'important');
+        if (window.ConsoleTheme) {
+            ConsoleTheme.setVar('--bg-0', bg);
+            ConsoleTheme.setVar('--bg-1', bg);
+            ConsoleTheme.setVar('--acc', primary);
+            ConsoleTheme.setVar('--txt', text);
+        }
+    }
+
+    function cnnMarkTheme() {
+        const cur = (window.ConsoleTheme ? ConsoleTheme.current() : 'reator');
+        document.querySelectorAll('.cnn-theme-btn').forEach(function(b){
+            b.classList.toggle('active', b.getAttribute('data-theme') === cur);
+        });
+    }
+    function cnnSelectTheme(name) {
+        if (window.ConsoleTheme) { ConsoleTheme.reset(); ConsoleTheme.set(name); }
+        cnnMarkTheme();
+    }
+    function cnnResetTheme() {
+        if (window.ConsoleTheme) { ConsoleTheme.reset(); }
+        cnnMarkTheme();
+    }
+    function cnnBuildThemePicker() {
+        const fold = document.getElementById('settings-theme-fold');
+        if (!fold || document.getElementById('cnn-theme-picker')) return;
+        const body = fold.querySelector('.settings-fold-body') || fold;
+        const grid = body.querySelector('.preset-grid');
+        const names = [['reator','Reator'],['circuito','Circuito'],['cobre','Cobre'],['claro','Claro']];
+        const wrap = document.createElement('div');
+        wrap.id = 'cnn-theme-picker';
+        wrap.style.cssText = 'display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;';
+        names.forEach(function(n){
+            const b = document.createElement('button');
+            b.type = 'button'; b.className = 'btn cnn-theme-btn';
+            b.setAttribute('data-theme', n[0]);
+            b.style.cssText = 'flex:1; min-width:64px; padding:8px; font-size:0.72rem;';
+            b.textContent = n[1];
+            b.addEventListener('click', function(){ cnnSelectTheme(n[0]); });
+            wrap.appendChild(b);
+        });
+        if (grid) { body.insertBefore(wrap, grid); } else { body.insertBefore(wrap, body.firstChild); }
+        cnnMarkTheme();
+    }
+    document.addEventListener('DOMContentLoaded', cnnBuildThemePicker);
     async function saveProfile() { 
         let currentAvatar = ''; const imgElement = document.querySelector('#preview-avatar img'); if (imgElement) currentAvatar = imgElement.getAttribute('src');
         const payload = { name: document.getElementById('prof-name').value, bio: '', avatar: currentAvatar, bg_color: document.getElementById('prof-bg').value, primary_color: document.getElementById('prof-primary').value, text_color: document.getElementById('prof-text').value };

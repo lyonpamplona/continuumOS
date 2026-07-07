@@ -83,6 +83,7 @@
       '<div class="aia-mut">Configure um provedor compativel com a API OpenAI (OpenAI, Groq, OpenRouter, Azure, LM local...). Sem provedor, o sistema usa heuristica offline.</div>' +
       '<div class="aia-lbl">Status</div>' +
       '<label class="aia-row"><input type="checkbox" id="c-en" ' + (c.enabled ? 'checked' : '') + '> &nbsp;IA ativada</label>' +
+      '<label class="aia-row"><input type="checkbox" id="c-arkb" ' + ((c.features && c.features.auto_reply_kb) ? 'checked' : '') + '> &nbsp;Responder clientes automaticamente pela base de conhecimento</label>' +
       '<div class="aia-lbl">Provedor</div><input class="aia-in" id="c-prov" value="' + esc(c.provider || 'openai') + '">' +
       '<div class="aia-lbl">API base URL</div><input class="aia-in" id="c-base" value="' + esc(c.api_base || 'https://api.openai.com/v1') + '">' +
       '<div class="aia-lbl">Modelo</div><input class="aia-in" id="c-model" value="' + esc(c.model || 'gpt-4o-mini') + '">' +
@@ -94,7 +95,8 @@
       var w = await api('POST', '/api/ai/settings', {
         enabled: s.querySelector('#c-en').checked, provider: s.querySelector('#c-prov').value,
         api_base: s.querySelector('#c-base').value, model: s.querySelector('#c-model').value,
-        api_key: s.querySelector('#c-key').value
+        api_key: s.querySelector('#c-key').value,
+        features: Object.assign({}, c.features || {}, { auto_reply_kb: s.querySelector('#c-arkb').checked })
       });
       if (w.ok) { toast('Configuracao salva.'); renderCfg(); } else toast('Erro ao salvar.', true);
     };

@@ -9,6 +9,7 @@ from fastapi import Request
 from loguru import logger
 from config import settings
 import database as db
+import permissions
 from tenant_context import set_current_tenant
 from tenant_config import load_tenant_config
 
@@ -98,6 +99,23 @@ async def clear_session_from_request(request: Request):
     except Exception:
         return
 
+async def attach_effective_permissions(user):
+    """Anexa user["_perms"] com as permissoes efetivas (overlay do tenant)."""
+    if not user:
+        return user
+    role = (user.get("role") or "").strip().lower()
+    if role == "admin":
+        user["_perms"] = set(permissions.ALL_PERMISSIONS)
+        return user
+    try:
+        custom = await db.get_custom_roles_map()
+    except Exception as exc:
+        logger.warning(f"Falha ao carregar papeis customizados: {exc}")
+        custom = {}
+    user["_perms"] = permissions.permissions_for(role, custom)
+    return user
+
+
 async def get_current_user(request: Request):
     """Lê o cookie de sessão, valida o JWT e retorna o usuário ativo."""
     # Fase 1 (Multi-tenancy): resolve o tenant da requisição e ativa o contexto,
@@ -130,7 +148,7 @@ async def get_current_user(request: Request):
             if user.get('username', '').lower() == username.lower() and user.get('is_active', 1):
                 if not await validate_login_session(username, user.get("role"), session_id):
                     return None
-                return user
+                return await attach_effective_permissions(user)
         logger.warning(f"Usuário do token não encontrado ou inativo: {username}")
     except jwt.ExpiredSignatureError:
         logger.info("Token de sessão expirado.")

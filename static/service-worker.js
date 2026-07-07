@@ -1,16 +1,22 @@
-const CACHE_NAME = "continnumos-pwa-v1";
-const STATIC_ASSETS = [
-  "/static/logo.png",
+/*
+ * Service Worker (r18) - estrategia network-first para /static/.
+ * Motivo: a versao anterior usava cache-first, servindo CSS/JS antigos e
+ * exigindo Ctrl+Shift+R para ver mudancas. Agora busca sempre a versao nova
+ * quando online e cai no cache apenas offline (bom para o Raspberry Pi).
+ */
+const CACHE_NAME = "continnumos-pwa-v3";
+const OFFLINE_URL = "/static/offline.html";
+const PRECACHE = [
+  "/static/offline.html",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
-  "/static/manifest.webmanifest",
-  "/static/offline.html"
+  "/static/manifest.webmanifest"
 ];
 
 self.addEventListener("install", event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(STATIC_ASSETS))
+      .then(cache => cache.addAll(PRECACHE))
       .then(() => self.skipWaiting())
   );
 });
@@ -23,6 +29,10 @@ self.addEventListener("activate", event => {
   );
 });
 
+self.addEventListener("message", event => {
+  if (event.data === "skipWaiting") self.skipWaiting();
+});
+
 self.addEventListener("fetch", event => {
   const request = event.request;
   if (request.method !== "GET") return;
@@ -32,19 +42,19 @@ self.addEventListener("fetch", event => {
   if (livePrefixes.some(prefix => url.pathname.startsWith(prefix))) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request).catch(() => caches.match("/static/offline.html"))
-    );
+    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
     return;
   }
 
   if (url.pathname.startsWith("/static/")) {
     event.respondWith(
-      caches.match(request).then(cached => cached || fetch(request).then(response => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-        return response;
-      }))
+      fetch(request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          return response;
+        })
+        .catch(() => caches.match(request))
     );
   }
 });

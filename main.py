@@ -70,7 +70,7 @@ GLOBAL_AUTO_REPLY_LIMIT = 60
 GLOBAL_AUTO_REPLY_WINDOW_SECONDS = 5 * 60
 GLOBAL_AUTOMATION_SUPPRESSION_SECONDS = 10 * 60
 OPERATOR_ROLES = {"vendas_1", "vendas_2", "financeiro", "engenharia"}
-ADMIN_READ_ROLES = {"admin", "financeiro"}
+ADMIN_READ_ROLES = {"admin"}
 ADMIN_WRITE_ROLES = {"admin"}
 ADMIN_PERMISSION_GROUPS = {
     "admin": {
@@ -86,6 +86,10 @@ ADMIN_PERMISSION_GROUPS = {
     },
     "financeiro": {"communication", "contacts", "audit", "reports"},
 }
+ADMIN_GROUPS_ALL = {"communication", "contacts", "audit", "reports", "users", "sessions", "evolution", "settings", "maintenance"}
+# Grupos que realmente concedem o console admin (exclui contacts/communication/audit/reports,
+# que operadores e financeiro possuem por padrao e nao devem virar acesso de admin).
+ADMIN_PANEL_GROUPS = {"users", "sessions", "evolution", "settings", "maintenance"}
 CHANGELOG_PATH = "CHANGELOG.md"
 MAX_MEDIA_UPLOAD_BYTES = int(getattr(settings, "MAX_MEDIA_UPLOAD_MB", 32)) * 1024 * 1024
 STATUS_WA_JID_PATTERN = re.compile(r"^55\d{10,11}@s\.whatsapp\.net$")
@@ -130,18 +134,27 @@ def audit_log_category_actions(category: str) -> list[str]:
     return AUDIT_LOG_ACTION_CATEGORIES.get(category, [])
 
 def can_read_admin_panel(user: dict) -> bool:
-    """Permite leitura administrativa para admin e financeiro sem mudar o papel operacional."""
-    return bool(user and user.get("role") in ADMIN_READ_ROLES)
+    """Libera o painel administrativo modular para admin, financeiro e papeis com capacidade administrativa."""
+    if not user:
+        return False
+    if user.get("role") in ADMIN_READ_ROLES:
+        return True
+    return any(can_admin_action(user, g) for g in ADMIN_PANEL_GROUPS)
 
 def can_write_admin_panel(user: dict) -> bool:
     """Restringe ações administrativas sensíveis ao administrador raiz."""
     return bool(user and user.get("role") in ADMIN_WRITE_ROLES)
 
 def can_admin_action(user: dict, group: str) -> bool:
-    """Valida permissão administrativa por grupo funcional."""
+    """Valida permissao administrativa por grupo funcional (orientado a permissao)."""
     if not user:
         return False
-    return group in ADMIN_PERMISSION_GROUPS.get(user.get("role"), set())
+    if user.get("role") == "admin":
+        return True
+    perm = permissions.group_permission(group)
+    if not perm:
+        return False
+    return permissions.user_has_permission(user, perm)
 
 def can_edit_contact_record(user: dict, contact: dict) -> bool:
     """Valida se o usuário pode alterar dados de um contato específico."""
@@ -1025,12 +1038,20 @@ class CalendarEventRequest(ApiPayload):
     phone: str = ""
     assigned_to: str = ""
     repeat_until_done: bool = True
+    remind_before_minutes: int = 0
 
 class CalendarRescheduleRequest(ApiPayload):
     """Contrato para remarcar tarefa inteligente de agenda."""
 
     date: str
     time: str = "09:00"
+
+class CalendarUpdateRequest(ApiPayload):
+    """Contrato para editar campos de uma tarefa de agenda existente."""
+
+    note: str | None = None
+    phone: str | None = None
+    assigned_to: str | None = None
 
 class AdminUserRequest(ApiPayload):
     """Contrato para criação/edição de usuário interno pelo admin."""
@@ -1040,6 +1061,15 @@ class AdminUserRequest(ApiPayload):
     name: str
     is_active: int = 1
     password: Optional[str] = None
+
+class CustomRoleRequest(ApiPayload):
+    """Contrato para criar/atualizar um papel customizado do tenant."""
+
+    role_key: str
+    label: str = ""
+    permissions: list = []
+    base_role: str = ""
+    is_active: int = 1
 
 class AdminSettingsRequest(ApiPayload):
     """Contrato para atualizar textos operacionais do bot."""
@@ -2318,7 +2348,7 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
     if not user: return RedirectResponse(url="/login")
     transfer_targets = await db.get_transfer_targets()
     sys_users = await db.get_all_system_users()
-    if user['role'] == 'admin':
+    if user['role'] == 'admin' or can_read_admin_panel(user):
         return await render_admin_dashboard(request, user, sys_users, transfer_targets)
     else:
         clientes = await db.get_clients(user['role'], user['name'], tab='home')
@@ -2327,7 +2357,7 @@ async def dashboard(request: Request, user: dict = Depends(get_current_user)):
         current_status = await db.get_seller_status(user['name'])
         format_client_datetimes(clientes)
         format_client_datetimes(carteira)
-        return templates.TemplateResponse(request=request, name="dashboard_vendas.html", context={"request": request, "user": user, "clientes": clientes, "carteira": carteira, "metrics": metrics, "status": current_status, "transfer_targets": transfer_targets, "sys_users": sys_users})
+        return templates.TemplateResponse(request=request, name="dashboard_vendas.html", context={"request": request, "user": user, "clientes": clientes, "carteira": carteira, "metrics": metrics, "status": current_status, "transfer_targets": transfer_targets, "sys_users": sys_users, "user_permissions": sorted(user.get("_perms") or [])})
 
 async def render_admin_dashboard(request: Request, user: dict, sys_users: list = None, transfer_targets: list = None):
     """Monta a visão administrativa com ações habilitadas por grupos de permissão."""
@@ -2364,6 +2394,13 @@ async def render_admin_dashboard(request: Request, user: dict, sys_users: list =
                 for group in ["communication", "contacts", "users", "sessions", "evolution", "settings", "maintenance"]
             ),
             "admin_read_only": can_read_admin_panel(user) and not can_write_admin_panel(user),
+            "mod_omnichannel": permissions.user_has_permission(user, permissions.PERM_MODULE_OMNICHANNEL),
+            "mod_campaigns": permissions.user_has_permission(user, permissions.PERM_MODULE_CAMPAIGNS),
+            "mod_sales": permissions.user_has_permission(user, permissions.PERM_MODULE_SALES),
+            "mod_team": permissions.user_has_permission(user, permissions.PERM_MODULE_TEAM),
+            "mod_ai": permissions.user_has_permission(user, permissions.PERM_MODULE_AI),
+            "can_billing": permissions.user_has_permission(user, permissions.PERM_MANAGE_BILLING),
+            "user_permissions": sorted(user.get("_perms") or []),
         },
     )
 
@@ -3534,6 +3571,7 @@ async def post_calendar(payload: CalendarEventRequest, user: dict = Depends(get_
         assigned_to=assigned_to,
         due_at=due_at,
         repeat_until_done=payload.repeat_until_done,
+        remind_before_minutes=payload.remind_before_minutes,
     )
     await record_audit_log(
         user,
@@ -3558,6 +3596,32 @@ async def complete_calendar(event_id: int, user: dict = Depends(get_current_user
         phone=event.get("phone") or "",
         target=event.get("assigned_to") or event.get("user_name") or "",
         details={"event_id": event_id, "note": event.get("note"), "due_at": event.get("due_at")},
+    )
+    await manager.broadcast("calendar_update")
+    return {"status": "ok"}
+
+@app.post("/api/calendar/{event_id}/update")
+async def update_calendar(event_id: int, payload: CalendarUpdateRequest, user: dict = Depends(get_current_user)):
+    """Edita nota, telefone e responsável de uma tarefa de agenda existente."""
+    if not user: return {"status": "error"}
+    event = await db.get_calendar_event(event_id)
+    if not calendar_event_owner(event, user):
+        return JSONResponse(status_code=403, content={"status": "error", "message": "Sem acesso à tarefa."})
+    clean_phone = payload.phone
+    if payload.phone:
+        clean_phone = normalize_whatsapp_jid(payload.phone)
+    await db.update_calendar_event(
+        event_id,
+        note=payload.note,
+        phone=clean_phone,
+        assigned_to=payload.assigned_to,
+    )
+    await record_audit_log(
+        user,
+        "calendar_event_updated",
+        phone=clean_phone or event.get("phone") or "",
+        target=payload.assigned_to or event.get("assigned_to") or event.get("user_name") or "",
+        details={"event_id": event_id, "note": payload.note},
     )
     await manager.broadcast("calendar_update")
     return {"status": "ok"}
@@ -4661,8 +4725,10 @@ async def process_webhook(data: dict):
                     await db.update_user_stage(sender, "menu_wait")
                     await manager.broadcast("update")
                 else:
-                    rep = "Opção inválida. Por favor, digite um número do menu."
-                    await send_automated_message(sender, rep, session_id, "invalid_menu_option", user)
+                    if not await maybe_ai_autoreply(sender, session_id, body, user):
+                        rep = "Opção inválida. Por favor, digite um número do menu."
+                        await send_automated_message(sender, rep, session_id, "invalid_menu_option", user)
+                    await manager.broadcast(f"chat_{sender}")
     except Exception as e:
         logger.error(f"ERRO CRÍTICO NO WEBHOOK: {e}")
 
@@ -4691,9 +4757,9 @@ async def signup_page(request: Request):
     if not settings.SIGNUP_ENABLED:
         return HTMLResponse("<h1>Cadastro indisponivel</h1>", status_code=404)
     trial = settings.TRIAL_DAYS
-    html = """<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8">
+    html = """<!DOCTYPE html><html lang="pt-br" data-theme="reator"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Criar conta - continnumOS CRM</title>
+<title>Criar conta - continnumOS CRM</title><link rel="stylesheet" href="/static/console-blueprint.css"><link rel="stylesheet" href="/static/console-public.css">
 <style>
 body { font-family:system-ui,Arial,sans-serif; background:#0B1014; color:#E9EDEF; display:flex; justify-content:center; padding:40px; }
 .card { background:#151b21; padding:28px; border-radius:14px; max-width:420px; width:100%; }
@@ -4702,7 +4768,7 @@ button { width:100%; padding:12px; border:0; border-radius:8px; background:#ff66
 .msg { padding:10px; border-radius:8px; margin-top:12px; display:none; }
 h1 { font-size:20px; } small { color:#8aa0b2; }
 </style></head>
-<body><div class="card"><h1>Crie sua conta</h1><small>Trial gratis de __TRIAL__ dias.</small>
+<body class="console-public"><div class="card"><h1>Crie sua conta</h1><small>Trial gratis de __TRIAL__ dias.</small>
 <label>Nome da empresa</label><input id="company" placeholder="Minha Empresa">
 <label>Seu nome</label><input id="name" placeholder="Nome completo">
 <label>E-mail (login)</label><input id="email" type="email" placeholder="voce@empresa.com">
@@ -4774,8 +4840,8 @@ async def billing_portal_page(request: Request, user: dict = Depends(get_current
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
     if not permissions.user_has_permission(user, permissions.PERM_MANAGE_BILLING):
         return HTMLResponse("<h1>Acesso restrito ao responsável financeiro.</h1>", status_code=403)
-    html = """<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Billing — continnumOS CRM</title>
+    html = """<!DOCTYPE html><html lang="pt-br" data-theme="reator"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Billing — continnumOS CRM</title><link rel="stylesheet" href="/static/console-blueprint.css"><link rel="stylesheet" href="/static/console-public.css">
 <style>body{font-family:system-ui,Arial,sans-serif;background:#0B1014;color:#E9EDEF;padding:24px;max-width:820px;margin:auto}
 .card{background:#151b21;padding:20px;border-radius:12px;margin-bottom:16px}table{width:100%;border-collapse:collapse}
 th,td{padding:8px;border-bottom:1px solid #222c34;text-align:left;font-size:14px}button{padding:8px 14px;border:0;border-radius:8px;background:#ff6600;color:#fff;cursor:pointer}
@@ -4892,8 +4958,49 @@ async def api_roles(request: Request, user: dict = Depends(get_current_user)):
         return JSONResponse(status_code=401, content={"detail": "Não autenticado"})
     if not permissions.user_has_permission(user, permissions.PERM_MANAGE_USERS):
         return JSONResponse(status_code=403, content={"detail": "Sem permissão"})
-    return {"roles": permissions.list_roles(),
-            "my_permissions": sorted(permissions.permissions_for(user.get("role", "")))}
+    custom_detail = await db.get_custom_roles()
+    return {"roles": permissions.list_roles(custom_detail),
+            "catalog": permissions.PERMISSION_CATALOG,
+            "system_roles": sorted(permissions.SYSTEM_ROLES),
+            "my_permissions": sorted(user.get("_perms") or permissions.permissions_for(user.get("role", "")))}
+
+
+@app.post("/api/roles")
+async def api_save_role(payload: CustomRoleRequest, user: dict = Depends(get_current_user)):
+    """Fase 8: cria/atualiza um papel customizado do tenant atual."""
+    if not user:
+        return JSONResponse(status_code=401, content={"detail": "Nao autenticado"})
+    if not permissions.user_has_permission(user, permissions.PERM_MANAGE_USERS):
+        return JSONResponse(status_code=403, content={"detail": "Sem permissao"})
+    role_key = re.sub(r"[^a-z0-9_]+", "_", (payload.role_key or "").strip().lower()).strip("_")
+    if not role_key:
+        return JSONResponse(status_code=400, content={"detail": "Identificador de papel invalido"})
+    if role_key in permissions.DEFAULT_ROLE_PERMISSIONS:
+        return JSONResponse(status_code=400, content={"detail": "Identificador reservado a um papel padrao"})
+    valid = set(permissions.ALL_PERMISSIONS)
+    perms = [p for p in (payload.permissions or []) if p in valid]
+    label = (payload.label or role_key).strip()
+    await db.upsert_custom_role(role_key, label, perms, (payload.base_role or "").strip().lower(), int(payload.is_active))
+    await record_audit_log(user, "custom_role_saved", target=role_key, details={"label": label, "permissions": perms})
+    return {"status": "ok", "role_key": role_key}
+
+
+@app.delete("/api/roles/{role_key}")
+async def api_delete_role(role_key: str, user: dict = Depends(get_current_user)):
+    """Fase 8: remove um papel customizado (nao permitido para papeis padrao ou em uso)."""
+    if not user:
+        return JSONResponse(status_code=401, content={"detail": "Nao autenticado"})
+    if not permissions.user_has_permission(user, permissions.PERM_MANAGE_USERS):
+        return JSONResponse(status_code=403, content={"detail": "Sem permissao"})
+    key = (role_key or "").strip().lower()
+    if key in permissions.DEFAULT_ROLE_PERMISSIONS:
+        return JSONResponse(status_code=400, content={"detail": "Nao e possivel remover um papel padrao"})
+    in_use = [u for u in await db.get_all_system_users() if (u.get("role") or "") == key]
+    if in_use:
+        return JSONResponse(status_code=409, content={"detail": f"Papel em uso por {len(in_use)} usuario(s)"})
+    await db.delete_custom_role(key)
+    await record_audit_log(user, "custom_role_deleted", target=key)
+    return {"status": "ok"}
 
 
 @app.get("/api/lgpd/export")
@@ -4928,6 +5035,19 @@ async def api_lgpd_delete(request: Request, user: dict = Depends(get_current_use
     return {"status": "ok", "deleted": deleted}
 
 
+@app.get("/ajuda", response_class=HTMLResponse)
+async def ajuda_page(request: Request):
+    """Central de Ajuda publica: guia de uso, ferramentas e solucao de problemas."""
+    import os
+    _p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "ajuda.html")
+    try:
+        with open(_p, encoding="utf-8") as _f:
+            return HTMLResponse(_f.read())
+    except Exception as _e:
+        logger.warning(f"Falha ao servir /ajuda: {_e}")
+        return HTMLResponse("<h1>Central de Ajuda indisponivel</h1>", status_code=500)
+
+
 @app.get("/status", response_class=HTMLResponse)
 async def status_page(request: Request):
     """Fase 8: status page publica (saude de banco, redis e storage)."""
@@ -4948,14 +5068,14 @@ async def status_page(request: Request):
     label = "Operacional" if overall else "Degradado"
     def badge(ok):
         return '<span style="color:#7CFC9B">online</span>' if ok else '<span style="color:#ff6b6b">offline</span>'
-    html = """<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Status - continnumOS CRM</title>
+    html = """<!DOCTYPE html><html lang="pt-br" data-theme="reator"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Status - continnumOS CRM</title><link rel="stylesheet" href="/static/console-blueprint.css"><link rel="stylesheet" href="/static/console-public.css">
 <style>
 body { font-family:system-ui,Arial,sans-serif; background:#0B1014; color:#E9EDEF; padding:40px; max-width:560px; margin:auto; }
 .card { background:#151b21; padding:22px; border-radius:12px; }
 .row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #222c34; }
 h1 { font-size:22px; }
-</style></head><body>
+</style></head><body class="console-public">
 <h1>Status do servico <span style="color:__COLOR__">__LABEL__</span></h1>
 <div class="card">
 <div class="row"><span>Banco de dados</span>__DB__</div>
@@ -5734,6 +5854,46 @@ async def apply_ai_pipeline(phone, session_id, text, user):
     except Exception as e:
         logger.warning(f"[AI_PIPELINE] falha: {e}")
         return None
+
+
+async def maybe_ai_autoreply(phone, session_id, text, user):
+    """Resposta automatica opcional via base de conhecimento (opt-in).
+
+    So responde ao cliente quando: a IA (LLM) esta ativa e com chave, a feature
+    auto_reply_kb esta ligada, o sentimento nao e negativo e a base de
+    conhecimento retorna uma resposta confiavel (engine LLM). Caso contrario
+    retorna False para manter o atendimento humano/menu. Respeita o guard de
+    automacao (limites anti-spam).
+    """
+    try:
+        config = await _ai_config()
+        if not config or not config.get("enabled"):
+            return False
+        if not (config.get("api_key") or "").strip():
+            return False
+        features = config.get("features") or {}
+        if not features.get("auto_reply_kb"):
+            return False
+        sent = await ai_engine.analyze_sentiment(text, config)
+        if sent.get("label") == "negativo":
+            return False  # cliente insatisfeito: encaminha para humano
+        chunks = await db.get_kb_chunks()
+        if not chunks:
+            return False
+        ans = await ai_engine.answer_from_kb(text, chunks, config)
+        if not ans.get("found") or ans.get("engine") != "llm":
+            return False
+        reply = (ans.get("text") or "").strip()
+        if not reply:
+            return False
+        if not await can_send_automated_reply(phone, session_id, "ai_kb_autoreply", user):
+            return False
+        await send_automated_message(phone, reply, session_id, "ai_kb_autoreply", user)
+        logger.info("[AI_AUTOREPLY] resposta enviada via base de conhecimento phone={}", phone)
+        return True
+    except Exception as e:
+        logger.warning(f"[AI_AUTOREPLY] falha: {e}")
+        return False
 
 
 # ------------------------------------------------- distribuição automatica
@@ -6829,9 +6989,9 @@ async def public_pay_page(token: str):
     action = ("<div class='paid'>Pagamento confirmado. Obrigado!</div>" if paid else
               "<button id='payBtn' onclick=\"pay()\">Pagar R$ " + total_txt + "</button>")
     html = (
-        "<!doctype html><html lang='pt-BR'><head><meta charset='utf-8'>"
+        "<!doctype html><html lang='pt-BR' data-theme='reator'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>Pagamento continnumOS</title><style>"
+        "<title>Pagamento continnumOS</title><link rel='stylesheet' href='/static/console-blueprint.css'><link rel='stylesheet' href='/static/console-public.css'><style>"
         "body{margin:0;background:#0d0d0f;color:#f2ede6;font-family:system-ui,Segoe UI,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}"
         ".card{width:min(460px,92vw);background:#141417;border:1px solid #2a2a30;border-radius:16px;padding:26px}"
         "h1{font-size:18px;margin:0 0 4px;color:#ff6a00}.mut{color:#9a9aa0;font-size:13px;margin-bottom:16px}"
@@ -6839,7 +6999,7 @@ async def public_pay_page(token: str):
         ".tot{font-size:22px;font-weight:700;margin:10px 0 18px}"
         "button{width:100%;padding:13px;border:0;border-radius:10px;background:#ff6a00;color:#0a0a0a;font-weight:700;font-size:15px;cursor:pointer}"
         ".paid{padding:13px;border-radius:10px;background:#3ddc8422;color:#3ddc84;text-align:center;font-weight:700}"
-        "</style></head><body><div class='card'>"
+        "</style></head><body class='console-public'><div class='card'>"
         "<h1>continnumOS</h1><div class='mut'>Pedido " + str(token) + "</div>"
         "<table>" + rows + "</table><div class='tot'>Total: R$ " + total_txt + "</div>"
         + action +
